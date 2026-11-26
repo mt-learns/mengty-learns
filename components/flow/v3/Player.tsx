@@ -38,6 +38,7 @@ import type {
   ParsedFlowProps,
   ParsedFlowStep,
 } from '../types';
+import type { PrecomputedLayoutsByVariant } from '../../diagram/layout-types';
 import type { FlowCanvasControls, FlowCanvasLayoutMeta } from './FlowCanvas';
 
 const STEP_INTERVAL_MS = 2200;
@@ -90,7 +91,8 @@ export function Player({
   steps: propSteps,
   groups: propGroups,
   variants,
-}: ParsedFlowProps) {
+  precomputedLayouts,
+}: ParsedFlowProps & { precomputedLayouts?: PrecomputedLayoutsByVariant }) {
   const hasVariants = Boolean(variants && variants.length > 0);
   const [activeVariantId, setActiveVariantId] = useState<string>(
     () => variants?.[0]?.id ?? '',
@@ -409,6 +411,7 @@ export function Player({
             layoutMode={layoutMode}
             activeStepIndex={stepIndex}
             reducedMotion={reducedMotion}
+            precomputed={precomputedLayouts?.[activeVariant?.id ?? 'default']}
             onControlsReady={handleControlsReady}
             onLayoutChange={handleLayoutChange}
           />

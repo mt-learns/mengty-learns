@@ -14,7 +14,8 @@ import { cn } from '../../../lib/utils';
 import {
   FIT_PADDING,
   MIN_READABLE_ZOOM,
-} from '../../diagram/layout';
+  type SerializedLayout,
+} from '../../diagram/layout-types';
 import type {
   FlowGroup,
   FlowLayoutMode,
@@ -24,7 +25,7 @@ import type {
 import { GroupNode } from './GroupNode';
 import { IosNode } from './IosNode';
 import { StepEdge } from './StepEdge';
-import { computeFlowGraph } from './layout';
+import { buildFlowGraphFromPrecomputed, type ClientFlowGraph } from './graph';
 
 export interface FlowCanvasControls {
   zoomIn: () => void;
@@ -45,6 +46,7 @@ export interface FlowCanvasProps {
   layoutMode?: FlowLayoutMode;
   activeStepIndex: number;
   reducedMotion: boolean;
+  precomputed?: SerializedLayout[];
   onControlsReady?: (controls: FlowCanvasControls | null) => void;
   onLayoutChange?: (meta: FlowCanvasLayoutMeta) => void;
 }
@@ -103,16 +105,21 @@ function FlowCanvasInner({
   layoutMode = 'flow',
   activeStepIndex,
   reducedMotion,
+  precomputed,
   onControlsReady,
   onLayoutChange,
 }: FlowCanvasProps) {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const containerWidth = useContainerWidth(containerRef);
   const reactFlow = useReactFlow();
+  const [fallbackGraph, setFallbackGraph] = useState<ClientFlowGraph | null>(null);
 
-  const graph = useMemo(
-    () =>
-      computeFlowGraph({
+  useEffect(() => {
+    if (precomputed) return;
+    let cancelled = false;
+    import('./layout').then(({ computeFlowGraph }) => {
+      if (cancelled) return;
+      const res = computeFlowGraph({
         nodes,
         steps,
         groups,
@@ -120,19 +127,62 @@ function FlowCanvasInner({
         containerWidth,
         activeStepIndex,
         reducedMotion,
-      }),
-    [
-      nodes,
-      steps,
-      groups,
-      layoutMode,
-      containerWidth,
-      activeStepIndex,
-      reducedMotion,
-    ],
-  );
+      });
+      setFallbackGraph({
+        nodes: res.nodes,
+        edges: res.edges,
+        direction: res.layout.direction,
+        bounds: res.layout.bounds,
+        panMode: res.layout.panMode,
+        canvasHeight: res.layout.canvasHeight,
+      });
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    precomputed,
+    nodes,
+    steps,
+    groups,
+    layoutMode,
+    containerWidth,
+    activeStepIndex,
+    reducedMotion,
+  ]);
 
-  const { panMode, canvasHeight, direction, bounds } = graph.layout;
+  const graph = useMemo<ClientFlowGraph>(() => {
+    if (precomputed) {
+      return buildFlowGraphFromPrecomputed({
+        nodes,
+        steps,
+        precomputed,
+        containerWidth,
+        activeStepIndex,
+        reducedMotion,
+      });
+    }
+    return (
+      fallbackGraph ?? {
+        nodes: [],
+        edges: [],
+        direction: 'TB',
+        bounds: { width: 320, height: 240 },
+        panMode: false,
+        canvasHeight: 240,
+      }
+    );
+  }, [
+    precomputed,
+    fallbackGraph,
+    nodes,
+    steps,
+    containerWidth,
+    activeStepIndex,
+    reducedMotion,
+  ]);
+
+  const { panMode, canvasHeight, direction, bounds } = graph;
   // §3.3a: pan hint only on MEASURED overflow, never when everything fits.
   const [hasHorizontalOverflow, setHasHorizontalOverflow] = useState(false);
   const [overflowSide, setOverflowSide] = useState<'left' | 'right' | null>(null);

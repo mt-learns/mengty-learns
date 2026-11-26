@@ -12,7 +12,7 @@ import {
   buildSkipRankPath,
   buildTreeBusPath,
   type LayoutDirection,
-} from '../../diagram/layout';
+} from '../../diagram/layout-types';
 import { cn } from '../../../lib/utils';
 import type { FlowEdgeKind } from '../types';
 
