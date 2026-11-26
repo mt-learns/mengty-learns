@@ -14,13 +14,25 @@ tested_with:
 
 Docker is a platform for developing, shipping, and running applications.
 
+<Tip>
+  Always use explicit tags for base images instead of `latest`.
+</Tip>
+
+<Sidenote>
+  Containers share the host kernel, making them lightweight compared to full VMs.
+</Sidenote>
+
 ## What is a Container?
 
 A container is a standard unit of software that packages up code and all its dependencies.
 
+<Gotcha>
+  Data inside containers is ephemeral unless volumes are mounted.
+</Gotcha>
+
 ### Key Commands
 
-```bash
+<Terminal title="bash">
 docker run hello-world
 docker ps
-```
+</Terminal>
