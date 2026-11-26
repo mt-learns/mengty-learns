@@ -5,8 +5,9 @@ import { appName, getPageImageUrl } from '@/lib/shared';
 
 export const revalidate = false;
 
-export async function GET(_req: Request, { params }: RouteContext<'/og/docs/[...slug]'>) {
-  const { slug } = await params;
+export async function GET(_req: Request, { params }: { params: Promise<{ slug: string[] }> }) {
+  const resolvedParams = await params;
+  const { slug } = resolvedParams;
   const page = source.getPage(slug.slice(0, -1));
   if (!page) notFound();
 

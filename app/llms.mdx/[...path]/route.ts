@@ -4,8 +4,9 @@ export const revalidate = false;
 // other paths are 404s, never cached responses
 export const dynamicParams = false;
 
-export async function GET(_req: Request, { params }: RouteContext<'/llms.mdx/[...path]'>) {
-  const { path } = await params;
+export async function GET(_req: Request, { params }: { params: Promise<{ path: string[] }> }) {
+  const resolvedParams = await params;
+  const { path } = resolvedParams;
   return (await docsLlms.serve(`/${path.join('/')}`)) ?? new Response(null, { status: 404 });
 }
 
