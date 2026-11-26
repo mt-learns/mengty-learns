@@ -33,7 +33,8 @@
 |---|---|
 | 3.1 | **MUST** fit the whole diagram inside the card. Use `fitView` with `padding: 0.12` on mount, on container resize, and on variant change. Nothing may be clipped at any width ≥ 320px. |
 | 3.2 | **Canvas height = layout height × zoom + padding**, clamped to 240–560px. No fixed 420px with empty space or clipping. |
-| 3.3 | **Readable zoom:** the rendered label size = 15px × zoom must stay **≥ 13px** (zoom ≥ 0.87). If fitting would need a smaller zoom, first switch to `TB`. If it's still too small, keep zoom at 0.87 and enable horizontal pan with a visible "Drag to see more →" hint. Never shrink text below 13px. |
+| 3.3 | **Fit before pan.** Try these in order until the diagram fits the container at zoom ≥ 0.87 (label ≥ 13px): **(a)** choose the LR/TB direction that fits best; **(b)** the **compact node variant** (width 128–160px, 28px icon, 14px label, subtitle moved into the step text/tooltip); **(c)** **wrap wide ranks**: when a rank has more nodes than fit, split it into rows of N (siblings under a tree bus wrap onto a second row, still connected by the bus); **(d)** for trees and class diagrams at < 480px, the **stacked list layout** (an indented vertical tree, like a file explorer, with elbow connectors on the left). **Pan is the last resort, and is never allowed when the container is ≥ 640px wide.** |
+| 3.3a | The pan hint ("Drag to see more") appears **only** when content actually overflows (measured), with a fade edge on the overflowing side. Never when everything fits. |
 | 3.4 | The camera does **not** move on step change (no auto-pan), so readers keep their orientation. |
 | 3.5 | Zoom controls appear only when §3.3 pan mode is active. |
 
@@ -43,7 +44,7 @@
 |---|---|
 | 4.1 | **Full label always visible:** wrap to a maximum of 2 lines, **never truncate with an ellipsis**. Node width = measured text width + icon + padding, clamped to **160–240px**. All nodes in one diagram use the **same width** (the widest, within the clamp) for a calm grid. Height is 64px (1 line) or 80px (2 lines). |
 | 4.2 | Label 15px / 600. Subtitle 13px / 400 in `--muted-foreground`. Labels **≤ 18 characters**; put more detail in the subtitle (a lint check in validation warns). |
-| 4.3 | Icon tile 36px rounded squircle with a category tint (client = gray, network = blue, service = indigo, data = green, external = orange). **Tint only on the icon tile**, never on borders or text. |
+| 4.3 | Icon tile 36px rounded squircle with a category tint (client = gray, network = blue, service = indigo, data = green, external = orange, abstraction = purple, concrete = teal). **Tint only on the icon tile**, never on borders or text. **Red/destructive is never a category tint.** |
 | 4.4 | **Dimming never touches text:** inactive nodes keep text at full contrast (≥ 4.5:1). Dim them with a muted border, a desaturated icon tile, and a background step only. **No `opacity` on the node element.** |
 | 4.5 | Active node: 2px accent ring + a subtle accent background tint (8%) + shadow. No scale jump above 1.02. |
 | 4.6 | Variant for "problem/bad" nodes: dashed border in `--border-strong` + a small "✕" badge. **Red is reserved for errors** and never used for "bad design". |
