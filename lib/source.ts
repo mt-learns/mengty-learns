@@ -67,3 +67,37 @@ export const radarSource = loader({
   baseUrl: '/radar',
   source: radar.toFumadocsSource(),
 });
+
+const digestSchema = pageSchema.extend({
+  date: z.string().min(1),
+  summary: z.string().min(1),
+  status: z.enum(['draft', 'stable']).default('stable'),
+  items: z
+    .array(
+      z.object({
+        title: z.string().min(1),
+        url: z.string().url(),
+        why: z.string().min(1),
+        action: z.string().min(1),
+      })
+    )
+    .default([]),
+});
+
+const digest = defineCollections({
+  type: 'doc',
+  dir: 'content/digest',
+  schema: digestSchema,
+});
+
+export const digestSource = loader({
+  baseUrl: '/digest',
+  source: digest.toFumadocsSource(),
+});
+
+export function getPublishedDigests() {
+  return digestSource
+    .getPages()
+    .filter((entry) => process.env.NODE_ENV !== 'production' || entry.data.status !== 'draft')
+    .sort((a, b) => new Date(b.data.date).getTime() - new Date(a.data.date).getTime());
+}

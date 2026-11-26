@@ -19,6 +19,7 @@ export function homeLinks(): LinkItemType[] {
   return [
     { text: 'Docs', url: '/docs', active: 'nested-url' },
     { text: 'Radar', url: '/radar', active: 'nested-url' },
+    { text: 'Digest', url: '/digest', active: 'nested-url' },
     { text: 'Projects', url: '/projects', active: 'nested-url' },
     { text: 'About', url: '/about', active: 'nested-url' },
   ];

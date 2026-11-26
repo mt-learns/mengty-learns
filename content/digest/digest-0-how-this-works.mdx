@@ -1,0 +1,22 @@
+---
+title: "Digest #0: how this works"
+date: "2026-11-26"
+summary: "How the biweekly digest turns a private RSS inbox into 3–5 concise, actionable notes."
+status: draft
+items: []
+---
+
+This is a draft template explaining the digest format. It is excluded from the public `/digest` list and RSS feed in production.
+
+## Cadence & workflow
+
+1. **Private inbox:** A weekly GitHub Action reads `inbox/feeds.json`, fetches the configured RSS/Atom feeds, deduplicates against `inbox/seen.json`, and opens or updates a single GitHub issue (`Inbox week NN`).
+2. **Triage (15 min/week):** Pick 3–5 items that actually matter to my stack and write a short digest in my own words.
+3. **Promote to radar or docs:** If an item changes my default choice, update `/radar` or write a full note in `/docs`.
+
+## Entry format
+
+Each digest entry includes:
+- **Title + source link**
+- **Why it matters to me** (1 line)
+- **Action** (`adopt` / `try in a lab` / `watch` / `ignore`)
