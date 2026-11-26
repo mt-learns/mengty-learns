@@ -17,7 +17,7 @@ export function GroupNode({ data }: NodeProps<FlowGroupNode>) {
   return (
     <div
       style={{ width: data.width, height: data.height }}
-      className="pointer-events-none rounded-panel border border-border/70 material-thin px-3 pt-2"
+      className="pointer-events-none rounded-panel border border-border material-thin px-4 pt-3"
     >
       <span className="block truncate text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
         {data.label}
