@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { Check } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
 export function MarkDone({ slug }: { slug: string }) {
@@ -31,7 +32,14 @@ export function MarkDone({ slug }: { slug: string }) {
       onClick={toggle}
       className="min-h-tap rounded-control"
     >
-      {done ? '✓ Completed' : 'Mark as done'}
+      {done ? (
+        <span className="inline-flex items-center gap-1.5">
+          <Check className="size-4" strokeWidth={1.75} aria-hidden="true" />
+          <span>Completed</span>
+        </span>
+      ) : (
+        'Mark as done'
+      )}
     </Button>
   );
 }

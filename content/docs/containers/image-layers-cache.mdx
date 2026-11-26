@@ -53,13 +53,13 @@ When Docker evaluates `COPY`, it checksums the copied files. If you write `COPY 
 Compare the slow order versus the cache-friendly order:
 
 ```dockerfile
-# ❌ Cache-busting order: any edit to server.mjs re-runs npm install
+# Avoid — cache-busting order: any edit to server.mjs re-runs npm install
 FROM node:22-alpine3.21
 WORKDIR /app
 COPY . .
 RUN npm install --omit=dev
 
-# ✅ Cache-friendly order: source edits skip npm install
+# Good — cache-friendly order: source edits skip npm install
 FROM node:22-alpine3.21
 WORKDIR /app
 COPY package.json ./

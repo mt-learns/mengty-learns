@@ -2,6 +2,7 @@
 
 import { type ReactNode, useState, useEffect } from 'react';
 import Link from 'next/link';
+import { Sparkles } from 'lucide-react';
 import { source } from '@/lib/source';
 
 export function SectionIcon({ name, className = 'h-6 w-6' }: { name: string; className?: string }) {
@@ -46,7 +47,7 @@ export function Tile({ title, description, href, icon, badge, large, section }: 
       <div>
         <div className="flex items-center justify-between mb-4">
           <div className={`${large ? 'h-14 w-14 rounded-[18px]' : 'h-12 w-12 rounded-2xl'} bg-primary/10 flex items-center justify-center text-primary group-hover:scale-105 transition-transform`}>
-            {icon || <span className="text-xl font-bold">✦</span>}
+            {icon || <Sparkles className="size-5" strokeWidth={1.75} aria-hidden="true" />}
           </div>
           <div className="flex gap-2 items-center">
             {progress && <span className="px-2.5 py-0.5 rounded-pill text-xs font-medium bg-primary/10 text-primary">{progress}</span>}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { Flame, PartyPopper } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { createEmptyCard, Rating, fsrs, generatorParameters } from 'ts-fsrs';
 
@@ -101,7 +102,10 @@ export function ReviewClient({ cards }: { cards: CardItem[] }) {
         </div>
         <div className="border-l pl-4">
           <span className="text-subheadline text-muted-foreground block">Streak</span>
-          <span className="text-2xl font-bold font-headline">🔥 {streak}</span>
+          <span className="inline-flex items-center gap-1.5 text-2xl font-bold font-headline">
+            <Flame className="size-5 text-primary" strokeWidth={1.75} aria-hidden="true" />
+            <span>{streak}</span>
+          </span>
         </div>
       </div>
 
@@ -144,7 +148,10 @@ export function ReviewClient({ cards }: { cards: CardItem[] }) {
         </div>
       ) : (
         <div className="rounded-card border bg-card p-12 text-center space-y-4">
-          <h3 className="text-2xl font-bold font-headline">All caught up! 🎉</h3>
+          <h3 className="inline-flex items-center justify-center gap-2 text-2xl font-bold font-headline">
+            <PartyPopper className="size-6 text-primary" strokeWidth={1.75} aria-hidden="true" />
+            <span>All caught up!</span>
+          </h3>
           <p className="text-muted-foreground">You have no more flashcards due for review right now.</p>
         </div>
       )}
