@@ -4,6 +4,7 @@
     "oop-pillars",
     "solid",
     "bridge",
+    "observer",
     "strategy"
   ],
   "icon": "design"
