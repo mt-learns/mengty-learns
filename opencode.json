@@ -1,6 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "model": "opencode/deepseek-v4.1-flash-free",
+  "model": "opencode/seaglass-alpha-free",
   "permission": {
     "edit": "allow",
     "bash": "allow",
