@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
+import { K8S_REQUEST_FLOW } from '../../lib/flows/k8s-request';
 import {
   buildSkipRankPath,
   buildSmoothStepSvgPath,
@@ -340,6 +341,7 @@ describe('DIAGRAM-RULES §9.1 layout invariants across all MDX flows and diagram
     const diagrams = extractTagProps(content, 'Diagram');
 
     for (const rawFlow of flows) {
+      if (!rawFlow.nodes && !rawFlow.variants) continue;
       const parsed = parseFlowProps(rawFlow as unknown as FlowProps);
       const variants = parsed.variants ?? [
         {
@@ -408,5 +410,29 @@ describe('DIAGRAM-RULES §9.1 layout invariants across all MDX flows and diagram
         });
       }
     }
+  }
+
+  for (const width of TEST_WIDTHS) {
+    it(`shared lib/flows/k8s-request.ts <Flow id="${K8S_REQUEST_FLOW.id}"> @ ${width}px`, () => {
+      const parsed = parseFlowProps(K8S_REQUEST_FLOW);
+      const edges = (parsed.steps ?? []).map((s) => {
+        const [from, to] = s.edge.split('->').map((p) => p.trim());
+        return { from, to, kind: s.kind ?? 'request', label: s.label };
+      });
+      const layoutResult = computeDiagramLayout({
+        nodes: parsed.nodes ?? [],
+        edges,
+        groups: parsed.groups ?? [],
+        layout: parsed.layout,
+        containerWidth: width,
+      });
+      assertLayoutInvariants(
+        `${parsed.id}:shared@${width}`,
+        layoutResult,
+        parsed.nodes ?? [],
+        width,
+        false,
+      );
+    });
   }
 });
