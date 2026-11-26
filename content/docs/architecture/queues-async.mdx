@@ -69,14 +69,14 @@ A work queue is a restaurant **ticket rail**: cashiers (**API**) clip orders ont
     { id: 'api', label: 'API Service', subtitle: 'Returns 202', icon: 'gateway', category: 'edge', rank: 0, order: 0 },
     { id: 'queue', label: 'Work Queue', subtitle: 'Durable broker', icon: 'queue', category: 'data', rank: 1, order: 0 },
     { id: 'worker', label: 'Worker', subtitle: 'Idempotent job', icon: 'pod', category: 'service', rank: 2, order: 0 },
-    { id: 'dlq', label: 'Dead-Letter Q', subtitle: 'Max retries', icon: 'queue', category: 'external', rank: 2, order: 1 },
+    { id: 'dlq', label: 'Dead-letter queue', subtitle: 'Max retries', icon: 'queue', category: 'external', rank: 3, order: 0 },
   ]}
   steps={[
     { edge: 'api->queue', title: 'Enqueue job with key', text: 'API persists a job with an idempotency key to the queue and replies 202 Accepted.', label: 'Enqueue' },
     { edge: 'queue->worker', title: 'Deliver to worker', text: 'Queue hands the message to a worker and starts the visibility timeout.', label: 'Deliver' },
-    { edge: 'worker->queue', title: 'Transient fail → backoff', text: 'Downstream 503 fails the job; worker NACKs so the queue retries after backoff.', kind: 'error', label: 'Retry' },
+    { edge: 'worker->queue', title: 'Transient fail → backoff', text: 'Downstream 503 fails the job; worker NACKs so the queue retries after backoff.', kind: 'response', label: 'Retry' },
     { edge: 'queue->worker', title: 'Redeliver after backoff', text: 'Queue redelivers the job; worker checks its idempotency key before acting.', label: 'Attempt 2' },
-    { edge: 'queue->dlq', title: 'Poison message → DLQ', text: 'After max_retries, the broker moves the failing message to the DLQ for inspection.', kind: 'error', label: 'To DLQ' },
+    { edge: 'queue->dlq', title: 'Poison message → DLQ', text: 'After max_retries, the broker moves the failing message to the DLQ for inspection.', kind: 'error', label: 'Max retries' },
   ]}
 />
 
