@@ -1,5 +1,8 @@
-import { type ReactNode } from 'react';
+'use client';
+
+import { type ReactNode, useState, useEffect } from 'react';
 import Link from 'next/link';
+import { source } from '@/lib/source';
 
 export function SectionIcon({ name, className = 'h-6 w-6' }: { name: string; className?: string }) {
   const common = { className, fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
@@ -24,7 +27,20 @@ export function MaterialNav({ children }: { children: ReactNode }) {
   );
 }
 
-export function Tile({ title, description, href, icon, badge, large }: { title: string; description: string; href: string; icon?: ReactNode; badge?: string; large?: boolean }) {
+export function Tile({ title, description, href, icon, badge, large, section }: { title: string; description: string; href: string; icon?: ReactNode; badge?: string; large?: boolean; section?: string }) {
+  const [progress, setProgress] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!section) return;
+    const completed = JSON.parse(localStorage.getItem('mt-completed-v1') || '{}');
+    const pages = source.getPages().filter((p) => p.url.startsWith(`/docs/${section}/`));
+    const total = pages.length;
+    const done = pages.filter((p) => completed[p.url]).length;
+    if (total > 0) {
+      setProgress(`${done} / ${total} done`);
+    }
+  }, [section]);
+
   return (
     <Link href={href} className={`group relative flex flex-col justify-between rounded-card border bg-card text-card-foreground shadow-sm transition-all hover:shadow-md hover:border-primary/50 min-h-tap ${large ? 'p-8 md:min-h-56' : 'p-6'}`}>
       <div>
@@ -32,7 +48,10 @@ export function Tile({ title, description, href, icon, badge, large }: { title: 
           <div className={`${large ? 'h-14 w-14 rounded-[18px]' : 'h-12 w-12 rounded-2xl'} bg-primary/10 flex items-center justify-center text-primary group-hover:scale-105 transition-transform`}>
             {icon || <span className="text-xl font-bold">✦</span>}
           </div>
-          {badge && <span className="px-2.5 py-0.5 rounded-pill text-xs font-medium bg-secondary text-secondary-foreground">{badge}</span>}
+          <div className="flex gap-2 items-center">
+            {progress && <span className="px-2.5 py-0.5 rounded-pill text-xs font-medium bg-primary/10 text-primary">{progress}</span>}
+            {badge && <span className="px-2.5 py-0.5 rounded-pill text-xs font-medium bg-secondary text-secondary-foreground">{badge}</span>}
+          </div>
         </div>
         <h3 className={`${large ? 'text-2xl' : 'text-lg'} font-headline font-bold mb-1`}>{title}</h3>
         <p className={`${large ? 'text-base max-w-xl' : 'text-sm'} text-muted-foreground`}>{description}</p>
@@ -46,17 +65,6 @@ export function LargeTitle({ children, subtitle }: { children: ReactNode; subtit
     <div className="mb-8">
       <h1 className="text-4xl font-bold tracking-tight text-foreground sm:text-5xl mb-2">{children}</h1>
       {subtitle && <p className="text-lg text-muted-foreground">{subtitle}</p>}
-    </div>
-  );
-}
-
-export function GroupedList({ title, children }: { title?: string; children: ReactNode }) {
-  return (
-    <div className="mb-6">
-      {title && <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">{title}</h4>}
-      <div className="rounded-card border bg-card overflow-hidden divide-y divide-border">
-        {children}
-      </div>
     </div>
   );
 }

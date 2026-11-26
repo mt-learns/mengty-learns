@@ -44,11 +44,12 @@ export default function HomePage() {
               badge="Featured"
               icon={<SectionIcon name="containers" />}
               large
+              section="containers"
             />
           </div>
-          <Tile title="Kubernetes" description="Orchestration and cluster management." href="/docs/kubernetes/kubectl-cheatsheet" icon={<SectionIcon name="kubernetes" />} />
-          <Tile title="CI/CD Pipelines" description="Automate testing and deployments." href="/docs/ci-cd/github-actions" icon={<SectionIcon name="cicd" />} />
-          <Tile title="Security" description="Practical security notes and OWASP basics." href="/docs" icon={<SectionIcon name="security" />} />
+          <Tile title="Kubernetes" description="Orchestration and cluster management." href="/docs/kubernetes/kubectl-cheatsheet" icon={<SectionIcon name="kubernetes" />} section="kubernetes" />
+          <Tile title="CI/CD Pipelines" description="Automate testing and deployments." href="/docs/ci-cd/github-actions" icon={<SectionIcon name="cicd" />} section="ci-cd" />
+          <Tile title="Security" description="Practical security notes and OWASP basics." href="/docs" icon={<SectionIcon name="security" />} section="security" />
         </div>
       </section>
 
