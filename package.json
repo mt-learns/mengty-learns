@@ -4,7 +4,7 @@
   "private": true,
   "packageManager": "pnpm@11.6.0",
   "scripts": {
-    "build": "node scripts/build-cards.mjs && next build",
+    "build": "node scripts/build-cards.mjs && next build && node scripts/flatten-rsc.mjs",
     "prebuild": "node scripts/build-cards.mjs",
     "dev": "next dev",
     "start": "serve out",
