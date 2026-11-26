@@ -1,0 +1,121 @@
+---
+title: "DDD Essentials: Ubiquitous Language, Bounded Context, Context Map"
+description: Align code and domain experts using Ubiquitous Language, isolate models inside Bounded Contexts, and document integration boundaries with a Context Map.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: explanation
+level: intermediate
+tags: [architecture, ddd, bounded-context, ubiquitous-language, context-map]
+tested_with:
+  typescript: "7.0.2"
+cards:
+  - q: "What is Ubiquitous Language in Domain-Driven Design?"
+    a: "A shared, unambiguous vocabulary spoken by both domain experts and developers and mirrored directly in class, method, and module names."
+  - q: "Why does DDD split a large system into multiple Bounded Contexts instead of one shared enterprise model?"
+    a: "A word like 'Order' or 'Customer' means different things with different attributes in Sales, Billing, and Fulfillment; forcing one shared model creates a tangled god object."
+  - q: "What is a Context Map?"
+    a: "A diagram/document showing the Bounded Contexts in a system and how they translate or integrate with each other (e.g., Customer-Supplier, Anti-Corruption Layer, Published Language)."
+  - q: "What is an Anti-Corruption Layer (ACL)?"
+    a: "A translation boundary that converts an upstream or legacy model into your Bounded Context's own language so external quirks don't leak into your domain."
+related:
+  - architecture/hexagonal
+  - architecture/compare-styles
+sources:
+  - title: "Martin Fowler: BoundedContext"
+    url: https://martinfowler.com/bliki/BoundedContext.html
+  - title: "Martin Fowler: UbiquitousLanguage"
+    url: https://martinfowler.com/bliki/UbiquitousLanguage.html
+---
+
+## TL;DR
+Strategic DDD prevents big-ball-of-mud models: **Ubiquitous Language** keeps code and business terms identical, **Bounded Contexts** give each subdomain its own clean model (so `Order` in Checkout ≠ `Order` in Shipping), and a **Context Map** makes integration contracts explicit.
+
+## Why it exists
+When an e-commerce team puts one `Order` table and one `Order` class at the center of Checkout, Billing, and Warehouse Shipping, every team adds columns they need (`trackingNumber`, `taxRate`, `refundReason`). Soon, changing a shipping rule breaks invoicing, and nobody agrees on what "Order completed" means.
+
+## Mental model
+Strategic DDD draws **linguistic boundaries** first, before choosing databases or microservices:
+- **Ubiquitous Language:** if the warehouse team says "Pick Ticket" and "Shipment", the code uses `PickTicket` and `Shipment`—not `OrderDtoV2`.
+- **Bounded Context:** the explicit boundary within which a particular model and language apply.
+- **Context Map:** shows how contexts interact—using an **Anti-Corruption Layer (ACL)** when protecting a clean domain from a messy legacy API, or a **Published Language** (shared event schema) between peers.
+
+<Diagram
+  id="ddd-context-map"
+  ariaLabel="Context Map showing Checkout, Billing, and Shipping Bounded Contexts with Published Language and Anti-Corruption Layer"
+  caption="Each Bounded Context owns its own model of Order; integration happens across explicit translation boundaries."
+  nodes={[
+    { id: 'checkout', label: 'Checkout Context', subtitle: 'Cart → PlacedOrder', icon: 'service', category: 'service', rank: 0, order: 0 },
+    { id: 'billing', label: 'Billing Context', subtitle: 'Invoice & Payment', icon: 'interface', category: 'abstraction', rank: 1, order: 0 },
+    { id: 'shipping', label: 'Shipping Context', subtitle: 'ACL → Shipment', icon: 'pod', category: 'concrete', rank: 1, order: 1 },
+    { id: 'legacy', label: 'Legacy ERP', subtitle: 'External SOAP', icon: 'db', category: 'external', rank: 2, order: 1 },
+  ]}
+  edges={[
+    { from: 'checkout', to: 'billing', kind: 'request', label: 'Pub Event' },
+    { from: 'checkout', to: 'shipping', kind: 'request', label: 'OrderPlaced' },
+    { from: 'shipping', to: 'legacy', kind: 'request', label: 'ACL' },
+  ]}
+/>
+
+## Do it
+You don't need separate microservices to apply Bounded Contexts—start with separate folders/modules and explicit DTO translation at boundaries:
+
+```ts
+// Verified pattern in TypeScript 7.0.2
+// --- Billing Context: translates Checkout's event into Billing's own language ---
+export interface CheckoutOrderPlacedEvent {
+  orderId: string;
+  customerId: string;
+  totalCents: number;
+}
+
+export interface InvoiceDraft {
+  invoiceId: string;
+  accountId: string;
+  amountDueCents: number;
+}
+
+// Anti-Corruption / translation function at the Billing boundary
+export function toInvoiceDraft(event: CheckoutOrderPlacedEvent): InvoiceDraft {
+  return {
+    invoiceId: `inv_${event.orderId}`,
+    accountId: event.customerId,
+    amountDueCents: event.totalCents,
+  };
+}
+```
+
+## Gotchas
+- **1 Bounded Context ≠ 1 Microservice:** you can run three Bounded Contexts inside one modular monolith process and still get 90% of the design benefit without network latency.
+- **Shared Database across contexts:** letting Shipping read Checkout's internal tables bypasses the context boundary and re-couples both teams.
+- **Vocabulary drift:** if engineers say `User` in code while support says `Subscriber` and billing says `Account`, bugs happen in requirements before a line of code is written.
+
+## Production checklist
+- [ ] Define a glossary for each Bounded Context and rename ambiguous classes to match it
+- [ ] Keep separate domain models per context—never share ORM entities across context boundaries
+- [ ] Document upstream/downstream relationships in a lightweight Context Map
+- [ ] Place an Anti-Corruption Layer in front of third-party or legacy APIs
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "Why should the Shipping context and Billing context each have their own Order/Shipment model instead of sharing one Order class?",
+    options: [
+      { label: "Each context cares about different attributes and invariants; sharing one model couples unrelated business rules", description: "Billing cares about tax and payment terms, while Shipping cares about weight, boxes, and carrier tracking.", correct: true },
+      { label: "TypeScript does not allow importing classes from another folder", description: "This is a modular design boundary, not a compiler limitation." },
+      { label: "Shared classes cannot be stored in PostgreSQL", description: "Database storage is independent of bounded-context modeling." }
+    ]
+  },
+  {
+    question: "You are integrating a new TypeScript domain with a messy legacy ERP whose status codes are 'X1', 'Z9'. Which Context Map pattern protects your domain?",
+    options: [
+      { label: "Anti-Corruption Layer (ACL)", description: "An ACL translates the legacy ERP model into your domain's clean types and terminology at the boundary.", correct: true },
+      { label: "Shared Kernel", description: "A Shared Kernel shares code directly, which would pull legacy quirks into your new domain." },
+      { label: "Database View sharing", description: "Sharing database views couples your schema directly to the legacy system." }
+    ]
+  }
+]} />
+
+## Sources
+- [Martin Fowler: BoundedContext](https://martinfowler.com/bliki/BoundedContext.html)
+- [Martin Fowler: UbiquitousLanguage](https://martinfowler.com/bliki/UbiquitousLanguage.html)
