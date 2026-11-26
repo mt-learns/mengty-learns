@@ -415,3 +415,8 @@ Home ─▶ Learning path (3/8) ─▶ Concept page
 6. Flashcard scheduler: FSRS (better retention, slightly more code) or SM-2 (simple)? *Default: FSRS via the `ts-fsrs` package.*
 7. Digest cadence: weekly or biweekly? *Default: biweekly. It's easier to keep up.*
 8. Code-tab languages for concept pages: TS + Go + Python, or TS only to start? *Default: TS only in P1, then add Go.*
+
+---
+
+## Appendix A — Diagram rendering standard
+All flows and diagrams follow **`DIAGRAM-RULES.md`** (MUST rules are blocking for merge). It supersedes the visual details in §10.5 wherever they differ: the badge-per-edge lists, the fixed canvas height, raw x/y coordinates, bezier edges, and opacity dimming.
