@@ -1,0 +1,298 @@
+---
+title: Layered (N-Tier) Architecture
+description: Organize an application into horizontal layers—Presentation, Business, and Data—where each layer only calls the layer directly below it.
+type: explanation
+level: beginner
+tags: [architecture, layered, typescript]
+tested_with:
+  typescript: "5.x"
+status: stable
+updated: "2026-11-26"
+---
+
+{/* TODO(schema-v2): Add kind: 'concept', verified, cards, related, and sources to frontmatter once lib/source.ts supports them. */}
+
+## 1. Intent
+
+<Intent>
+Separate an application into horizontal technical layers—**Presentation**, **Business**, and **Data**—so UI handling, business rules, and database queries do not live in the same file, with dependencies flowing strictly downward.
+</Intent>
+
+## 2. Problem
+
+When a small Order API grows inside route handlers, HTTP parsing, discount rules, tax math, and SQL queries end up tangled together. Changing a table column breaks validation; testing a discount calculation requires a running Postgres instance.
+
+Over time, two classic layered pitfalls appear even after splitting files:
+
+1. **Leaky layers:** A controller bypasses the business layer and queries the database directly, or the business layer accepts raw HTTP `Request` objects.
+2. **Database-centric design:** Because Business depends on Data, and Data mirrors SQL tables, domain models turn into thin wrappers around database rows instead of expressing business rules.
+
+<figure className="my-6">
+  <svg
+    viewBox="0 0 560 190"
+    className="w-full h-auto rounded-card border border-border bg-card p-3"
+    role="img"
+    aria-label="Leaky layered architecture: Presentation bypasses Business to hit Data, and Business couples to ORM rows"
+  >
+    <rect x="40" y="18" width="140" height="44" rx="12" fill="var(--muted)" stroke="var(--border)" />
+    <text x="110" y="44" textAnchor="middle" fill="var(--foreground)" fontSize="13" fontWeight="600">Presentation</text>
+
+    <rect x="210" y="18" width="140" height="44" rx="12" fill="var(--muted)" stroke="var(--border)" />
+    <text x="280" y="44" textAnchor="middle" fill="var(--foreground)" fontSize="13" fontWeight="600">Business</text>
+
+    <rect x="380" y="18" width="140" height="44" rx="12" fill="var(--muted)" stroke="var(--border)" />
+    <text x="450" y="44" textAnchor="middle" fill="var(--foreground)" fontSize="13" fontWeight="600">Data / ORM</text>
+
+    <path d="M 110 62 L 110 120 L 450 120 L 450 62" fill="none" stroke="var(--destructive)" strokeWidth="2" strokeDasharray="5 4" />
+    <text x="280" y="112" textAnchor="middle" fill="var(--destructive)" fontSize="11" fontWeight="600">Leaky shortcut: controller queries DB directly</text>
+
+    <line x1="350" y1="40" x2="380" y2="40" stroke="var(--destructive)" strokeWidth="2" />
+    <text x="280" y="160" textAnchor="middle" fill="var(--muted-foreground)" fontSize="11">Business logic becomes coupled to ORM row shapes and SQL schema</text>
+  </svg>
+  <figcaption className="mt-2 text-center text-caption-1 text-muted-foreground">
+    Without strict layer boundaries, Presentation leaks into Data and Business becomes DB-centric.
+  </figcaption>
+</figure>
+
+## 3. Solution
+
+Group code by **technical responsibility** into stacked horizontal layers:
+
+- **Presentation:** Parses HTTP requests, validates input shapes, and formats JSON responses.
+- **Business (Domain / Service):** Enforces Order rules—stock checks, totals, and discounts—without knowing about HTTP status codes or SQL syntax.
+- **Data (Persistence):** Reads and writes `orders` rows in Postgres.
+
+Each layer only talks to the layer immediately below it. Presentation calls Business; Business calls Data; Data talks to Postgres.
+
+## 4. Real-world analogy
+
+<Analogy>
+Think of a restaurant with a **waiter** (Presentation), a **chef** (Business), and a **pantry clerk** (Data). The customer never walks into the pantry to grab ingredients, and the chef does not take payments at the table. Each station hands work to the next station down the line.
+</Analogy>
+
+## 5. Flow: watch it work
+
+<Flow
+  id="layered-order"
+  title="Layered Order Service: Place Order"
+  variants={[
+    {
+      id: 'clean-layers',
+      label: 'Strict layers',
+      groups: [
+        { id: 'app-layers', label: 'Application Layers', x: 1, y: 0, width: 3, height: 1 },
+      ],
+      nodes: [
+        { id: 'http', label: 'HTTP Client', subtitle: 'POST /orders', icon: 'user', x: 0, y: 0 },
+        { id: 'pres', label: 'Presentation', subtitle: 'OrderController', icon: 'gateway', x: 1, y: 0 },
+        { id: 'biz', label: 'Business', subtitle: 'OrderService', icon: 'service', x: 2, y: 0 },
+        { id: 'data', label: 'Data', subtitle: 'OrderRepo', icon: 'class', x: 3, y: 0 },
+        { id: 'db', label: 'Postgres', subtitle: 'orders table', icon: 'db', x: 4, y: 0 },
+      ],
+      steps: [
+        { edge: 'http->pres', text: 'Client sends POST /orders with customerId and line items' },
+        { edge: 'pres->biz', text: 'Presentation validates JSON and calls OrderService.placeOrder()' },
+        { edge: 'biz->data', text: 'Business calculates totals and asks Data layer to persist the order' },
+        { edge: 'data->db', text: 'Data runs INSERT INTO orders and returns the saved record' },
+        { edge: 'db->data', text: 'Postgres confirms commit with generated order id', kind: 'response' },
+        { edge: 'data->biz', text: 'Data maps the database row to an Order record', kind: 'response' },
+        { edge: 'biz->pres', text: 'Business returns the created Order to Presentation', kind: 'response' },
+        { edge: 'pres->http', text: 'Presentation serializes JSON and responds 201 Created', kind: 'response' },
+      ],
+    },
+    {
+      id: 'leaky-layer',
+      label: 'Leaky layer (problem)',
+      nodes: [
+        { id: 'http', label: 'HTTP Client', subtitle: 'POST /orders', icon: 'user', x: 0, y: 0 },
+        { id: 'pres', label: 'Presentation', subtitle: 'OrderController', icon: 'gateway', x: 1, y: 0 },
+        { id: 'biz', label: 'Business', subtitle: 'OrderService', icon: 'service', x: 2, y: 1 },
+        { id: 'data', label: 'Data', subtitle: 'OrderRepo', icon: 'class', x: 2, y: 0 },
+        { id: 'db', label: 'Postgres', subtitle: 'orders table', icon: 'db', x: 3, y: 0 },
+      ],
+      steps: [
+        { edge: 'http->pres', text: 'Client sends POST /orders' },
+        { edge: 'pres->data', text: 'Controller bypasses OrderService and calls OrderRepo directly', kind: 'error' },
+        { edge: 'data->db', text: 'Data inserts row without running Business discount or stock checks', kind: 'error' },
+        { edge: 'db->pres', text: 'Raw database row leaks back into the HTTP response shape', kind: 'error' },
+      ],
+    },
+  ]}
+/>
+
+## 6. Structure: Dependency Rule
+
+In classic Layered architecture, **dependencies point top-down**. Presentation depends on Business, and Business depends on Data.
+
+<figure className="my-6">
+  <svg
+    viewBox="0 0 560 220"
+    className="w-full h-auto rounded-card border border-border bg-card p-3"
+    role="img"
+    aria-label="Layered dependency rule: arrows point downward from Presentation to Business to Data to Database"
+  >
+    <rect x="155" y="14" width="250" height="36" rx="10" fill="var(--card)" stroke="var(--primary)" strokeWidth="1.5" />
+    <text x="280" y="37" textAnchor="middle" fill="var(--foreground)" fontSize="13" fontWeight="600">Presentation (HTTP / UI)</text>
+
+    <line x1="280" y1="50" x2="280" y2="72" stroke="var(--primary)" strokeWidth="2" />
+    <polygon points="275,68 285,68 280,75" fill="var(--primary)" />
+
+    <rect x="155" y="75" width="250" height="36" rx="10" fill="var(--card)" stroke="var(--primary)" strokeWidth="1.5" />
+    <text x="280" y="98" textAnchor="middle" fill="var(--foreground)" fontSize="13" fontWeight="600">Business (OrderService)</text>
+
+    <line x1="280" y1="111" x2="280" y2="133" stroke="var(--primary)" strokeWidth="2" />
+    <polygon points="275,129 285,129 280,136" fill="var(--primary)" />
+
+    <rect x="155" y="136" width="250" height="36" rx="10" fill="var(--muted)" stroke="var(--border)" strokeWidth="1.5" />
+    <text x="280" y="159" textAnchor="middle" fill="var(--foreground)" fontSize="13" fontWeight="600">Data (OrderRepo → Postgres)</text>
+
+    <text x="280" y="200" textAnchor="middle" fill="var(--muted-foreground)" fontSize="11">
+      Dependency Rule: every layer imports only the layer directly below it (DB-centric bottom).
+    </text>
+  </svg>
+  <figcaption className="mt-2 text-center text-caption-1 text-muted-foreground">
+    Arrows represent compile-time imports: Business directly imports Data.
+  </figcaption>
+</figure>
+
+## 7. Code
+
+<Tabs items={['TypeScript']}>
+  <Tab value="TypeScript">
+```ts
+// --- Data Layer (src/data/order-repo.ts) ---
+export interface OrderRow {
+  id: string;
+  customerId: string;
+  totalCents: number;
+}
+
+export class OrderRepo {
+  async insert(customerId: string, totalCents: number): Promise<OrderRow> {
+    // Simulated Postgres INSERT
+    return { id: 'ord_101', customerId, totalCents };
+  }
+}
+
+// --- Business Layer (src/business/order-service.ts) ---
+export interface OrderItemInput {
+  priceCents: number;
+  qty: number;
+}
+
+export class OrderService {
+  constructor(private readonly repo: OrderRepo) {}
+
+  async placeOrder(customerId: string, items: OrderItemInput[]): Promise<OrderRow> {
+    if (items.length === 0) {
+      throw new Error('Order must contain at least one item');
+    }
+    const totalCents = items.reduce((sum, item) => sum + item.priceCents * item.qty, 0);
+    return this.repo.insert(customerId, totalCents);
+  }
+}
+
+// --- Presentation Layer (src/presentation/order-controller.ts) ---
+export class OrderController {
+  constructor(private readonly service: OrderService) {}
+
+  async handlePost(body: { customerId: string; items: OrderItemInput[] }) {
+    const order = await this.service.placeOrder(body.customerId, body.items);
+    return { status: 201, data: order };
+  }
+}
+```
+  </Tab>
+</Tabs>
+
+<LabLink
+  name="arch-order-service"
+  description="Compare the Order service in layered, hexagonal, and clean branches."
+  command="npx tsx src/presentation/order-controller.ts"
+/>
+
+## 8. When to use / when to avoid
+
+<Checklist
+  use={[
+    'You are building a straightforward CRUD app or internal admin tool with simple domain rules.',
+    'The team is small and wants a familiar folder layout (controllers, services, repositories) on day one.',
+    'Database schema and business objects map closely without complex invariants.',
+  ]}
+  avoid={[
+    'Business rules are rich and need fast unit tests with zero database or ORM setup.',
+    'You need to swap databases, message brokers, or external APIs without touching business logic.',
+    'The app is large enough that horizontal layers create a big ball of mud across features.',
+  ]}
+/>
+
+## 9. How to implement
+
+<Steps>
+  <Step>
+    ### Split folders by horizontal layer
+    Create `presentation/`, `business/`, and `data/` directories so team members know where each responsibility belongs.
+  </Step>
+  <Step>
+    ### Keep HTTP types out of Business
+    Parse request bodies and set HTTP status codes in Presentation; pass plain TypeScript objects into `OrderService`.
+  </Step>
+  <Step>
+    ### Enforce downward-only imports
+    Add an ESLint import rule so `presentation/` never imports `data/` directly, preventing leaky shortcuts.
+  </Step>
+  <Step>
+    ### Watch for DB-centric drift
+    When `OrderService` starts returning raw ORM models with lazy-loaded relations, consider introducing [Dependency Inversion](/docs/architecture/dependency-inversion) or [Hexagonal Architecture](/docs/architecture/hexagonal).
+  </Step>
+</Steps>
+
+## 10. Pros / Cons
+
+<ProsCons
+  pros={[
+    'Minimal boilerplate and fast to scaffold for CRUD-heavy services.',
+    'Every developer immediately recognizes the Controller → Service → Repository flow.',
+    'Easy to enforce basic separation of concerns in small codebases.',
+  ]}
+  cons={[
+    'Business logic depends directly on the Data layer, making pure domain unit tests harder.',
+    'Layers often turn into pass-throughs ("sinkhole" anti-pattern) that add files without logic.',
+    'Schema changes in the database ripple upward into business services.',
+  ]}
+/>
+
+## 11. Relations
+
+<Relations
+  items={[
+    {
+      name: 'Hexagonal Architecture',
+      summary: 'Inverts the Business → Data dependency so the domain owns an interface and Postgres plugs in as an adapter.',
+      href: '/docs/architecture/hexagonal',
+    },
+    {
+      name: 'Compare Architecture Styles',
+      summary: 'Side-by-side comparison of Layered, Hexagonal, Onion, and Clean on the same Order request.',
+      href: '/docs/architecture/compare-styles',
+    },
+    {
+      name: 'Dependency Inversion',
+      summary: 'The SOLID principle that breaks the Business → Data coupling.',
+      href: '/docs/architecture/dependency-inversion',
+    },
+  ]}
+/>
+
+## 12. Check yourself
+
+<MyTake>
+Layered architecture is my default starting point for small APIs and prototypes. It only starts hurting when `OrderService` becomes a maze of ORM queries and mocking the database takes more lines than the test itself—that is my signal to invert the repository dependency.
+</MyTake>
+
+{/* TODO(step-11): Add <Quiz> component once Step 11 is merged. */}
+
+### Sources
+
+- [Martin Fowler: PresentationDomainDataLayering](https://martinfowler.com/bliki/PresentationDomainDataLayering.html)
+- [Mark Richards: Software Architecture Patterns (Layered Architecture)](https://www.oreilly.com/library/view/software-architecture-patterns/9781491971437/)

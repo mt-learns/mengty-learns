@@ -1,0 +1,171 @@
+---
+title: Dependency Inversion in Practice
+description: Break compile-time coupling between business logic and infrastructure by having both depend on an interface owned by the domain.
+type: explanation
+level: beginner
+tags: [architecture, solid, dependency-inversion, typescript]
+tested_with:
+  typescript: "5.x"
+status: stable
+updated: "2026-11-26"
+---
+
+{/* TODO(schema-v2): Add kind: 'note', verified, cards, related, and sources to frontmatter once lib/source.ts supports them. */}
+
+<Intent>
+The **Dependency Inversion Principle (DIP)** is the mechanism behind Hexagonal, Onion, and Clean architectures: high-level business rules (`PlaceOrderService`) do not import low-level drivers (`PostgresOrderRepo`). Instead, **both depend on an abstraction** (`OrderRepository`) owned by the business layer.
+</Intent>
+
+## The Problem: Concrete Imports Lock You In
+
+In a standard layered setup, `PlaceOrderService` directly imports `PostgresOrderRepo`. Even if you pass it via constructor injection, the `import` statement at the top of the file still creates a compile-time dependency on Postgres, its types, and its error classes.
+
+## The Solution: Invert the Arrow Across the Boundary
+
+Move the `OrderRepository` interface **into the domain/business module**, and make `PostgresOrderRepo` implement it from the infrastructure module. Source code imports now point **from infrastructure toward the domain**, while runtime control still flows from domain to Postgres.
+
+<figure className="my-6">
+  <svg
+    viewBox="0 0 560 190"
+    className="w-full h-auto rounded-card border border-border bg-card p-3"
+    role="img"
+    aria-label="Dependency Inversion: PlaceOrderService and PostgresOrderRepo both depend on OrderRepository interface"
+  >
+    {/* Boundary */}
+    <line x1="280" y1="16" x2="280" y2="155" stroke="var(--border)" strokeWidth="1.5" strokeDasharray="5 4" />
+    <text x="140" y="24" textAnchor="middle" fill="var(--primary)" fontSize="11" fontWeight="600">Domain / Business Module</text>
+    <text x="420" y="24" textAnchor="middle" fill="var(--muted-foreground)" fontSize="11" fontWeight="600">Infrastructure Module</text>
+
+    {/* Service */}
+    <rect x="24" y="54" width="130" height="52" rx="12" fill="var(--card)" stroke="var(--primary)" strokeWidth="1.5" />
+    <text x="89" y="77" textAnchor="middle" fill="var(--foreground)" fontSize="12" fontWeight="600">PlaceOrderService</text>
+    <text x="89" y="94" textAnchor="middle" fill="var(--muted-foreground)" fontSize="10">High-level policy</text>
+
+    {/* Interface owned by domain */}
+    <rect x="180" y="54" width="150" height="52" rx="12" fill="var(--card)" stroke="var(--primary)" strokeWidth="1.5" />
+    <text x="255" y="77" textAnchor="middle" fill="var(--foreground)" fontSize="12" fontWeight="600">«interface»</text>
+    <text x="255" y="94" textAnchor="middle" fill="var(--primary)" fontSize="11" fontWeight="600">OrderRepository</text>
+
+    {/* Concrete Postgres */}
+    <rect x="380" y="54" width="156" height="52" rx="12" fill="var(--muted)" stroke="var(--border)" strokeWidth="1.5" />
+    <text x="458" y="77" textAnchor="middle" fill="var(--foreground)" fontSize="12" fontWeight="600">PostgresOrderRepo</text>
+    <text x="458" y="94" textAnchor="middle" fill="var(--muted-foreground)" fontSize="10">Low-level detail</text>
+
+    {/* Arrows pointing to interface */}
+    <line x1="154" y1="80" x2="176" y2="80" stroke="var(--primary)" strokeWidth="2" />
+    <polygon points="172,76 172,84 180,80" fill="var(--primary)" />
+
+    <line x1="380" y1="80" x2="334" y2="80" stroke="var(--primary)" strokeWidth="2" strokeDasharray="4 3" />
+    <polygon points="338,76 338,84 330,80" fill="var(--primary)" />
+
+    <text x="280" y="176" textAnchor="middle" fill="var(--muted-foreground)" fontSize="11">
+      Dependency Rule: PostgresOrderRepo imports OrderRepository across the boundary, not vice versa.
+    </text>
+  </svg>
+  <figcaption className="mt-2 text-center text-caption-1 text-muted-foreground">
+    Compile-time dependency is inverted: Infrastructure depends on the Domain interface.
+  </figcaption>
+</figure>
+
+## Code: Before vs After DIP
+
+<Tabs items={['TypeScript (After DIP)', 'TypeScript (Before DIP)']}>
+  <Tab value="TypeScript (After DIP)">
+```ts
+// --- domain/order.ts (owns the abstraction) ---
+export interface Order {
+  id: string;
+  totalCents: number;
+}
+
+export interface OrderRepository {
+  save(order: Order): Promise<void>;
+}
+
+export class PlaceOrderService {
+  constructor(private readonly repo: OrderRepository) {}
+
+  async execute(totalCents: number): Promise<Order> {
+    const order = { id: crypto.randomUUID(), totalCents };
+    await this.repo.save(order);
+    return order;
+  }
+}
+
+// --- infra/postgres-order-repo.ts (depends on domain/) ---
+export class PostgresOrderRepo implements OrderRepository {
+  async save(order: Order): Promise<void> {
+    // INSERT INTO orders ...
+    void order;
+  }
+}
+```
+  </Tab>
+  <Tab value="TypeScript (Before DIP)">
+```ts
+// --- business/place-order-service.ts ---
+import { PostgresOrderRepo } from '../infra/postgres-order-repo';
+
+export class PlaceOrderService {
+  private readonly repo = new PostgresOrderRepo(); // coupled to SQL driver
+
+  async execute(totalCents: number) {
+    return this.repo.insert(totalCents);
+  }
+}
+```
+  </Tab>
+</Tabs>
+
+## How DIP Relates to the Bridge Pattern
+
+Notice how identical this structure is to the [Bridge Pattern](/docs/design/bridge):
+
+- **Bridge** separates an Abstraction hierarchy (`RemoteControl`) from an Implementation hierarchy (`Device` interface → `TV`, `Radio`) using composition.
+- **Dependency Inversion** applies that same composition-over-interface idea at **architectural module boundaries** (`PlaceOrderService` → `OrderRepository` ← `PostgresOrderRepo`).
+
+<Checklist
+  use={[
+    'You want domain modules to compile and pass unit tests without importing database or HTTP packages.',
+    'You need to swap Postgres for an in-memory fake in tests or migrate storage engines later.',
+  ]}
+  avoid={[
+    'Creating a 1-to-1 interface for every utility class that has no external I/O or alternate implementation.',
+  ]}
+/>
+
+<Relations
+  items={[
+    {
+      name: 'Bridge Pattern',
+      summary: 'The OOP structural pattern that separates Abstraction from Implementation via an interface.',
+      href: '/docs/design/bridge',
+    },
+    {
+      name: 'Hexagonal Architecture',
+      summary: 'Applies DIP to every driving and driven boundary around the application core.',
+      href: '/docs/architecture/hexagonal',
+    },
+    {
+      name: 'Layered Architecture',
+      summary: 'Shows what happens when dependencies point downward instead of being inverted.',
+      href: '/docs/architecture/layered',
+    },
+    {
+      name: 'Compare Architecture Styles',
+      summary: 'See how Layered, Hexagonal, Onion, and Clean apply (or skip) DIP.',
+      href: '/docs/architecture/compare-styles',
+    },
+  ]}
+/>
+
+<MyTake>
+The most common mistake with Dependency Inversion is putting the `OrderRepository` interface in the `infra/` folder. If `domain/` imports an interface from `infra/`, you have not inverted anything—the domain still depends on infrastructure. Always place the interface in the module that **calls** it.
+</MyTake>
+
+{/* TODO(step-11): Add <Quiz> component once Step 11 is merged. */}
+
+### Sources
+
+- [Robert C. Martin: The Clean Architecture (Dependency Rule)](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
+- [Martin Fowler: Inversion of Control Containers and the Dependency Injection pattern](https://martinfowler.com/articles/injection.html)

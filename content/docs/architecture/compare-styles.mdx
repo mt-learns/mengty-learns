@@ -1,0 +1,202 @@
+---
+title: "Layered vs Hexagonal vs Onion vs Clean"
+description: Compare the four major application architecture styles side by side using the same TypeScript Order service request.
+type: explanation
+level: intermediate
+tags: [architecture, layered, hexagonal, onion, clean-architecture, typescript]
+tested_with:
+  typescript: "5.x"
+status: stable
+updated: "2026-11-26"
+---
+
+{/* TODO(schema-v2): Add kind: 'note', verified, cards, related, and sources to frontmatter once lib/source.ts supports them. */}
+
+<Intent>
+**Layered** points dependencies **downward** toward the database. **Hexagonal**, **Onion**, and **Clean** all invert that bottom arrow so dependencies point **inward** toward the domain—they mainly differ in how they subdivide the core and name the boundaries.
+</Intent>
+
+## Dependency Rule: Side-by-Side
+
+The single biggest difference between Layered and the three domain-centric styles is **which way the import arrows point**:
+
+<figure className="my-6">
+  <svg
+    viewBox="0 0 600 200"
+    className="w-full h-auto rounded-card border border-border bg-card p-3"
+    role="img"
+    aria-label="Dependency direction comparison: Layered points down to DB, while Hexagonal, Onion, and Clean point inward to Domain"
+  >
+    {/* Layered */}
+    <rect x="16" y="16" width="264" height="168" rx="14" fill="var(--muted)" fillOpacity="0.4" stroke="var(--border)" />
+    <text x="148" y="38" textAnchor="middle" fill="var(--foreground)" fontSize="13" fontWeight="600">Layered (Top-Down)</text>
+
+    <rect x="58" y="50" width="180" height="28" rx="8" fill="var(--card)" stroke="var(--border)" />
+    <text x="148" y="68" textAnchor="middle" fill="var(--foreground)" fontSize="11">Presentation</text>
+
+    <line x1="148" y1="78" x2="148" y2="92" stroke="var(--destructive)" strokeWidth="2" />
+    <polygon points="144,89 152,89 148,95" fill="var(--destructive)" />
+
+    <rect x="58" y="95" width="180" height="28" rx="8" fill="var(--card)" stroke="var(--border)" />
+    <text x="148" y="113" textAnchor="middle" fill="var(--foreground)" fontSize="11">Business (OrderService)</text>
+
+    <line x1="148" y1="123" x2="148" y2="137" stroke="var(--destructive)" strokeWidth="2" />
+    <polygon points="144,134 152,134 148,140" fill="var(--destructive)" />
+
+    <rect x="58" y="140" width="180" height="28" rx="8" fill="var(--card)" stroke="var(--destructive)" />
+    <text x="148" y="158" textAnchor="middle" fill="var(--foreground)" fontSize="11">Data / Database</text>
+
+    {/* Hexagonal / Onion / Clean */}
+    <rect x="312" y="16" width="272" height="168" rx="14" fill="var(--muted)" fillOpacity="0.4" stroke="var(--primary)" />
+    <text x="448" y="38" textAnchor="middle" fill="var(--primary)" fontSize="13" fontWeight="600">Hexagonal / Onion / Clean</text>
+
+    <rect x="330" y="54" width="76" height="44" rx="8" fill="var(--card)" stroke="var(--border)" />
+    <text x="368" y="80" textAnchor="middle" fill="var(--foreground)" fontSize="11">HTTP / UI</text>
+
+    <line x1="406" y1="76" x2="424" y2="76" stroke="var(--primary)" strokeWidth="2" />
+    <polygon points="421,72 421,80 427,76" fill="var(--primary)" />
+
+    <rect x="427" y="54" width="60" height="106" rx="10" fill="var(--card)" stroke="var(--primary)" strokeWidth="1.5" />
+    <text x="457" y="102" textAnchor="middle" fill="var(--foreground)" fontSize="11" fontWeight="600">Domain</text>
+    <text x="457" y="117" textAnchor="middle" fill="var(--muted-foreground)" fontSize="10">+ Ports</text>
+
+    <line x1="510" y1="76" x2="491" y2="76" stroke="var(--primary)" strokeWidth="2" />
+    <polygon points="494,72 494,80 488,76" fill="var(--primary)" />
+
+    <rect x="510" y="54" width="60" height="44" rx="8" fill="var(--card)" stroke="var(--border)" />
+    <text x="540" y="80" textAnchor="middle" fill="var(--foreground)" fontSize="11">Postgres</text>
+
+    <text x="448" y="176" textAnchor="middle" fill="var(--muted-foreground)" fontSize="10">
+      All outer rings depend inward on core interfaces
+    </text>
+  </svg>
+  <figcaption className="mt-2 text-center text-caption-1 text-muted-foreground">
+    Layered couples Business to Data; Hexagonal, Onion, and Clean invert that dependency so Domain owns the contract.
+  </figcaption>
+</figure>
+
+## Flow: Same "Place Order" Request in All 4 Styles
+
+Switch between the four variants below to trace how a `POST /orders` request travels through each architecture:
+
+<Flow
+  id="compare-arch-styles"
+  title="Place Order Request Across 4 Architecture Styles"
+  variants={[
+    {
+      id: 'layered',
+      label: 'Layered',
+      groups: [
+        { id: 'layers', label: 'Horizontal Layers', x: 1, y: 0, width: 3, height: 1 },
+      ],
+      nodes: [
+        { id: 'http', label: 'HTTP Client', subtitle: 'POST /orders', icon: 'user', x: 0, y: 0 },
+        { id: 'pres', label: 'Presentation', subtitle: 'OrderController', icon: 'gateway', x: 1, y: 0 },
+        { id: 'biz', label: 'Business', subtitle: 'OrderService', icon: 'service', x: 2, y: 0 },
+        { id: 'data', label: 'Data', subtitle: 'OrderRepo', icon: 'db', x: 3, y: 0 },
+      ],
+      steps: [
+        { edge: 'http->pres', text: 'Client sends POST /orders to OrderController' },
+        { edge: 'pres->biz', text: 'Controller validates payload and calls OrderService.placeOrder()' },
+        { edge: 'biz->data', text: 'OrderService directly imports and calls OrderRepo.insert()' },
+        { edge: 'data->biz', text: 'OrderRepo returns saved database row', kind: 'response' },
+        { edge: 'biz->pres', text: 'OrderService returns result to Presentation', kind: 'response' },
+        { edge: 'pres->http', text: 'Controller sends 201 Created JSON response', kind: 'response' },
+      ],
+    },
+    {
+      id: 'hexagonal',
+      label: 'Hexagonal',
+      groups: [
+        { id: 'hex', label: 'Application Core (Hexagon)', x: 1, y: 0, width: 3, height: 1 },
+      ],
+      nodes: [
+        { id: 'rest', label: 'REST Adapter', subtitle: 'Driving', icon: 'gateway', x: 0, y: 0 },
+        { id: 'inport', label: 'PlaceOrderPort', subtitle: 'Inbound port', icon: 'interface', x: 1, y: 0 },
+        { id: 'domain', label: 'OrderDomain', subtitle: 'Core', icon: 'service', x: 2, y: 0 },
+        { id: 'outport', label: 'OrderRepoPort', subtitle: 'Outbound port', icon: 'interface', x: 3, y: 0 },
+        { id: 'pg', label: 'PostgresAdapter', subtitle: 'Driven', icon: 'db', x: 4, y: 0 },
+      ],
+      steps: [
+        { edge: 'rest->inport', text: 'Driving REST adapter calls inbound PlaceOrderPort' },
+        { edge: 'inport->domain', text: 'Core validates items and computes Order total' },
+        { edge: 'domain->outport', text: 'Core calls outbound OrderRepoPort.save()' },
+        { edge: 'outport->pg', text: 'Driven PostgresAdapter executes SQL INSERT' },
+        { edge: 'pg->domain', text: 'Saved Order returns through outbound port', kind: 'response' },
+        { edge: 'domain->rest', text: 'REST adapter formats Order as 201 JSON', kind: 'response' },
+      ],
+    },
+    {
+      id: 'onion',
+      label: 'Onion',
+      groups: [
+        { id: 'app-ring', label: 'Application Services Ring', x: 1, y: 0, width: 3, height: 1 },
+        { id: 'domain-ring', label: 'Domain Core (Model + Services)', x: 2, y: 0, width: 1, height: 1 },
+      ],
+      nodes: [
+        { id: 'ui', label: 'UI / API', subtitle: 'Outer ring', icon: 'gateway', x: 0, y: 0 },
+        { id: 'appsvc', label: 'App Service', subtitle: 'PlaceOrderSvc', icon: 'service', x: 1, y: 0 },
+        { id: 'dom', label: 'Domain Model', subtitle: 'Order + Repo IF', icon: 'class', x: 2, y: 0 },
+        { id: 'infra', label: 'Infrastructure', subtitle: 'PostgresRepo', icon: 'db', x: 3, y: 0 },
+      ],
+      steps: [
+        { edge: 'ui->appsvc', text: 'Outer API ring calls Application Service PlaceOrderSvc' },
+        { edge: 'appsvc->dom', text: 'App Service creates Order entity and checks Domain invariants' },
+        { edge: 'dom->infra', text: 'Domain-defined IOrderRepo is resolved to PostgresRepo at runtime' },
+        { edge: 'infra->appsvc', text: 'Infrastructure persists Order and returns to App Service', kind: 'response' },
+        { edge: 'appsvc->ui', text: 'App Service returns DTO to UI / API ring', kind: 'response' },
+        { edge: 'ui->appsvc', text: 'API ring returns 201 Created to caller', kind: 'response' },
+      ],
+    },
+    {
+      id: 'clean',
+      label: 'Clean',
+      groups: [
+        { id: 'usecase-ring', label: 'Use Cases + Entities', x: 1, y: 0, width: 2, height: 1 },
+      ],
+      nodes: [
+        { id: 'ctrl', label: 'Controller', subtitle: 'Interface Adapter', icon: 'gateway', x: 0, y: 0 },
+        { id: 'uc', label: 'PlaceOrderUC', subtitle: 'Interactor', icon: 'service', x: 1, y: 0 },
+        { id: 'ent', label: 'Order Entity', subtitle: 'Enterprise rule', icon: 'class', x: 2, y: 0 },
+        { id: 'gw', label: 'OrderGateway', subtitle: 'DB Adapter', icon: 'db', x: 3, y: 0 },
+      ],
+      steps: [
+        { edge: 'ctrl->uc', text: 'Controller converts HTTP body to InputData and invokes Interactor' },
+        { edge: 'uc->ent', text: 'Interactor creates Order Entity and runs enterprise pricing rules' },
+        { edge: 'uc->gw', text: 'Interactor calls OrderGateway interface implemented by DB Adapter' },
+        { edge: 'gw->uc', text: 'DB Adapter returns persisted Order to Interactor', kind: 'response' },
+        { edge: 'uc->ctrl', text: 'Interactor passes OutputData through Presenter to Controller', kind: 'response' },
+        { edge: 'ctrl->uc', text: 'Presenter formats ViewModel for HTTP 201 response', kind: 'response' },
+      ],
+    },
+  ]}
+/>
+
+## Comparison Table
+
+| Dimension | Layered (N-Tier) | Hexagonal (Ports & Adapters) | Onion Architecture | Clean Architecture |
+|---|---|---|---|---|
+| **Where business logic lives** | Business / Service layer | Inside the Hexagon (Domain + Use cases) | Concentric Domain Model & Domain Services rings | Entities (enterprise rules) + Use Cases (application rules) |
+| **Dependency direction** | Top-down (`Presentation → Business → Data`) | Inward (`Adapters → Ports ← Core`) | Strictly inward toward Domain Model | Strictly inward (Dependency Rule) |
+| **Testability** | Medium — often needs DB or repository mocks | High — swap Postgres adapter for InMemory adapter | High — domain & app rings have zero infra imports | High — use cases test with gateway fakes |
+| **Typical folder layout** | `presentation/`, `business/`, `data/` | `core/ports/`, `core/domain/`, `adapters/` | `domain/`, `application/`, `infrastructure/`, `api/` | `entities/`, `use-cases/`, `adapters/`, `frameworks/` |
+| **When to use** | Simple CRUD apps, small teams, fast prototypes | Apps with multiple entry points or external integrations | Rich DDD domains where domain model stability matters | Large systems with strict use-case boundaries & teams |
+
+## The Order Service Takeaway
+
+In TypeScript, **Hexagonal, Onion, and Clean share the exact same core mechanism**: the `Order` domain defines an interface (`OrderRepoPort` / `IOrderRepository` / `OrderGateway`), and Postgres implements it in an outer folder.
+
+- Choose **Layered** when `OrderService` is mostly CRUD and extra interfaces are pure ceremony.
+- Choose **Hexagonal** when you want clear **driving** (REST, CLI, test) vs **driven** (Postgres, Stripe, InMemory) boundaries.
+- Choose **Onion** or **Clean** when your team wants explicit sub-layers inside the core (separating pure `Order` entity rules from `PlaceOrder` use-case orchestration).
+
+<MyTake>
+In practice, Hexagonal is the easiest inward-dependency style to explain and maintain in TypeScript projects. You get 90% of the benefits of Onion and Clean—fast in-memory tests and zero framework lock-in—without maintaining separate Presenter and Input/Output boundary DTOs for every endpoint.
+</MyTake>
+
+### Sources
+
+- [Martin Fowler: PresentationDomainDataLayering](https://martinfowler.com/bliki/PresentationDomainDataLayering.html)
+- [Alistair Cockburn: Hexagonal Architecture](https://alistair.cockburn.us/hexagonal-architecture/)
+- [Jeffrey Palermo: The Onion Architecture (Part 1)](https://jeffreypalermo.com/2008/07/the-onion-architecture-part-1/)
+- [Robert C. Martin: The Clean Architecture](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)
