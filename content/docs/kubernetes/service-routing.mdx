@@ -67,11 +67,11 @@ Think of **Ingress** as the building's front-desk directory ("Accounting is on F
   id="k8s-request"
   title="Kubernetes Request: User → Ingress → Service → Pod"
   nodes={[
-    { id: 'user', label: 'User', subtitle: 'Browser', icon: 'user', category: 'client', x: 0, y: 1 },
-    { id: 'ing', label: 'Ingress', subtitle: 'L7 HTTP router', icon: 'gateway', category: 'edge', x: 1, y: 1 },
-    { id: 'svc', label: 'Service', subtitle: 'ClusterIP :80', icon: 'service', category: 'service', x: 2, y: 1 },
-    { id: 'podA', label: 'Pod A', subtitle: 'Ready', icon: 'pod', category: 'data', x: 3, y: 0 },
-    { id: 'podB', label: 'Pod B', subtitle: 'Ready', icon: 'pod', category: 'data', x: 3, y: 2 },
+    { id: 'user', label: 'User', subtitle: 'Browser', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'ing', label: 'Ingress', subtitle: 'L7 HTTP router', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+    { id: 'svc', label: 'Service', subtitle: 'ClusterIP :80', icon: 'service', category: 'service', rank: 2, order: 0 },
+    { id: 'podA', label: 'Pod A', subtitle: 'Ready', icon: 'pod', category: 'data', rank: 3, order: 0 },
+    { id: 'podB', label: 'Pod B', subtitle: 'Ready', icon: 'pod', category: 'data', rank: 3, order: 1 },
   ]}
   steps={[
     { edge: 'user->ing', title: 'Browser requests /cart', text: 'Browser sends HTTPS GET /cart to the cluster Ingress controller' },

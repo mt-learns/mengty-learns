@@ -31,8 +31,14 @@ import {
   buildFlowDeepLinkUrl,
   parseFlowDeepLink,
 } from '../deep-link';
-import type { FlowGroup, FlowNode, ParsedFlowProps, ParsedFlowStep } from '../types';
-import type { FlowCanvasControls } from './FlowCanvas';
+import type {
+  FlowGroup,
+  FlowLayoutMode,
+  FlowNode,
+  ParsedFlowProps,
+  ParsedFlowStep,
+} from '../types';
+import type { FlowCanvasControls, FlowCanvasLayoutMeta } from './FlowCanvas';
 
 const STEP_INTERVAL_MS = 2200;
 
@@ -79,6 +85,7 @@ function getStepHeadline(step: ParsedFlowStep, index: number): string {
 export function Player({
   id,
   title,
+  layout: propLayout = 'flow',
   nodes: propNodes,
   steps: propSteps,
   groups: propGroups,
@@ -106,6 +113,7 @@ export function Player({
     () => activeVariant?.steps ?? propSteps ?? [],
     [activeVariant, propSteps],
   );
+  const layoutMode: FlowLayoutMode = activeVariant?.layout ?? propLayout;
 
   // -1 = Overview start state, 0..steps.length-1 = active step
   const [stepIndex, setStepIndex] = useState<number>(-1);
@@ -113,6 +121,10 @@ export function Player({
   const [menuOpen, setMenuOpen] = useState<boolean>(false);
   const [copied, setCopied] = useState<boolean>(false);
   const [shouldLoadCanvas, setShouldLoadCanvas] = useState<boolean>(false);
+  const [layoutMeta, setLayoutMeta] = useState<FlowCanvasLayoutMeta>({
+    canvasHeight: 320,
+    panMode: false,
+  });
 
   const canvasContainerRef = useRef<HTMLDivElement | null>(null);
   const canvasControlsRef = useRef<FlowCanvasControls | null>(null);
@@ -123,6 +135,14 @@ export function Player({
   const handleControlsReady = useCallback((controls: FlowCanvasControls | null) => {
     canvasControlsRef.current = controls;
     setHasCanvasControls(controls !== null);
+  }, []);
+
+  const handleLayoutChange = useCallback((meta: FlowCanvasLayoutMeta) => {
+    setLayoutMeta((prev) =>
+      prev.canvasHeight === meta.canvasHeight && prev.panMode === meta.panMode
+        ? prev
+        : meta,
+    );
   }, []);
 
   // Lazy-load React Flow + dagre only when the diagram enters the viewport
@@ -309,33 +329,37 @@ export function Player({
         </h3>
 
         <div className="relative flex shrink-0 items-center gap-1">
-          <button
-            type="button"
-            onClick={() => canvasControlsRef.current?.zoomOut()}
-            disabled={!hasCanvasControls}
-            aria-label="Zoom out"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-control text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-40"
-          >
-            <Minus className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => canvasControlsRef.current?.zoomIn()}
-            disabled={!hasCanvasControls}
-            aria-label="Zoom in"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-control text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-40"
-          >
-            <Plus className="h-4 w-4" />
-          </button>
-          <button
-            type="button"
-            onClick={() => canvasControlsRef.current?.fitView()}
-            disabled={!hasCanvasControls}
-            aria-label="Fit diagram to view"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-control text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-40"
-          >
-            <Maximize2 className="h-3.5 w-3.5" />
-          </button>
+          {layoutMeta.panMode && (
+            <>
+              <button
+                type="button"
+                onClick={() => canvasControlsRef.current?.zoomOut()}
+                disabled={!hasCanvasControls}
+                aria-label="Zoom out"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-control text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-40"
+              >
+                <Minus className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => canvasControlsRef.current?.zoomIn()}
+                disabled={!hasCanvasControls}
+                aria-label="Zoom in"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-control text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-40"
+              >
+                <Plus className="h-4 w-4" />
+              </button>
+              <button
+                type="button"
+                onClick={() => canvasControlsRef.current?.fitView()}
+                disabled={!hasCanvasControls}
+                aria-label="Fit diagram to view"
+                className="inline-flex h-8 w-8 items-center justify-center rounded-control text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground disabled:opacity-40"
+              >
+                <Maximize2 className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
 
           <button
             type="button"
@@ -373,7 +397,8 @@ export function Player({
       {/* Canvas */}
       <div
         ref={canvasContainerRef}
-        className="relative h-[420px] w-full overflow-hidden rounded-panel bg-grouped sm:aspect-video sm:h-auto sm:min-h-[320px]"
+        style={{ height: layoutMeta.canvasHeight }}
+        className="relative w-full overflow-hidden rounded-panel bg-grouped"
       >
         {shouldLoadCanvas ? (
           <LazyFlowCanvas
@@ -381,9 +406,11 @@ export function Player({
             nodes={nodes}
             steps={steps}
             groups={groups}
+            layoutMode={layoutMode}
             activeStepIndex={stepIndex}
             reducedMotion={reducedMotion}
             onControlsReady={handleControlsReady}
+            onLayoutChange={handleLayoutChange}
           />
         ) : (
           <FlowSkeleton nodes={nodes} steps={steps} title={title} />

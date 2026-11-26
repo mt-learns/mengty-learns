@@ -8,12 +8,21 @@ import {
   ReactFlowProvider,
   useReactFlow,
 } from '@xyflow/react';
-import { useEffect, useMemo, useState } from 'react';
-import type { FlowGroup, FlowNode, ParsedFlowStep } from '../types';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  FIT_PADDING,
+  MIN_READABLE_ZOOM,
+} from '../../diagram/layout';
+import type {
+  FlowGroup,
+  FlowLayoutMode,
+  FlowNode,
+  ParsedFlowStep,
+} from '../types';
 import { GroupNode } from './GroupNode';
 import { IosNode } from './IosNode';
 import { StepEdge } from './StepEdge';
-import { MOBILE_BREAKPOINT, computeFlowGraph } from './layout';
+import { computeFlowGraph } from './layout';
 
 export interface FlowCanvasControls {
   zoomIn: () => void;
@@ -21,14 +30,21 @@ export interface FlowCanvasControls {
   fitView: () => void;
 }
 
+export interface FlowCanvasLayoutMeta {
+  canvasHeight: number;
+  panMode: boolean;
+}
+
 export interface FlowCanvasProps {
   flowKey: string;
   nodes: FlowNode[];
   steps: ParsedFlowStep[];
   groups?: FlowGroup[];
+  layoutMode?: FlowLayoutMode;
   activeStepIndex: number;
   reducedMotion: boolean;
   onControlsReady?: (controls: FlowCanvasControls | null) => void;
+  onLayoutChange?: (meta: FlowCanvasLayoutMeta) => void;
 }
 
 const NODE_TYPES = {
@@ -40,29 +56,41 @@ const EDGE_TYPES = {
   step: StepEdge,
 };
 
-function useIsMobile(): boolean {
-  const [isMobile, setIsMobile] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return false;
-    return window.innerWidth < MOBILE_BREAKPOINT;
-  });
+function useContainerWidth(ref: React.RefObject<HTMLDivElement | null>): number {
+  const [width, setWidth] = useState<number>(360);
 
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const handleResize = () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(() => {
-        setIsMobile(window.innerWidth < MOBILE_BREAKPOINT);
-      }, 150);
+    const el = ref.current;
+    if (!el) return;
+
+    const measure = () => {
+      const next = Math.round(el.getBoundingClientRect().width);
+      if (next > 0) {
+        setWidth((prev) => (Math.abs(prev - next) >= 2 ? next : prev));
+      }
     };
 
-    window.addEventListener('resize', handleResize);
+    measure();
+
+    if (typeof ResizeObserver === 'undefined') {
+      window.addEventListener('resize', measure);
+      return () => window.removeEventListener('resize', measure);
+    }
+
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const observer = new ResizeObserver(() => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(measure, 80);
+    });
+    observer.observe(el);
+
     return () => {
       if (timer) clearTimeout(timer);
-      window.removeEventListener('resize', handleResize);
+      observer.disconnect();
     };
-  }, []);
+  }, [ref]);
 
-  return isMobile;
+  return width;
 }
 
 function FlowCanvasInner({
@@ -70,11 +98,14 @@ function FlowCanvasInner({
   nodes,
   steps,
   groups,
+  layoutMode = 'flow',
   activeStepIndex,
   reducedMotion,
   onControlsReady,
+  onLayoutChange,
 }: FlowCanvasProps) {
-  const isMobile = useIsMobile();
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const containerWidth = useContainerWidth(containerRef);
   const reactFlow = useReactFlow();
 
   const graph = useMemo(
@@ -83,12 +114,27 @@ function FlowCanvasInner({
         nodes,
         steps,
         groups,
-        isMobile,
+        layoutMode,
+        containerWidth,
         activeStepIndex,
         reducedMotion,
       }),
-    [nodes, steps, groups, isMobile, activeStepIndex, reducedMotion],
+    [
+      nodes,
+      steps,
+      groups,
+      layoutMode,
+      containerWidth,
+      activeStepIndex,
+      reducedMotion,
+    ],
   );
+
+  const { panMode, canvasHeight, direction, bounds } = graph.layout;
+
+  useEffect(() => {
+    onLayoutChange?.({ canvasHeight, panMode });
+  }, [canvasHeight, panMode, onLayoutChange]);
 
   useEffect(() => {
     onControlsReady?.({
@@ -96,32 +142,49 @@ function FlowCanvasInner({
       zoomOut: () => reactFlow.zoomOut({ duration: reducedMotion ? 0 : 200 }),
       fitView: () =>
         reactFlow.fitView({
-          padding: 0.16,
-          duration: reducedMotion ? 0 : 240,
+          padding: FIT_PADDING,
+          duration: reducedMotion ? 0 : 200,
         }),
     });
     return () => onControlsReady?.(null);
   }, [reactFlow, reducedMotion, onControlsReady]);
 
+  // Fit on mount, container resize, and variant change — never on step change (§3.1, §3.4)
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
-      reactFlow.fitView({
-        padding: 0.16,
-        duration: reducedMotion ? 0 : 240,
-      });
+      if (panMode) {
+        const yOffset = Math.max(
+          16,
+          Math.round((canvasHeight - bounds.height * MIN_READABLE_ZOOM) / 2),
+        );
+        reactFlow.setViewport(
+          { x: 16, y: yOffset, zoom: MIN_READABLE_ZOOM },
+          { duration: 0 },
+        );
+      } else {
+        reactFlow.fitView({
+          padding: FIT_PADDING,
+          minZoom: MIN_READABLE_ZOOM,
+          duration: 0,
+        });
+      }
     });
     return () => cancelAnimationFrame(frame);
-  }, [reactFlow, flowKey, isMobile, reducedMotion]);
+  }, [reactFlow, flowKey, containerWidth, direction, panMode, canvasHeight, bounds.height]);
 
   return (
     <div
-      className="flow-v3-canvas h-full w-full"
-      onDoubleClick={() =>
-        reactFlow.fitView({
-          padding: 0.16,
-          duration: reducedMotion ? 0 : 240,
-        })
-      }
+      ref={containerRef}
+      className="flow-v3-canvas relative h-full w-full"
+      onDoubleClick={() => {
+        if (!panMode) {
+          reactFlow.fitView({
+            padding: FIT_PADDING,
+            minZoom: MIN_READABLE_ZOOM,
+            duration: reducedMotion ? 0 : 200,
+          });
+        }
+      }}
     >
       <ReactFlow
         nodes={graph.nodes}
@@ -134,15 +197,20 @@ function FlowCanvasInner({
         zoomOnScroll={false}
         panOnScroll={false}
         preventScrolling={false}
-        zoomOnPinch={true}
+        zoomOnPinch={panMode}
         zoomOnDoubleClick={false}
-        panOnDrag={true}
-        minZoom={0.4}
+        panOnDrag={panMode}
+        minZoom={MIN_READABLE_ZOOM}
         maxZoom={2}
-        fitView
-        fitViewOptions={{ padding: 0.16 }}
+        fitView={!panMode}
+        fitViewOptions={{ padding: FIT_PADDING, minZoom: MIN_READABLE_ZOOM }}
         proOptions={{ hideAttribution: true }}
       />
+      {panMode && (
+        <div className="pointer-events-none absolute right-2.5 bottom-2.5 rounded-pill border border-border bg-card/90 px-2.5 py-1 text-caption-1 font-medium text-muted-foreground shadow-xs">
+          Drag to see more →
+        </div>
+      )}
     </div>
   );
 }

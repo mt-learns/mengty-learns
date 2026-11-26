@@ -9,13 +9,9 @@ import {
 } from './deep-link';
 import { parseFlowProps, resolveNodeCategory } from './types';
 import { Player } from './v3/Player';
-import {
-  DESKTOP_CELL_X,
-  DESKTOP_CELL_Y,
-  computeDesktopPositions,
-  computeFlowGraph,
-  computeMobileDagrePositions,
-} from './v3/layout';
+import { IosNode } from './v3/IosNode';
+import { computeFlowGraph } from './v3/layout';
+import { ReactFlowProvider } from '@xyflow/react';
 
 afterEach(() => {
   cleanup();
@@ -27,9 +23,9 @@ const SAMPLE_FLOW = parseFlowProps({
   id: 'sample-flow',
   title: 'Sample Request Flow',
   nodes: [
-    { id: 'user', label: 'User', icon: 'user', category: 'client', x: 0, y: 0 },
-    { id: 'svc', label: 'Service', icon: 'service', x: 1, y: 0 },
-    { id: 'pod', label: 'Pod', icon: 'pod', x: 1, y: 1 },
+    { id: 'user', label: 'User', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'svc', label: 'Service', icon: 'service', rank: 1, order: 0 },
+    { id: 'pod', label: 'Pod', icon: 'pod', rank: 2, order: 0 },
   ],
   steps: [
     { edge: 'user->svc', title: 'Send request', text: 'User sends request to Service' },
@@ -43,8 +39,8 @@ describe('Flow Zod validation & defaults', () => {
     const parsed = parseFlowProps({
       id: 'compat-flow',
       nodes: [
-        { id: 'a', label: 'A', icon: 'user', x: 0, y: 0 },
-        { id: 'b', label: 'B', icon: 'db', x: 1, y: 0 },
+        { id: 'a', label: 'A', icon: 'user', rank: 0, order: 0 },
+        { id: 'b', label: 'B', icon: 'db', rank: 1, order: 0 },
       ],
       steps: [{ edge: 'a->b', text: 'A calls B' }],
     });
@@ -60,8 +56,8 @@ describe('Flow Zod validation & defaults', () => {
       parseFlowProps({
         id: 'bad-edge',
         nodes: [
-          { id: 'user', label: 'User', x: 0, y: 0 },
-          { id: 'svc', label: 'Service', x: 1, y: 0 },
+          { id: 'user', label: 'User', rank: 0, order: 0 },
+          { id: 'svc', label: 'Service', rank: 1, order: 0 },
         ],
         steps: [{ edge: 'user->ghost', text: 'Broken edge' }],
       }),
@@ -73,8 +69,8 @@ describe('Flow Zod validation & defaults', () => {
       parseFlowProps({
         id: 'dup',
         nodes: [
-          { id: 'a', label: 'A', x: 0, y: 0 },
-          { id: 'a', label: 'A2', x: 1, y: 0 },
+          { id: 'a', label: 'A', rank: 0, order: 0 },
+          { id: 'a', label: 'A2', rank: 1, order: 0 },
         ],
         steps: [{ edge: 'a->a', text: 'Self' }],
       }),
@@ -83,25 +79,41 @@ describe('Flow Zod validation & defaults', () => {
 });
 
 describe('Flow v3 layout switch & visited edges', () => {
-  it('uses hand-placed grid on desktop and top-to-bottom dagre on mobile', () => {
-    const desktop = computeDesktopPositions(SAMPLE_FLOW.nodes!);
-    expect(desktop.get('user')?.x).toBe(0);
-    expect(desktop.get('svc')?.x).toBe(DESKTOP_CELL_X);
-    expect(desktop.get('pod')?.y).toBe(DESKTOP_CELL_Y);
+  it('uses LR dagre at wide container (>= 720px) and TB dagre on narrow (< 720px)', () => {
+    const desktop = computeFlowGraph({
+      nodes: SAMPLE_FLOW.nodes!,
+      steps: SAMPLE_FLOW.steps!,
+      containerWidth: 760,
+      activeStepIndex: -1,
+      reducedMotion: false,
+    });
+    expect(desktop.layout.direction).toBe('LR');
+    const dUser = desktop.layout.nodes.get('user')!;
+    const dSvc = desktop.layout.nodes.get('svc')!;
+    const dPod = desktop.layout.nodes.get('pod')!;
+    expect(dUser.cx).toBeLessThan(dSvc.cx);
+    expect(dSvc.cx).toBeLessThan(dPod.cx);
 
-    const mobile = computeMobileDagrePositions(SAMPLE_FLOW.nodes!, SAMPLE_FLOW.steps!);
-    const userPos = mobile.get('user')!;
-    const svcPos = mobile.get('svc')!;
-    const podPos = mobile.get('pod')!;
-    expect(userPos.y).toBeLessThan(svcPos.y);
-    expect(svcPos.y).toBeLessThan(podPos.y);
+    const mobile = computeFlowGraph({
+      nodes: SAMPLE_FLOW.nodes!,
+      steps: SAMPLE_FLOW.steps!,
+      containerWidth: 360,
+      activeStepIndex: -1,
+      reducedMotion: false,
+    });
+    expect(mobile.layout.direction).toBe('TB');
+    const mUser = mobile.layout.nodes.get('user')!;
+    const mSvc = mobile.layout.nodes.get('svc')!;
+    const mPod = mobile.layout.nodes.get('pod')!;
+    expect(mUser.cy).toBeLessThan(mSvc.cy);
+    expect(mSvc.cy).toBeLessThan(mPod.cy);
   });
 
   it('marks overview, active, and visited edges accurately', () => {
     const overviewGraph = computeFlowGraph({
       nodes: SAMPLE_FLOW.nodes!,
       steps: SAMPLE_FLOW.steps!,
-      isMobile: false,
+      containerWidth: 760,
       activeStepIndex: -1,
       reducedMotion: false,
     });
@@ -110,7 +122,7 @@ describe('Flow v3 layout switch & visited edges', () => {
     const step2Graph = computeFlowGraph({
       nodes: SAMPLE_FLOW.nodes!,
       steps: SAMPLE_FLOW.steps!,
-      isMobile: false,
+      containerWidth: 760,
       activeStepIndex: 1,
       reducedMotion: false,
     });
@@ -190,10 +202,10 @@ describe('Flow v3 variants and deep links', () => {
       {
         id: 'same-len-a',
         label: 'Variant A',
-        groups: [{ id: 'core-a', label: 'Domain Core', x: 1, y: 0, width: 1, height: 1 }],
+        groups: [{ id: 'core-a', label: 'Domain Core', nodeIds: ['domain'] }],
         nodes: [
-          { id: 'client', label: 'Client', x: 0, y: 0 },
-          { id: 'domain', label: 'Domain', x: 1, y: 0 },
+          { id: 'client', label: 'Client', rank: 0, order: 0 },
+          { id: 'domain', label: 'Domain', rank: 1, order: 0 },
         ],
         steps: [
           { edge: 'client->domain', title: 'A1', text: 'A step 1' },
@@ -204,8 +216,8 @@ describe('Flow v3 variants and deep links', () => {
         id: 'same-len-b',
         label: 'Variant B',
         nodes: [
-          { id: 'client', label: 'Client', x: 0, y: 0 },
-          { id: 'port', label: 'Port', x: 1, y: 0 },
+          { id: 'client', label: 'Client', rank: 0, order: 0 },
+          { id: 'port', label: 'Port', rank: 1, order: 0 },
         ],
         steps: [
           { edge: 'client->port', title: 'B1', text: 'B step 1' },
@@ -216,9 +228,9 @@ describe('Flow v3 variants and deep links', () => {
         id: 'diff-len-c',
         label: 'Variant C',
         nodes: [
-          { id: 'client', label: 'Client', x: 0, y: 0 },
-          { id: 'layer', label: 'Layer', x: 1, y: 0 },
-          { id: 'db', label: 'DB', x: 2, y: 0 },
+          { id: 'client', label: 'Client', rank: 0, order: 0 },
+          { id: 'layer', label: 'Layer', rank: 1, order: 0 },
+          { id: 'db', label: 'DB', rank: 2, order: 0 },
         ],
         steps: [
           { edge: 'client->layer', title: 'C1', text: 'C step 1' },
@@ -279,5 +291,61 @@ describe('Flow v3 variants and deep links', () => {
     expect(writeText).toHaveBeenCalledWith(
       expect.stringContaining('flow=sample-flow&step=2'),
     );
+  });
+});
+
+describe('Flow §4 & §6 readable states, problem variant, and single active badge', () => {
+  it('renders dimmed IosNode without opacity classes and renders problem variant with dashed border + X', () => {
+    const { container } = render(
+      <ReactFlowProvider>
+        <IosNode
+          id="n1"
+          type="ios"
+          positionAbsoluteX={0}
+          positionAbsoluteY={0}
+          zIndex={0}
+          isConnectable={false}
+          dragging={false}
+          draggable={false}
+          selectable={false}
+          deletable={false}
+          selected={false}
+          data={{
+            label: 'RemoteControl',
+            subtitle: 'Abstraction',
+            icon: 'class',
+            category: 'service',
+            variant: 'problem',
+            isActive: false,
+            isOverview: false,
+            isError: false,
+            width: 200,
+            height: 64,
+          }}
+        />
+      </ReactFlowProvider>,
+    );
+
+    const nodeEl = container.querySelector('.rounded-panel') as HTMLElement;
+    expect(nodeEl.className).not.toMatch(/\bopacity-/);
+    expect(nodeEl.className).toContain('border-dashed');
+    expect(nodeEl.className).not.toContain('destructive');
+    expect(screen.getByLabelText('Problem')).toBeInTheDocument();
+  });
+
+  it('sets activeStepNumber only on the active edge and never lists multiple numbers', () => {
+    const graph = computeFlowGraph({
+      nodes: SAMPLE_FLOW.nodes!,
+      steps: SAMPLE_FLOW.steps!,
+      containerWidth: 760,
+      activeStepIndex: 1,
+      reducedMotion: false,
+    });
+
+    const activeEdges = graph.edges.filter((e) => e.data?.isActive);
+    const inactiveEdges = graph.edges.filter((e) => !e.data?.isActive);
+    expect(activeEdges).toHaveLength(1);
+    expect(activeEdges[0].data?.activeStepNumber).toBe(2);
+    expect(inactiveEdges.every((e) => e.data?.activeStepNumber === null)).toBe(true);
   });
 });

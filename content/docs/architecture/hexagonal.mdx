@@ -83,14 +83,14 @@ Toggle between **Production (Postgres)** and **Unit Test (InMemory)** to see how
       id: 'prod-postgres',
       label: 'Production (Postgres)',
       groups: [
-        { id: 'hexagon', label: 'Application Core (Hexagon)', x: 1, y: 0, width: 3, height: 1 },
+        { id: 'hexagon', label: 'Application Core (Hexagon)', nodeIds: ['inport', 'domain', 'outport'] },
       ],
       nodes: [
-        { id: 'rest', label: 'REST Adapter', subtitle: 'Driving', icon: 'gateway', category: 'edge', x: 0, y: 0 },
-        { id: 'inport', label: 'PlaceOrderPort', subtitle: 'Inbound port', icon: 'interface', category: 'service', x: 1, y: 0 },
-        { id: 'domain', label: 'OrderDomain', subtitle: 'Core logic', icon: 'service', category: 'service', x: 2, y: 0 },
-        { id: 'outport', label: 'OrderRepoPort', subtitle: 'Outbound port', icon: 'interface', category: 'service', x: 3, y: 0 },
-        { id: 'pg', label: 'PostgresAdapter', subtitle: 'Driven (SQL)', icon: 'db', category: 'data', x: 4, y: 0 },
+        { id: 'rest', label: 'REST Adapter', subtitle: 'Driving', icon: 'gateway', category: 'edge', rank: 0, order: 0 },
+        { id: 'inport', label: 'PlaceOrderPort', subtitle: 'Inbound port', icon: 'interface', category: 'service', rank: 1, order: 0 },
+        { id: 'domain', label: 'OrderDomain', subtitle: 'Core logic', icon: 'service', category: 'service', rank: 2, order: 0 },
+        { id: 'outport', label: 'OrderRepoPort', subtitle: 'Outbound port', icon: 'interface', category: 'service', rank: 3, order: 0 },
+        { id: 'pg', label: 'PostgresAdapter', subtitle: 'Driven (SQL)', icon: 'db', category: 'data', rank: 4, order: 0 },
       ],
       steps: [
         { edge: 'rest->inport', title: 'Invoke inbound port', text: 'REST adapter parses POST /orders and invokes PlaceOrderPort' },
@@ -106,14 +106,14 @@ Toggle between **Production (Postgres)** and **Unit Test (InMemory)** to see how
       id: 'test-inmemory',
       label: 'Test (InMemory)',
       groups: [
-        { id: 'hexagon', label: 'Application Core (Hexagon)', x: 1, y: 0, width: 3, height: 1 },
+        { id: 'hexagon', label: 'Application Core (Hexagon)', nodeIds: ['inport', 'domain', 'outport'] },
       ],
       nodes: [
-        { id: 'test', label: 'Vitest Runner', subtitle: 'Driving test', icon: 'ci', category: 'external', x: 0, y: 0 },
-        { id: 'inport', label: 'PlaceOrderPort', subtitle: 'Inbound port', icon: 'interface', category: 'service', x: 1, y: 0 },
-        { id: 'domain', label: 'OrderDomain', subtitle: 'Core logic', icon: 'service', category: 'service', x: 2, y: 0 },
-        { id: 'outport', label: 'OrderRepoPort', subtitle: 'Outbound port', icon: 'interface', category: 'service', x: 3, y: 0 },
-        { id: 'mem', label: 'InMemoryAdapter', subtitle: 'Driven (Map)', icon: 'class', category: 'data', x: 4, y: 0 },
+        { id: 'test', label: 'Vitest Runner', subtitle: 'Driving test', icon: 'ci', category: 'external', rank: 0, order: 0 },
+        { id: 'inport', label: 'PlaceOrderPort', subtitle: 'Inbound port', icon: 'interface', category: 'service', rank: 1, order: 0 },
+        { id: 'domain', label: 'OrderDomain', subtitle: 'Core logic', icon: 'service', category: 'service', rank: 2, order: 0 },
+        { id: 'outport', label: 'OrderRepoPort', subtitle: 'Outbound port', icon: 'interface', category: 'service', rank: 3, order: 0 },
+        { id: 'mem', label: 'InMemoryAdapter', subtitle: 'Driven (Map)', icon: 'class', category: 'data', rank: 4, order: 0 },
       ],
       steps: [
         { edge: 'test->inport', title: 'Call port directly', text: 'Vitest calls PlaceOrderPort directly—no HTTP server needed' },

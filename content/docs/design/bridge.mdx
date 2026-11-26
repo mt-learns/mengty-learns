@@ -86,11 +86,11 @@ Think of a universal remote and a TV. The remote's buttons (Power, Volume Up, Mu
   id="bridge"
   title="Bridge Pattern: RemoteControl → Device"
   nodes={[
-    { id: 'client', label: 'Client', subtitle: 'App code', icon: 'user', category: 'client', x: 0, y: 1 },
-    { id: 'remote', label: 'RemoteControl', subtitle: 'Abstraction', icon: 'class', category: 'service', x: 1, y: 1 },
-    { id: 'device', label: 'Device', subtitle: 'Implementor', icon: 'interface', category: 'edge', x: 2, y: 1 },
-    { id: 'tv', label: 'TV', subtitle: 'Concrete', icon: 'service', category: 'external', x: 3, y: 0 },
-    { id: 'radio', label: 'Radio', subtitle: 'Concrete', icon: 'service', category: 'external', x: 3, y: 2 },
+    { id: 'client', label: 'Client', subtitle: 'App code', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'remote', label: 'RemoteControl', subtitle: 'Abstraction', icon: 'class', category: 'service', rank: 1, order: 0 },
+    { id: 'device', label: 'Device', subtitle: 'Implementor', icon: 'interface', category: 'edge', rank: 2, order: 0 },
+    { id: 'tv', label: 'TV', subtitle: 'Concrete', icon: 'service', category: 'external', rank: 3, order: 0 },
+    { id: 'radio', label: 'Radio', subtitle: 'Concrete', icon: 'service', category: 'external', rank: 3, order: 1 },
   ]}
   steps={[
     { edge: 'client->remote', title: 'Toggle power on remote', text: 'Client calls remote.togglePower() on an Abstraction instance' },

@@ -87,13 +87,13 @@ Switch between the four variants below to trace how a `POST /orders` request tra
       id: 'layered',
       label: 'Layered',
       groups: [
-        { id: 'layers', label: 'Horizontal Layers', x: 1, y: 0, width: 3, height: 1 },
+        { id: 'layers', label: 'Horizontal Layers', nodeIds: ['pres', 'biz', 'data'] },
       ],
       nodes: [
-        { id: 'http', label: 'HTTP Client', subtitle: 'POST /orders', icon: 'user', category: 'client', x: 0, y: 0 },
-        { id: 'pres', label: 'Presentation', subtitle: 'OrderController', icon: 'gateway', category: 'edge', x: 1, y: 0 },
-        { id: 'biz', label: 'Business', subtitle: 'OrderService', icon: 'service', category: 'service', x: 2, y: 0 },
-        { id: 'data', label: 'Data', subtitle: 'OrderRepo', icon: 'db', category: 'data', x: 3, y: 0 },
+        { id: 'http', label: 'HTTP Client', subtitle: 'POST /orders', icon: 'user', category: 'client', rank: 0, order: 0 },
+        { id: 'pres', label: 'Presentation', subtitle: 'OrderController', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+        { id: 'biz', label: 'Business', subtitle: 'OrderService', icon: 'service', category: 'service', rank: 2, order: 0 },
+        { id: 'data', label: 'Data', subtitle: 'OrderRepo', icon: 'db', category: 'data', rank: 3, order: 0 },
       ],
       steps: [
         { edge: 'http->pres', title: 'Send POST /orders', text: 'Client sends POST /orders to OrderController' },
@@ -108,14 +108,14 @@ Switch between the four variants below to trace how a `POST /orders` request tra
       id: 'hexagonal',
       label: 'Hexagonal',
       groups: [
-        { id: 'hex', label: 'Application Core (Hexagon)', x: 1, y: 0, width: 3, height: 1 },
+        { id: 'hex', label: 'Application Core (Hexagon)', nodeIds: ['inport', 'domain', 'outport'] },
       ],
       nodes: [
-        { id: 'rest', label: 'REST Adapter', subtitle: 'Driving', icon: 'gateway', category: 'edge', x: 0, y: 0 },
-        { id: 'inport', label: 'PlaceOrderPort', subtitle: 'Inbound port', icon: 'interface', category: 'service', x: 1, y: 0 },
-        { id: 'domain', label: 'OrderDomain', subtitle: 'Core', icon: 'service', category: 'service', x: 2, y: 0 },
-        { id: 'outport', label: 'OrderRepoPort', subtitle: 'Outbound port', icon: 'interface', category: 'service', x: 3, y: 0 },
-        { id: 'pg', label: 'PostgresAdapter', subtitle: 'Driven', icon: 'db', category: 'data', x: 4, y: 0 },
+        { id: 'rest', label: 'REST Adapter', subtitle: 'Driving', icon: 'gateway', category: 'edge', rank: 0, order: 0 },
+        { id: 'inport', label: 'PlaceOrderPort', subtitle: 'Inbound port', icon: 'interface', category: 'service', rank: 1, order: 0 },
+        { id: 'domain', label: 'OrderDomain', subtitle: 'Core', icon: 'service', category: 'service', rank: 2, order: 0 },
+        { id: 'outport', label: 'OrderRepoPort', subtitle: 'Outbound port', icon: 'interface', category: 'service', rank: 3, order: 0 },
+        { id: 'pg', label: 'PostgresAdapter', subtitle: 'Driven', icon: 'db', category: 'data', rank: 4, order: 0 },
       ],
       steps: [
         { edge: 'rest->inport', title: 'Call inbound port', text: 'Driving REST adapter calls inbound PlaceOrderPort' },
@@ -130,14 +130,14 @@ Switch between the four variants below to trace how a `POST /orders` request tra
       id: 'onion',
       label: 'Onion',
       groups: [
-        { id: 'app-ring', label: 'Application Services Ring', x: 1, y: 0, width: 3, height: 1 },
-        { id: 'domain-ring', label: 'Domain Core (Model + Services)', x: 2, y: 0, width: 1, height: 1 },
+        { id: 'app-ring', label: 'Application Services Ring', nodeIds: ['appsvc', 'dom', 'infra'] },
+        { id: 'domain-ring', label: 'Domain Core (Model + Services)', nodeIds: ['dom'] },
       ],
       nodes: [
-        { id: 'ui', label: 'UI / API', subtitle: 'Outer ring', icon: 'gateway', category: 'edge', x: 0, y: 0 },
-        { id: 'appsvc', label: 'App Service', subtitle: 'PlaceOrderSvc', icon: 'service', category: 'service', x: 1, y: 0 },
-        { id: 'dom', label: 'Domain Model', subtitle: 'Order + Repo IF', icon: 'class', category: 'service', x: 2, y: 0 },
-        { id: 'infra', label: 'Infrastructure', subtitle: 'PostgresRepo', icon: 'db', category: 'data', x: 3, y: 0 },
+        { id: 'ui', label: 'UI / API', subtitle: 'Outer ring', icon: 'gateway', category: 'edge', rank: 0, order: 0 },
+        { id: 'appsvc', label: 'App Service', subtitle: 'PlaceOrderSvc', icon: 'service', category: 'service', rank: 1, order: 0 },
+        { id: 'dom', label: 'Domain Model', subtitle: 'Order + Repo IF', icon: 'class', category: 'service', rank: 2, order: 0 },
+        { id: 'infra', label: 'Infrastructure', subtitle: 'PostgresRepo', icon: 'db', category: 'data', rank: 3, order: 0 },
       ],
       steps: [
         { edge: 'ui->appsvc', title: 'Call App Service', text: 'Outer API ring calls Application Service PlaceOrderSvc' },
@@ -152,13 +152,13 @@ Switch between the four variants below to trace how a `POST /orders` request tra
       id: 'clean',
       label: 'Clean',
       groups: [
-        { id: 'usecase-ring', label: 'Use Cases + Entities', x: 1, y: 0, width: 2, height: 1 },
+        { id: 'usecase-ring', label: 'Use Cases + Entities', nodeIds: ['uc', 'ent'] },
       ],
       nodes: [
-        { id: 'ctrl', label: 'Controller', subtitle: 'Interface Adapter', icon: 'gateway', category: 'edge', x: 0, y: 0 },
-        { id: 'uc', label: 'PlaceOrderUC', subtitle: 'Interactor', icon: 'service', category: 'service', x: 1, y: 0 },
-        { id: 'ent', label: 'Order Entity', subtitle: 'Enterprise rule', icon: 'class', category: 'service', x: 2, y: 0 },
-        { id: 'gw', label: 'OrderGateway', subtitle: 'DB Adapter', icon: 'db', category: 'data', x: 3, y: 0 },
+        { id: 'ctrl', label: 'Controller', subtitle: 'Interface Adapter', icon: 'gateway', category: 'edge', rank: 0, order: 0 },
+        { id: 'uc', label: 'PlaceOrderUC', subtitle: 'Interactor', icon: 'service', category: 'service', rank: 1, order: 0 },
+        { id: 'ent', label: 'Order Entity', subtitle: 'Enterprise rule', icon: 'class', category: 'service', rank: 2, order: 0 },
+        { id: 'gw', label: 'OrderGateway', subtitle: 'DB Adapter', icon: 'db', category: 'data', rank: 3, order: 0 },
       ],
       steps: [
         { edge: 'ctrl->uc', title: 'Invoke Interactor', text: 'Controller converts HTTP body to InputData and invokes Interactor' },

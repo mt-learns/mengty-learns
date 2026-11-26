@@ -80,14 +80,14 @@ Think of a restaurant with a **waiter** (Presentation), a **chef** (Business), a
       id: 'clean-layers',
       label: 'Strict layers',
       groups: [
-        { id: 'app-layers', label: 'Application Layers', x: 1, y: 0, width: 3, height: 1 },
+        { id: 'app-layers', label: 'Application Layers', nodeIds: ['pres', 'biz', 'data'] },
       ],
       nodes: [
-        { id: 'http', label: 'HTTP Client', subtitle: 'POST /orders', icon: 'user', category: 'client', x: 0, y: 0 },
-        { id: 'pres', label: 'Presentation', subtitle: 'OrderController', icon: 'gateway', category: 'edge', x: 1, y: 0 },
-        { id: 'biz', label: 'Business', subtitle: 'OrderService', icon: 'service', category: 'service', x: 2, y: 0 },
-        { id: 'data', label: 'Data', subtitle: 'OrderRepo', icon: 'class', category: 'service', x: 3, y: 0 },
-        { id: 'db', label: 'Postgres', subtitle: 'orders table', icon: 'db', category: 'data', x: 4, y: 0 },
+        { id: 'http', label: 'HTTP Client', subtitle: 'POST /orders', icon: 'user', category: 'client', rank: 0, order: 0 },
+        { id: 'pres', label: 'Presentation', subtitle: 'OrderController', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+        { id: 'biz', label: 'Business', subtitle: 'OrderService', icon: 'service', category: 'service', rank: 2, order: 0 },
+        { id: 'data', label: 'Data', subtitle: 'OrderRepo', icon: 'class', category: 'service', rank: 3, order: 0 },
+        { id: 'db', label: 'Postgres', subtitle: 'orders table', icon: 'db', category: 'data', rank: 4, order: 0 },
       ],
       steps: [
         { edge: 'http->pres', title: 'Send POST /orders', text: 'Client sends POST /orders with customerId and line items' },
@@ -104,11 +104,11 @@ Think of a restaurant with a **waiter** (Presentation), a **chef** (Business), a
       id: 'leaky-layer',
       label: 'Leaky layer (problem)',
       nodes: [
-        { id: 'http', label: 'HTTP Client', subtitle: 'POST /orders', icon: 'user', category: 'client', x: 0, y: 0 },
-        { id: 'pres', label: 'Presentation', subtitle: 'OrderController', icon: 'gateway', category: 'edge', x: 1, y: 0 },
-        { id: 'biz', label: 'Business', subtitle: 'OrderService', icon: 'service', category: 'service', x: 2, y: 1 },
-        { id: 'data', label: 'Data', subtitle: 'OrderRepo', icon: 'class', category: 'service', x: 2, y: 0 },
-        { id: 'db', label: 'Postgres', subtitle: 'orders table', icon: 'db', category: 'data', x: 3, y: 0 },
+        { id: 'http', label: 'HTTP Client', subtitle: 'POST /orders', icon: 'user', category: 'client', rank: 0, order: 0 },
+        { id: 'pres', label: 'Presentation', subtitle: 'OrderController', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+        { id: 'data', label: 'Data', subtitle: 'OrderRepo', icon: 'class', category: 'service', rank: 2, order: 0 },
+        { id: 'biz', label: 'Business', subtitle: 'Bypassed', icon: 'service', category: 'service', rank: 2, order: 1, variant: 'problem' },
+        { id: 'db', label: 'Postgres', subtitle: 'orders table', icon: 'db', category: 'data', rank: 3, order: 0 },
       ],
       steps: [
         { edge: 'http->pres', title: 'Send POST /orders', text: 'Client sends POST /orders' },
