@@ -6,7 +6,8 @@
     "onion",
     "clean",
     "compare-styles",
-    "dependency-inversion"
+    "dependency-inversion",
+    "caching-redis"
   ],
   "icon": "architecture"
 }
