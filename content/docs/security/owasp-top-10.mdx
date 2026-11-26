@@ -1,0 +1,84 @@
+---
+title: OWASP Top 10 (2025) Summary
+description: Summary of the current OWASP Top 10:2025 web application security risks, what changed from 2021, and practical mitigations.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: note
+type: reference
+level: beginner
+tags: [security, owasp, web, appsec]
+cards:
+  - q: "Which OWASP Top 10 edition is current as of 2026?"
+    a: "OWASP Top 10:2025, which succeeded the 2021 edition."
+  - q: "What happened to Server-Side Request Forgery (SSRF) in OWASP Top 10:2025?"
+    a: "SSRF was absorbed into A01:2025 Broken Access Control instead of remaining a standalone category."
+  - q: "What are the two new categories introduced in OWASP Top 10:2025?"
+    a: "A03:2025 Software Supply Chain Failures (expanded from Vulnerable and Outdated Components) and A10:2025 Mishandling of Exceptional Conditions."
+  - q: "Why is Broken Access Control #1 in OWASP Top 10:2025?"
+    a: "Enforcing who can access which resource on every server-side endpoint is easy to miss, and a single missing check exposes other tenants' data."
+related:
+  - containers/dockerfile-best-practices
+  - ci-cd/github-actions
+sources:
+  - title: "OWASP Top 10:2025"
+    url: https://top10.owasp.org/2025/
+  - title: "OWASP Top 10 Project"
+    url: https://owasp.org/www-project-top-ten/
+---
+
+### TL;DR
+The current edition is **OWASP Top 10:2025**. It keeps **Broken Access Control** at #1 (now including SSRF), promotes **Security Misconfiguration** to #2, expands dependency risk into **Software Supply Chain Failures** (#3), and adds **Mishandling of Exceptional Conditions** (#10).
+
+## Why it exists
+Most web breaches come from a small set of recurring mistakes rather than exotic zero-days. The OWASP Top 10 gives engineering teams a shared, data-driven baseline for threat modeling, code reviews, and security checklists.
+
+## The OWASP Top 10:2025 list
+
+| Rank | Category | What it covers & key mitigation |
+|---|---|---|
+| **A01:2025** | Broken Access Control | Enforcing object- and function-level authorization on every request; now also absorbs **SSRF** (validate/allowlist outbound server requests). Deny by default on the server, never trust client-supplied IDs or roles. |
+| **A02:2025** | Security Misconfiguration | Default credentials, overly permissive CORS/cloud IAM, verbose stack traces, or unnecessary open ports. Harden defaults, automate config checks, and disable debug modes in production. |
+| **A03:2025** | Software Supply Chain Failures | Expands beyond outdated packages to cover compromised builds, CI/CD pipelines, lockfile tampering, and unpinned actions/images. Pin dependencies, verify lockfiles (`--frozen-lockfile`), and run automated audits. |
+| **A04:2025** | Cryptographic Failures | Weak ciphers, missing TLS, hardcoded keys, or unencrypted sensitive data at rest. Use TLS everywhere, modern AEAD ciphers, and dedicated secret managers. |
+| **A05:2025** | Injection | Untrusted input interpreted as SQL, OS commands, LDAP, or template expressions. Use parameterized queries, strict allowlists, and context-aware output encoding. |
+| **A06:2025** | Insecure Design | Missing security controls at the architecture stage (no rate limiting on password resets, missing abuse checks). Threat-model early before writing code. |
+| **A07:2025** | Authentication Failures | Weak password rules, credential stuffing, session fixation, or missing MFA. Use proven auth libraries, short-lived tokens, and rate limiting. |
+| **A08:2025** | Software or Data Integrity Failures | Deserializing untrusted data, auto-updating without signature checks, or trusting unverified CI artifacts. Verify signatures/checksums and avoid unsafe deserialization. |
+| **A09:2025** | Security Logging & Alerting Failures | Missing audit trails or unmonitored alerts when brute-force or privilege escalation occurs. Log auth/access events centrally without logging secrets, and wire alerts. |
+| **A10:2025** | Mishandling of Exceptional Conditions | Fail-open error handlers, uncaught exceptions leaking state, or partial-failure bugs. Fail closed, return safe generic errors to clients, and test error paths. |
+
+## Gotchas
+- **Checking authorization only in the UI:** Hiding a button in React does not protect an API route; enforce ownership and role checks on every backend handler.
+- **Treating `pnpm audit` as the whole supply chain:** A03:2025 covers build pipelines too — unpinned GitHub Actions, floating Docker tags (`:latest`), and missing lockfile enforcement are supply-chain risks.
+- **Fail-open `catch` blocks:** Returning `true` or skipping a check inside a `catch` block turns an unexpected error into an authentication or authorization bypass (A10:2025).
+
+## Production checklist
+- [ ] Every API endpoint checks authentication and resource ownership on the server (deny by default).
+- [ ] Outbound URLs fetched by the server are validated against an allowlist and blocked from internal metadata IPs.
+- [ ] Lockfiles (`pnpm-lock.yaml`), container base tags, and CI actions are pinned.
+- [ ] Database queries use parameterized bindings, and error handlers fail closed without stack traces.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "In OWASP Top 10:2025, which category now includes Server-Side Request Forgery (SSRF)?",
+    options: [
+      { label: "A01:2025 Broken Access Control", description: "SSRF was folded into Broken Access Control in the 2025 edition.", correct: true },
+      { label: "A05:2025 Injection", description: "Injection covers SQL, command, and template injection, not SSRF." },
+      { label: "A10:2025 Mishandling of Exceptional Conditions", description: "A10:2025 is a new category for error/exception handling flaws." }
+    ]
+  },
+  {
+    question: "A catch block logs an error and returns isAuthorized = true so users aren't blocked during a DB hiccup. Which OWASP Top 10:2025 risks does this violate?",
+    options: [
+      { label: "A01:2025 Broken Access Control and A10:2025 Mishandling of Exceptional Conditions", description: "Failing open on an exception is both an access-control bypass and an exception-handling flaw.", correct: true },
+      { label: "A04:2025 Cryptographic Failures", description: "No cryptographic primitive is involved in failing open." },
+      { label: "A03:2025 Software Supply Chain Failures", description: "Supply chain failures concern dependencies, builds, and distribution." }
+    ]
+  }
+]} />
+
+## Sources
+- [OWASP Top 10:2025](https://top10.owasp.org/2025/)
+- [OWASP Top 10 Project](https://owasp.org/www-project-top-ten/)

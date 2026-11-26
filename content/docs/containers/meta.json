@@ -3,6 +3,8 @@
   "pages": [
     "docker-basics",
     "image-layers-cache",
-    "multi-stage-nextjs"
+    "multi-stage-nextjs",
+    "dockerfile-best-practices",
+    "docker-cheatsheet"
   ]
 }

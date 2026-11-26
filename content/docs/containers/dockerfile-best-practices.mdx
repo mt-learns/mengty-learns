@@ -1,0 +1,153 @@
+---
+title: Dockerfile Best Practices
+description: Write small, deterministic, and secure container images using pinned tags, non-root users, .dockerignore, layer ordering, healthchecks, and BuildKit secrets.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: note
+type: reference
+level: intermediate
+tags: [docker, dockerfile, security, containers, best-practices]
+tested_with:
+  docker: "29.4.3"
+cards:
+  - q: "Why should you copy package manifests before copying application source code in a Dockerfile?"
+    a: "So Docker can reuse the cached dependency-install layer whenever only source code changes."
+  - q: "How do you pass a secret token during docker build without baking it into any image layer?"
+    a: "Use a BuildKit secret mount (RUN --mount=type=secret,id=...) instead of ARG or ENV."
+  - q: "Why is FROM node:22-alpine3.21 preferred over FROM node:latest?"
+    a: "Pinned tags make builds reproducible and prevent surprise major-version or base-OS changes."
+  - q: "What happens if you copy files in a final stage without --chown when using a non-root USER?"
+    a: "Copied files are owned by root:root, so the non-root process may fail with permission errors if it needs to write."
+related:
+  - containers/multi-stage-nextjs
+  - containers/image-layers-cache
+  - containers/docker-basics
+sources:
+  - title: "Docker Docs: Building best practices"
+    url: https://docs.docker.com/build/building/best-practices/
+  - title: "Docker Docs: Build secrets"
+    url: https://docs.docker.com/build/building/secrets/
+  - title: "Docker Docs: Dockerfile reference — HEALTHCHECK"
+    url: https://docs.docker.com/reference/dockerfile/#healthcheck
+---
+
+### TL;DR
+Keep production images small, reproducible, and least-privileged: pin base image tags, exclude junk with `.dockerignore`, order layers from least- to most-frequently changed, run as a non-root `USER`, use `HEALTHCHECK`, and never bake secrets into `ARG` or `ENV`.
+
+## Why it exists
+A naive `Dockerfile` (`FROM node:latest`, `COPY . .`, `RUN npm install` as `root`) produces bloated images, busts the build cache on every edit, leaks `.git` or `.env` files into layers, and gives an attacker root inside the container if the app is compromised.
+
+## Mental model
+Every `Dockerfile` instruction creates an immutable layer. Anything written in an earlier layer stays in the image history even if deleted later, and any change to an instruction invalidates the cache for every instruction after it.
+
+<LabLink
+  name="docker-multistage-next"
+  description="Working multi-stage Dockerfile with pinned Alpine tag, non-root user, and .dockerignore — linted with hadolint in CI."
+  command="docker build -t mt-multistage-next:lab labs/docker-multistage-next"
+/>
+
+## The core practices
+
+### 1. Pin base image tags and keep images small
+Avoid floating tags like `:latest`. Pin a specific runtime and OS variant (or even a SHA256 digest in strict environments), and use multi-stage builds so compilers and `devDependencies` stay out of the final image.
+
+```dockerfile
+# syntax=docker/dockerfile:1
+FROM node:22-alpine3.21 AS deps
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts
+```
+
+### 2. Order layers for cache hits
+Put instructions that rarely change (base image, OS packages, lockfile + dependency install) above `COPY . .` so editing application code does not re-download dependencies.
+
+### 3. Filter the build context with `.dockerignore`
+Without `.dockerignore`, `COPY . .` sends `node_modules`, `.git`, build artifacts, and local `.env` files to the Docker daemon.
+
+```text
+.git
+node_modules
+.next
+out
+.env*
+*.log
+```
+
+### 4. Run as a non-root `USER`
+Create a dedicated system user and group, and use `COPY --chown` so the runtime user owns only what it needs without adding an extra `chown -R` layer.
+
+```dockerfile
+FROM node:22-alpine3.21 AS runner
+WORKDIR /app
+RUN addgroup -g 1001 -S nodejs \
+  && adduser -S nextjs -u 1001 -G nodejs
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules ./node_modules
+COPY --chown=nextjs:nodejs server.mjs ./
+USER nextjs
+```
+
+### 5. Add a `HEALTHCHECK`
+A `HEALTHCHECK` lets Docker (and Compose) distinguish a container whose process is merely alive from one that is actually serving traffic.
+
+```dockerfile
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+  CMD wget -qO- http://127.0.0.1:3000/healthz || exit 1
+```
+
+<Sidenote>
+  In Kubernetes, `livenessProbe` and `readinessProbe` in the Pod spec replace Docker's `HEALTHCHECK` instruction.
+</Sidenote>
+
+### 6. Pass build-time secrets with `--mount=type=secret`
+Never use `ARG` or `ENV` for tokens or private registry credentials — both are recorded in image metadata (`docker history`). Use a BuildKit secret mount instead; it is mounted only for that `RUN` step and never persisted to any layer.
+
+```dockerfile
+# not run (example requiring a secret file)
+RUN --mount=type=secret,id=npmrc,target=/root/.npmrc \
+  npm ci --omit=dev
+```
+
+```bash
+# not run
+docker build --secret id=npmrc,src=$HOME/.npmrc -t myapp:1.0.0 .
+```
+
+## Gotchas
+- **Deleting secrets in a later `RUN`:** `RUN rm /tmp/token` does not remove the secret from the earlier layer; use `--mount=type=secret` from the start.
+- **`apt-get update` without `install` in the same `RUN`:** Splitting them caches a stale package index. Always combine `apt-get update && apt-get install -y --no-install-recommends ... && rm -rf /var/lib/apt/lists/*`.
+- **Using `ADD` instead of `COPY`:** `ADD` silently unpacks local tarballs and fetches remote URLs; prefer `COPY` unless you explicitly want tar extraction.
+
+## Production checklist
+- [ ] Base image tag is pinned (no `:latest`) and final stage uses a minimal base (`alpine`, `distroless`, or `slim`).
+- [ ] `.dockerignore` excludes `.git`, `node_modules`, and `.env*`.
+- [ ] Manifests (`package.json`, lockfile) are copied and installed before application source.
+- [ ] Container switches to a non-root `USER` before `CMD`/`ENTRYPOINT`.
+- [ ] Build-time credentials use `--mount=type=secret`, never `ARG` or `ENV`.
+- [ ] `hadolint` passes in CI (`labs.yml` checks `labs/*/Dockerfile`).
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "Why is ARG NPM_TOKEN unsafe for passing a private registry token during docker build?",
+    options: [
+      { label: "ARG values are visible in image build history via docker history", description: "Use BuildKit --mount=type=secret instead so the secret never enters any layer or metadata.", correct: true },
+      { label: "ARG cannot be read inside RUN commands", description: "ARG is available during RUN, which is why people mistakenly use it for secrets." },
+      { label: "ARG automatically pushes the token to Docker Hub", description: "It stays in the local image metadata, which is exposed wherever the image is pushed." }
+    ]
+  },
+  {
+    question: "Where should COPY package.json package-lock.json ./ appear relative to COPY . .?",
+    options: [
+      { label: "Before COPY . . and before RUN npm ci", description: "So source-only edits do not invalidate the dependency installation layer.", correct: true },
+      { label: "After COPY . .", description: "Copying everything first invalidates the cache on every source file change." },
+      { label: "Order does not affect Docker layer caching", description: "Docker invalidates every layer after the first changed instruction." }
+    ]
+  }
+]} />
+
+## Sources
+- [Docker Docs: Building best practices](https://docs.docker.com/build/building/best-practices/)
+- [Docker Docs: Build secrets](https://docs.docker.com/build/building/secrets/)
+- [Docker Docs: Dockerfile reference — HEALTHCHECK](https://docs.docker.com/reference/dockerfile/#healthcheck)

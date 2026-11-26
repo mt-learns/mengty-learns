@@ -1,0 +1,151 @@
+---
+title: OOP Pillars in TypeScript
+description: Encapsulation, abstraction, inheritance, and polymorphism explained with practical TypeScript examples and modern composition trade-offs.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: note
+type: explanation
+level: beginner
+tags: [oop, typescript, design]
+tested_with:
+  typescript: "7.0.2"
+cards:
+  - q: "What is the difference between encapsulation and abstraction?"
+    a: "Encapsulation hides internal state and enforces invariants inside a boundary; abstraction exposes only the essential operations callers need."
+  - q: "Why does TypeScript favor interfaces and composition over deep inheritance hierarchies?"
+    a: "Deep inheritance couples subclasses to parent implementation details; composition with small interfaces keeps behavior swappable."
+  - q: "What is polymorphism in TypeScript?"
+    a: "Allowing different types that share a common interface or base contract to be used interchangeably through the same call site."
+related:
+  - design/solid
+  - design/bridge
+  - architecture/dependency-inversion
+sources:
+  - title: "TypeScript Handbook: Classes"
+    url: https://www.typescriptlang.org/docs/handbook/2/classes.html
+  - title: "TypeScript Handbook: More on Functions & Interfaces"
+    url: https://www.typescriptlang.org/docs/handbook/2/objects.html
+---
+
+### TL;DR
+Object-oriented design rests on four pillars: **encapsulation** (protect invariants), **abstraction** (hide details behind a contract), **inheritance** (reuse via an `is-a` hierarchy), and **polymorphism** (swap implementations behind one interface). In TypeScript, prefer interfaces and composition over deep class trees.
+
+## Why it exists
+Without clear boundaries around state and behavior, business rules leak across callers: any function can mutate an object's fields into an invalid state, and adding a new variant forces `if/else` chains everywhere.
+
+## Mental model
+Think of the four pillars as tools for controlling change:
+
+1. **Encapsulation** — keep mutable state private so only validated methods can change it.
+2. **Abstraction** — let callers depend on *what* an object does (`interface`) rather than *how* it does it.
+3. **Inheritance** — share structure and behavior down an `is-a` hierarchy (`extends`).
+4. **Polymorphism** — write one caller that works with any implementation matching the contract.
+
+## Do it
+
+### 1. Encapsulation
+Use `private` (or `#` private fields) to guard invariants instead of exposing raw mutable fields.
+
+```ts
+class BankAccount {
+  #balanceCents = 0;
+
+  deposit(cents: number): void {
+    if (cents <= 0) throw new Error('Deposit must be positive');
+    this.#balanceCents += cents;
+  }
+
+  get balanceCents(): number {
+    return this.#balanceCents;
+  }
+}
+```
+
+### 2. Abstraction & 3. Polymorphism
+Define a minimal `interface`, then pass any conforming implementation to the caller.
+
+```ts
+interface Notifier {
+  send(to: string, message: string): Promise<void>;
+}
+
+class EmailNotifier implements Notifier {
+  async send(to: string, message: string): Promise<void> {
+    console.log(`Email -> ${to}: ${message}`);
+  }
+}
+
+class SlackNotifier implements Notifier {
+  async send(to: string, message: string): Promise<void> {
+    console.log(`Slack -> ${to}: ${message}`);
+  }
+}
+
+// Polymorphic caller: works with any Notifier without branching
+async function notifyUser(notifier: Notifier, user: string): Promise<void> {
+  await notifier.send(user, 'Deployment finished');
+}
+```
+
+### 4. Inheritance (use sparingly)
+`extends` models an `is-a` relationship. Keep hierarchies shallow (1–2 levels) and prefer composition when dimensions vary independently.
+
+```ts
+abstract class RetryableJob {
+  constructor(protected readonly maxAttempts: number) {}
+
+  protected abstract execute(): Promise<void>;
+
+  async run(): Promise<void> {
+    for (let attempt = 1; attempt <= this.maxAttempts; attempt++) {
+      try {
+        await this.execute();
+        return;
+      } catch (err) {
+        if (attempt === this.maxAttempts) throw err;
+      }
+    }
+  }
+}
+
+class SyncUsersJob extends RetryableJob {
+  protected async execute(): Promise<void> {
+    // perform sync
+  }
+}
+```
+
+## Gotchas
+- **TypeScript `private` vs JS `#field`:** TypeScript's `private` is compile-time only and disappears in emitted JS. Use `#field` when you need runtime privacy.
+- **Inheritance for code reuse alone:** Subclassing just to borrow a helper method couples the child to every parent change. Extract a plain function or compose a collaborator instead (see [Bridge](/docs/design/bridge)).
+- **Structural typing surprises:** TypeScript checks shapes, not class names — two unrelated classes with identical public members are assignable to each other unless they have `private` or `#` fields.
+
+## Production checklist
+- [ ] Keep class fields private (`#` or `private readonly`) and validate state transitions in methods.
+- [ ] Depend on small `interface` contracts at module boundaries rather than concrete classes.
+- [ ] Reach for composition before `extends` whenever behavior varies along more than one axis.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "What is the main difference between TypeScript's private keyword and ECMAScript #private fields?",
+    options: [
+      { label: "private is checked only at compile time, while #private is enforced at runtime", description: "TypeScript erases the private modifier in emitted JavaScript, whereas #fields remain private in JS.", correct: true },
+      { label: "#private fields can be accessed by subclasses", description: "Neither private nor #private can be accessed by subclasses; use protected for that." },
+      { label: "private makes a property immutable", description: "Use readonly to prevent reassignment." }
+    ]
+  },
+  {
+    question: "In the notifyUser(notifier: Notifier, user: string) example, which OOP pillar lets notifyUser work with both EmailNotifier and SlackNotifier without an if/else check?",
+    options: [
+      { label: "Polymorphism", description: "Different implementations share the Notifier contract and can be substituted at the call site.", correct: true },
+      { label: "Inheritance", description: "Neither class extends the other; both implement the Notifier interface." },
+      { label: "Encapsulation", description: "Encapsulation hides internal state, whereas polymorphism enables interchangeable types." }
+    ]
+  }
+]} />
+
+## Sources
+- [TypeScript Handbook: Classes](https://www.typescriptlang.org/docs/handbook/2/classes.html)
+- [TypeScript Handbook: Object Types](https://www.typescriptlang.org/docs/handbook/2/objects.html)

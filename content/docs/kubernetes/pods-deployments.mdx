@@ -1,0 +1,127 @@
+---
+title: Pods, ReplicaSets, and Deployments
+description: How Kubernetes layers Pods, ReplicaSets, and Deployments to run stateless workloads and perform zero-downtime rollouts and rollbacks.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: note
+type: explanation
+level: beginner
+tags: [kubernetes, pods, replicasets, deployments]
+tested_with:
+  kubectl: "1.34.1"
+cards:
+  - q: "Why do you rarely create a bare Pod directly in Kubernetes?"
+    a: "A bare Pod is not rescheduled if its node dies or the Pod is deleted; a ReplicaSet or Deployment is needed to maintain desired replicas."
+  - q: "What is the relationship between a Deployment, a ReplicaSet, and a Pod?"
+    a: "A Deployment manages ReplicaSets to handle rollouts and rollbacks, while each ReplicaSet ensures a target number of Pod replicas are running."
+  - q: "How does a Deployment perform a rolling update without downtime?"
+    a: "It creates a new ReplicaSet with the updated Pod template, scales it up gradually while scaling the old ReplicaSet down, and keeps old ReplicaSets at 0 replicas for rollback."
+  - q: "Which command rolls a Deployment back to its previous revision?"
+    a: "kubectl rollout undo deployment/<name>"
+related:
+  - kubernetes/service-routing
+  - kubernetes/kubectl-cheatsheet
+  - containers/docker-basics
+sources:
+  - title: "Kubernetes Docs: Pods"
+    url: https://kubernetes.io/docs/concepts/workloads/pods/
+  - title: "Kubernetes Docs: ReplicaSet"
+    url: https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/
+  - title: "Kubernetes Docs: Deployments"
+    url: https://kubernetes.io/docs/concepts/workloads/controllers/deployment/
+---
+
+### TL;DR
+A **Pod** runs one or more tightly coupled containers, a **ReplicaSet** keeps a desired count of identical Pods alive, and a **Deployment** manages ReplicaSets to give you declarative rollouts and instant rollbacks.
+
+## Why it exists
+A single container process cannot heal itself if the node it runs on fails, and replacing Pods one by one by hand during a release causes downtime. Kubernetes separates the **runtime unit** (Pod), the **replica count controller** (ReplicaSet), and the **release controller** (Deployment) so each layer has one clear job.
+
+## Mental model
+Think of the three objects as a nested ownership chain:
+
+1. **Pod** — the smallest deployable unit in Kubernetes. It gives its containers a shared network namespace (one Pod IP) and shared storage volumes. Pods are mortal: if a Pod dies, it is not restarted in place as a new object; a controller creates a replacement Pod.
+2. **ReplicaSet** — watches a label selector (`matchLabels`) and reconciles the live Pod count to match `spec.replicas`. If a node vanishes, the ReplicaSet controller creates new Pods on healthy nodes.
+3. **Deployment** — sits above ReplicaSets. When you change `spec.template` (for example, bumping `image` from `1.27` to `1.28`), the Deployment creates a **new** ReplicaSet, shifts replicas from the old ReplicaSet to the new one according to `strategy.rollingUpdate` (`maxSurge`, `maxUnavailable`), and retains old ReplicaSets at `0` replicas so you can roll back.
+
+<Sidenote>
+  You almost never write a `ReplicaSet` manifest by hand — `Deployment` creates and owns its ReplicaSets automatically.
+</Sidenote>
+
+## Do it
+Generate a minimal Deployment manifest locally with `--dry-run=client` (verified with `kubectl v1.34.1`):
+
+```bash
+kubectl create deployment nginx --image=nginx:1.27 --replicas=3 --dry-run=client -o yaml
+```
+
+```yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: nginx
+  strategy: {}
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - image: nginx:1.27
+        name: nginx
+```
+
+Apply, roll out an image update, and roll back on a live cluster:
+
+```bash
+# not run (requires cluster)
+kubectl apply -f deployment.yaml
+kubectl set image deployment/nginx nginx=nginx:1.28
+kubectl rollout status deployment/nginx
+kubectl rollout history deployment/nginx
+kubectl rollout undo deployment/nginx
+```
+
+## Gotchas
+- **Mismatched `selector.matchLabels` and `template.metadata.labels`:** The API server rejects a Deployment if its selector does not match the Pod template labels. Never edit selector labels in place on a running Deployment.
+- **Unhealthy Pods marked Ready immediately:** Without a `readinessProbe`, Kubernetes considers a new Pod ready as soon as its container starts, which can send traffic to a booting app during a rollout.
+- **Zero-history `revisionHistoryLimit`:** Setting `spec.revisionHistoryLimit: 0` deletes old ReplicaSets immediately, which disables `kubectl rollout undo`.
+
+## Production checklist
+- [ ] Run stateless workloads via `Deployment` (never bare `Pod` or standalone `ReplicaSet`).
+- [ ] Set `readinessProbe` and `livenessProbe` so rolling updates wait for new Pods to be ready.
+- [ ] Define `resources.requests` and `resources.limits` on every container.
+- [ ] Keep `revisionHistoryLimit` at a positive number (default `10`) for fast rollbacks.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "What happens when you update the container image in a Kubernetes Deployment?",
+    options: [
+      { label: "The Deployment creates a new ReplicaSet and gradually shifts replicas from the old ReplicaSet to the new one", description: "Old ReplicaSets are kept at 0 replicas so you can roll back if needed.", correct: true },
+      { label: "The existing ReplicaSet restarts each Pod in place without creating a new ReplicaSet", description: "ReplicaSets do not perform rolling updates across revisions; Deployments orchestrate them." },
+      { label: "Kubernetes deletes all Pods first and then creates new ones", description: "The default RollingUpdate strategy replaces Pods gradually to avoid downtime." }
+    ]
+  },
+  {
+    question: "Which resource is directly responsible for ensuring 3 identical Pod replicas stay running?",
+    options: [
+      { label: "ReplicaSet", description: "The ReplicaSet controller watches the Pod count matching its label selector.", correct: true },
+      { label: "Pod", description: "A Pod is a single workload instance and cannot recreate itself." },
+      { label: "Service", description: "A Service routes network traffic to Pods; it does not manage their lifecycle." }
+    ]
+  }
+]} />
+
+## Sources
+- [Kubernetes Docs: Pods](https://kubernetes.io/docs/concepts/workloads/pods/)
+- [Kubernetes Docs: ReplicaSet](https://kubernetes.io/docs/concepts/workloads/controllers/replicaset/)
+- [Kubernetes Docs: Deployments](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)

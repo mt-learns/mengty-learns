@@ -1,0 +1,200 @@
+---
+title: SOLID Principles in TypeScript
+description: The five SOLID object-oriented design principles with concise TypeScript examples and links to Bridge and Dependency Inversion.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: note
+type: explanation
+level: intermediate
+tags: [solid, oop, typescript, architecture, design]
+tested_with:
+  typescript: "7.0.2"
+cards:
+  - q: "What does the Single Responsibility Principle (SRP) actually mean?"
+    a: "A module or class should have one reason to change — cohesive responsibility for one actor or concern, not literally one method."
+  - q: "How does the Open/Closed Principle (OCP) let you add behavior without editing existing code?"
+    a: "Depend on an abstraction (interface) and add a new implementation instead of growing a switch/if-else block."
+  - q: "What violates the Liskov Substitution Principle (LSP)?"
+    a: "A subtype that breaks expectations of the base contract, such as throwing UnexpectedError or weakening postconditions."
+  - q: "Why does Interface Segregation (ISP) matter?"
+    a: "Callers should not be forced to depend on methods they do not use; small focused interfaces prevent bloated mocks and unnecessary coupling."
+  - q: "How does Dependency Inversion (DIP) decouple business logic from infrastructure?"
+    a: "High-level policy defines and owns the interface; low-level infrastructure implements it, so source dependencies point inward."
+related:
+  - design/bridge
+  - architecture/dependency-inversion
+  - design/oop-pillars
+sources:
+  - title: "TypeScript Handbook: Classes"
+    url: https://www.typescriptlang.org/docs/handbook/2/classes.html
+  - title: "Clean Architecture — Robert C. Martin (SOLID overview)"
+    url: https://blog.cleancoder.com/uncle-bob/2020/10/18/Solid-Relevance.html
+---
+
+### TL;DR
+**SOLID** is five principles for keeping code easy to change: **S**ingle Responsibility, **O**pen/Closed, **L**iskov Substitution, **I**nterface Segregation, and **D**ependency Inversion. Together they push you toward small, focused interfaces where high-level logic does not break when low-level details change.
+
+## Why it exists
+As a codebase grows, unrelated features tangle together: editing tax rules breaks PDF formatting, adding a payment provider requires modifying five `switch` statements, and unit tests need a real database just to test order validation. SOLID gives concrete rules to prevent that coupling.
+
+## Mental model
+Each principle targets a specific axis of coupling:
+
+| Letter | Principle | Core rule |
+|---|---|---|
+| **S** | Single Responsibility | One cohesive reason to change |
+| **O** | Open/Closed | Extend via new implementations, not edits to stable logic |
+| **L** | Liskov Substitution | Subtypes must honor the base contract |
+| **I** | Interface Segregation | Split fat interfaces into role-specific ones |
+| **D** | Dependency Inversion | Both policy and details depend on policy-owned abstractions |
+
+## Do it
+
+### S — Single Responsibility Principle (SRP)
+Separate domain calculation from persistence or formatting so each changes for its own reason.
+
+```ts
+interface OrderLine {
+  priceCents: number;
+  qty: number;
+}
+
+class OrderCalculator {
+  totalCents(lines: OrderLine[]): number {
+    return lines.reduce((sum, l) => sum + l.priceCents * l.qty, 0);
+  }
+}
+
+class OrderReceiptFormatter {
+  format(totalCents: number): string {
+    return `Total: $${(totalCents / 100).toFixed(2)}`;
+  }
+}
+```
+
+### O — Open/Closed Principle (OCP)
+Add new discount rules by implementing `DiscountPolicy` instead of editing `checkoutTotal`.
+
+```ts
+interface DiscountPolicy {
+  apply(cents: number): number;
+}
+
+class NoDiscount implements DiscountPolicy {
+  apply(cents: number): number {
+    return cents;
+  }
+}
+
+class PercentDiscount implements DiscountPolicy {
+  constructor(private readonly percent: number) {}
+  apply(cents: number): number {
+    return Math.round(cents * (1 - this.percent / 100));
+  }
+}
+
+function checkoutTotal(cents: number, policy: DiscountPolicy): number {
+  return policy.apply(cents);
+}
+```
+
+### L — Liskov Substitution Principle (LSP)
+Any subtype passed where `StorageReader` is expected must return bytes or `null` — never surprise callers by throwing `UnsupportedOperation` on `read`.
+
+```ts
+interface StorageReader {
+  read(key: string): Promise<string | null>;
+}
+
+class MemoryReader implements StorageReader {
+  private readonly store = new Map<string, string>();
+  async read(key: string): Promise<string | null> {
+    return this.store.get(key) ?? null;
+  }
+}
+```
+
+<Sidenote>
+  The classic LSP trap is `Square extends Rectangle`: mutating `width` on a `Square` silently changes `height`, breaking callers that expect independent dimensions.
+</Sidenote>
+
+### I — Interface Segregation Principle (ISP)
+Split a fat `Worker` interface so read-only consumers do not implement or mock write methods they never call.
+
+```ts
+interface ReadableRepo<T> {
+  findById(id: string): Promise<T | null>;
+}
+
+interface WritableRepo<T> {
+  save(item: T): Promise<void>;
+}
+
+// A reporting service only depends on ReadableRepo<Order>
+class OrderReportService {
+  constructor(private readonly orders: ReadableRepo<{ id: string }>) {}
+  getOrder(id: string) {
+    return this.orders.findById(id);
+  }
+}
+```
+
+### D — Dependency Inversion Principle (DIP)
+High-level business logic owns the interface; infrastructure implements it. See [Dependency Inversion in Practice](/docs/architecture/dependency-inversion) for the full architectural boundary diagram and [Bridge](/docs/design/bridge) for how DIP powers the Bridge pattern.
+
+```ts
+// Domain owns the port
+interface Clock {
+  now(): Date;
+}
+
+// Domain service depends only on Clock
+class TokenService {
+  constructor(private readonly clock: Clock) {}
+  isExpired(expiresAt: Date): boolean {
+    return this.clock.now().getTime() > expiresAt.getTime();
+  }
+}
+
+// Infrastructure implements Clock
+class SystemClock implements Clock {
+  now(): Date {
+    return new Date();
+  }
+}
+```
+
+## Gotchas
+- **Over-splitting for SRP:** Turning every single method into its own class creates indirection soup. Group things that change for the *same* business reason.
+- **Speculative OCP:** Do not invent an abstraction layer for a single implementation that has no second variant in sight; refactor to an interface when the second variant arrives.
+- **Putting the interface in the infrastructure folder:** That defeats DIP because the domain still imports from infrastructure.
+
+## Production checklist
+- [ ] Business logic classes do not import database drivers, HTTP clients, or `Date.now()` directly when testability matters.
+- [ ] Interfaces are small (1–3 methods) and named after what the caller needs.
+- [ ] New variants (gateways, formatters, policies) are added as new implementations without editing core orchestration.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "A reporting module only reads orders, but its constructor takes a 10-method OrderStore interface that includes save, delete, and archive. Which principle does this violate?",
+    options: [
+      { label: "Interface Segregation Principle (ISP)", description: "Clients should not depend on methods they do not use; split out a smaller ReadableOrderRepo.", correct: true },
+      { label: "Liskov Substitution Principle (LSP)", description: "LSP is about behavioral compatibility of subtypes, not interface size." },
+      { label: "Single Responsibility Principle (SRP)", description: "SRP is about reasons for a module to change, whereas ISP addresses fat interfaces." }
+    ]
+  },
+  {
+    question: "Where should the interface live under the Dependency Inversion Principle?",
+    options: [
+      { label: "In the high-level domain/business module that uses it", description: "So source-code imports point from infrastructure inward toward the domain.", correct: true },
+      { label: "In the low-level database adapter module", description: "If the adapter owns the interface, the domain still depends on the adapter module." },
+      { label: "In a global types file imported by nobody", description: "Both the domain and adapter must import the interface." }
+    ]
+  }
+]} />
+
+## Sources
+- [TypeScript Handbook: Classes](https://www.typescriptlang.org/docs/handbook/2/classes.html)
+- [Clean Coder Blog: SOLID Relevance](https://blog.cleancoder.com/uncle-bob/2020/10/18/Solid-Relevance.html)
