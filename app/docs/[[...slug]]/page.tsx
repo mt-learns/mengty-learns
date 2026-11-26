@@ -24,13 +24,17 @@ export default async function Page({ params }: { params: Promise<{ slug?: string
   const MDX = page.data.body;
   const markdownUrl = `/llms.mdx${page.url}.md`;
 
-  // Find next in path from section meta/pages
-  const allPages = source.getPages();
-  const currentIndex = allPages.findIndex((p) => p.url === page.url);
-  const nextInPath = currentIndex !== -1 && currentIndex + 1 < allPages.length ? allPages[currentIndex + 1] : null;
-
   return (
-    <DocsPage toc={page.data.toc} full={page.data.full}>
+    <DocsPage
+      toc={page.data.toc}
+      full={page.data.full}
+      tableOfContent={{
+        container: {
+          role: 'navigation',
+          'aria-label': 'On this page',
+        },
+      }}
+    >
       <OutdatedBanner verified={page.data.verified} status={page.data.status} />
       <div className="flex justify-between items-start gap-4 mb-2">
         <div>
@@ -77,16 +81,6 @@ export default async function Page({ params }: { params: Promise<{ slug?: string
         />
       </DocsBody>
       <PageFooter related={page.data.related} sources={page.data.sources} slug={page.url} />
-      {nextInPath && (
-        <div className="mt-8 pt-6 border-t flex justify-end">
-          <a
-            href={nextInPath.url}
-            className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
-          >
-            Next in path: {nextInPath.data.title} →
-          </a>
-        </div>
-      )}
     </DocsPage>
   );
 }

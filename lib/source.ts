@@ -31,10 +31,21 @@ const docs = defineDocs({
   },
 });
 
+const docsSource = docs.toFumadocsSource();
+const filteredDocsSource =
+  process.env.NODE_ENV === 'production'
+    ? {
+        ...docsSource,
+        files: docsSource.files.filter(
+          (file) => file.type !== 'page' || file.data.status !== 'draft'
+        ),
+      }
+    : docsSource;
+
 // See https://fumadocs.dev/docs/headless/source-api for more info
 export const source = loader({
   baseUrl: docsRoute,
-  source: docs.toFumadocsSource(),
+  source: filteredDocsSource,
   plugins: [],
 });
 

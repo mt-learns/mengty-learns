@@ -117,7 +117,7 @@ export function ReviewClient({ cards }: { cards: CardItem[] }) {
           </div>
 
           <div className="space-y-4">
-            <h3 className="text-xl font-bold font-headline">{currentCard.q}</h3>
+            <h2 className="text-xl font-bold font-headline">{currentCard.q}</h2>
             {showAnswer ? (
               <div className="p-4 rounded-panel bg-muted text-body whitespace-pre-wrap border">
                 {currentCard.a}
@@ -148,16 +148,16 @@ export function ReviewClient({ cards }: { cards: CardItem[] }) {
         </div>
       ) : (
         <div className="rounded-card border bg-card p-12 text-center space-y-4">
-          <h3 className="inline-flex items-center justify-center gap-2 text-2xl font-bold font-headline">
+          <h2 className="inline-flex items-center justify-center gap-2 text-2xl font-bold font-headline">
             <PartyPopper className="size-6 text-primary" strokeWidth={1.75} aria-hidden="true" />
             <span>All caught up!</span>
-          </h3>
+          </h2>
           <p className="text-muted-foreground">You have no more flashcards due for review right now.</p>
         </div>
       )}
 
       <div className="rounded-card border bg-card p-6 space-y-4">
-        <h4 className="font-bold font-headline">Backup & Restore</h4>
+        <h2 className="text-lg font-bold font-headline">Backup & Restore</h2>
         <div className="flex gap-4">
           <Button onClick={exportJson} variant="outline" className="min-h-tap rounded-control">
             Export JSON

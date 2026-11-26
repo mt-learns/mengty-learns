@@ -40,8 +40,19 @@ html > body[data-scroll-locked] {
 }
 
 @layer components {
+  .prose p,
+  .prose li {
+    max-width: 68ch;
+    line-height: 1.65;
+  }
   figure.shiki {
     border-radius: var(--radius-control);
     background-color: var(--card);
+  }
+  figure.shiki span[style*="--shiki-light:#e36209" i] {
+    --shiki-light: #b34700;
+  }
+  figure.shiki span[style*="--shiki-dark:#6a737d" i] {
+    --shiki-dark: #8b949e;
   }
 }
