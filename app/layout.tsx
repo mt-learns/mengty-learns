@@ -1,13 +1,48 @@
-import { Inter } from 'next/font/google';
+import { Atkinson_Hyperlegible_Next, Inter, JetBrains_Mono } from 'next/font/google';
 import { Provider } from '@/components/provider';
 import './global.css';
 import { type ReactNode } from 'react';
 import type { Metadata, Viewport } from 'next';
 import { appName, siteUrl } from '@/lib/shared';
 
+/*
+ * One family per content role (DESIGN.md, Typography). All three are variable
+ * fonts, self-hosted by next/font, latin only, with a metric-adjusted fallback
+ * so the swap does not shift the layout.
+ */
+// UI, headings, navigation, stats and diagram labels.
 const inter = Inter({
   subsets: ['latin'],
+  display: 'swap',
+  adjustFontFallback: true,
   variable: '--font-inter',
+});
+
+// Long-form reading: distinct I/l/1, 0/O and rn/m at body size.
+const atkinson = Atkinson_Hyperlegible_Next({
+  subsets: ['latin'],
+  display: 'swap',
+  adjustFontFallback: true,
+  variable: '--font-atkinson',
+});
+
+// Its italic shares the family name but is not preloaded: few pages use
+// italics, so the browser fetches it only where emphasis appears.
+const atkinsonItalic = Atkinson_Hyperlegible_Next({
+  subsets: ['latin'],
+  style: 'italic',
+  display: 'swap',
+  preload: false,
+  adjustFontFallback: true,
+  variable: '--font-atkinson-italic',
+});
+
+// Code, commands, file paths. Ligatures are switched off in CSS.
+const jetbrainsMono = JetBrains_Mono({
+  subsets: ['latin'],
+  display: 'swap',
+  adjustFontFallback: true,
+  variable: '--font-jetbrains-mono',
 });
 
 const tagline = 'See how infrastructure really works: notes, animated flows, labs that CI runs and flashcards for DevOps, architecture and security.';
@@ -56,7 +91,7 @@ export const metadata: Metadata = {
 
 export default function Layout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={inter.variable} suppressHydrationWarning>
+    <html lang="en" className={`${inter.variable} ${atkinson.variable} ${atkinsonItalic.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <body className="flex flex-col min-h-screen">
         <Provider>{children}</Provider>
       </body>

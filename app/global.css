@@ -13,14 +13,40 @@
   }
 }
 
-:root {
-  --font-inter: var(--font-inter);
-}
-
+/*
+ * Font roles (DESIGN.md, Typography). next/font sets --font-inter,
+ * --font-atkinson and --font-jetbrains-mono on <html> (app/layout.tsx).
+ *   font-sans     Inter: UI, headings, nav, buttons, stats, diagram labels
+ *   font-reading  Atkinson Hyperlegible Next: prose and other long reading
+ *   font-mono     JetBrains Mono: code, commands, terminal output, paths
+ */
 @theme inline {
   --font-sans: var(--font-inter), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", monospace;
+  --font-reading: var(--font-atkinson), "Atkinson Hyperlegible Next Fallback", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
+
+/*
+ * next/font has no fallback metrics for Atkinson Hyperlegible Next (it emits
+ * one for Inter and JetBrains Mono), so declare it here. Measured in Chromium
+ * against the latin woff2: average advance on English prose is 98.71% of
+ * Arial's; ascent 0.98em, descent 0.32em, no line gap. Overrides are divided by
+ * size-adjust, as next/font does. Re-measure if the font version changes.
+ */
+@font-face {
+  font-family: "Atkinson Hyperlegible Next Fallback";
+  src: local("Arial"), local("ArialMT"), local("Helvetica"), local("Liberation Sans");
+  size-adjust: 98.71%;
+  ascent-override: 99.28%;
+  descent-override: 32.42%;
+  line-gap-override: 0%;
+}
+
+/*
+ * Fumadocs has no font variables of its own: its components use the Tailwind
+ * `font-sans` / `font-mono` utilities, which resolve to the two lines above,
+ * so the sidebar, TOC, search and code blocks follow these roles.
+ */
 
 /*
  * Fumadocs colours. Fumadocs ships its own unlayered values (and a grey
