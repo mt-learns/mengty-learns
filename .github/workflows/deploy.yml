@@ -1,0 +1,83 @@
+name: Deploy
+
+# Cloudflare Workers via OpenNext (docs/deploy/CLOUDFLARE-WORKERS-PLAN.md).
+#   pull_request (same repo) -> new Worker *version* + preview URL, not live
+#   push to main / manual run on main -> production deploy (learn.limmengty.com)
+# Rollback: `pnpm exec wrangler rollback [<version-id>]` or dashboard ->
+# Workers & Pages -> mengty-learns -> Deployments. See docs/deploy/RUNBOOK.md.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Production deploys never overlap and are never cancelled half-way.
+# PR previews are per PR, and a newer push cancels the older run.
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('deploy-preview-{0}', github.event.pull_request.number) || 'deploy-production' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      WRANGLER_SEND_METRICS: 'false'
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # pnpm version comes from package.json "packageManager"
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm test
+
+      # Runs `pnpm build` (next build + scripts/check-static-routes.mjs), then
+      # bundles .open-next/worker.js and .open-next/assets.
+      - run: pnpm exec opennextjs-cloudflare build
+
+      # Local dry run, no account needed. Fails above 48 MiB (limit: 64 MiB).
+      - run: node scripts/check-worker-size.mjs
+
+      # Fork PRs get no secrets, so they stop after the checks above.
+      - name: Upload preview version
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -o pipefail
+          pnpm exec opennextjs-cloudflare upload --preview-alias "pr-${PR_NUMBER}" --tag "${GITHUB_SHA::7}" 2>&1 | tee upload.log
+          {
+            echo "### Preview version (not live)"
+            echo
+            grep -E "Version Preview (Alias )?URL:|Worker Version ID:" upload.log | sed 's/^/- /' || echo "- No preview URL in the wrangler output; see the step log."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Deploy to production
+        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          set -o pipefail
+          pnpm exec opennextjs-cloudflare deploy --tag "${GITHUB_SHA::7}" 2>&1 | tee deploy.log
+          {
+            echo "### Production deploy"
+            echo
+            grep -E "https://|Current Version ID:" deploy.log | sed 's/^/- /' || true
+          } >> "$GITHUB_STEP_SUMMARY"
