@@ -1,0 +1,112 @@
+---
+title: "IaC Modules: When and How to Extract Them"
+description: Structure reusable OpenTofu/Terraform modules with clean inputs, outputs, and semantic versioning—and know when a module is premature abstraction.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: how-to
+level: intermediate
+tags: [iac, opentofu, terraform, modules, refactoring]
+tested_with:
+  opentofu: "1.13 (docs only)"
+cards:
+  - q: "What is the standard file layout of an OpenTofu/Terraform module?"
+    a: "main.tf (resources), variables.tf (inputs), outputs.tf (exported values), versions.tf (required_providers), and README.md."
+  - q: "Why should reusable modules omit provider {} configuration blocks?"
+    a: "Provider credentials, regions, and aliases belong in the root module; putting provider {} inside a child module breaks for_each/count and multi-region callers."
+  - q: "How do you safely refactor resources into a module without destroying live infrastructure?"
+    a: "Add a moved {} block mapping the old resource address to module.<name>.<resource> before running tofu apply."
+  - q: "When should you NOT create an IaC module?"
+    a: "When it wraps a single resource with 1:1 pass-through variables, or when it is only used in one place."
+related:
+  - iac/first-project
+  - iac/plan-apply
+  - iac/remote-state-locking
+sources:
+  - title: "OpenTofu Docs: Modules Overview"
+    url: https://opentofu.org/docs/language/modules/
+  - title: "OpenTofu Docs: Module Development & Standard Structure"
+    url: https://opentofu.org/docs/language/modules/develop/structure/
+  - title: "OpenTofu Docs: Refactoring with moved blocks"
+    url: https://opentofu.org/docs/language/modules/develop/refactoring/
+---
+
+## TL;DR
+A **module** is a folder of `.tf` files that groups cohesive resources behind typed `variables.tf` inputs and `outputs.tf` outputs, pinned by a Git tag (`?ref=v1.2.0`). Don't wrap a single resource just to feel "DRY"—wait until you have a repeatable pattern used across multiple environments or teams.
+
+## Why it exists
+Copying 150 lines of VPC, subnet, NAT, and route-table HCL into `dev/`, `staging/`, and `prod/` guarantees drift. Extracting a cohesive pattern into a module lets every environment share the same security defaults while varying only size, CIDR, or tags.
+
+## Mental model
+Treat a module like a **pure function**:
+- **Root module:** owns `backend {}`, `provider {}`, and concrete environment values.
+- **Child module:** declares `required_providers` (no `provider {}` credentials), `variable` inputs with `validation` blocks, cohesive resources, and `output` values.
+
+## Do it
+
+Standard module structure:
+
+```text
+modules/app-service/
+├── README.md
+├── versions.tf    # required_version + required_providers
+├── variables.tf   # typed inputs + validation blocks
+├── main.tf        # cohesive resources
+└── outputs.tf     # IDs, endpoints, ARNs needed by callers
+```
+
+Calling a versioned Git module and refactoring safely with `moved`:
+
+```hcl
+# environments/prod/main.tf (not run)
+module "api" {
+  source  = "git::https://github.com/acme/infra-modules.git//modules/app-service?ref=v1.4.0"
+  name    = "orders-api"
+  env     = "prod"
+  replicas = 3
+}
+
+# Safe refactor when moving an existing resource into a module
+moved {
+  from = aws_ecs_service.api
+  to   = module.api.aws_ecs_service.this
+}
+```
+
+## Gotchas
+- **Thin wrapper modules:** a module that wraps one `aws_s3_bucket` and exposes 25 pass-through variables adds indirection without value.
+- **Mutable branch refs:** `?ref=main` means tomorrow's `tofu apply` in `prod` can pull breaking module changes. Always pin a tag (`?ref=v1.4.0`) or commit SHA.
+- **Embedding `provider {}` inside child modules:** prevents callers from using `count` or `for_each` on the module and locks the module to one region/account.
+- **Deep module nesting:** 3+ levels of modules calling modules makes `tofu plan` diffs and `moved` blocks painful to trace. Keep trees flat (max 1–2 levels).
+
+## Production checklist
+- [ ] Pin every remote module source to an immutable Git tag or commit SHA
+- [ ] Add `type`, `description`, and `validation` rules on all module `variable` blocks
+- [ ] Keep `provider {}` and `backend {}` blocks exclusively in root modules
+- [ ] Use `moved {}` blocks when renaming resources or extracting modules over live state
+- [ ] Run `tofu fmt -check`, `tofu validate`, and `tflint` in module CI
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "You extract an existing aws_sqs_queue.orders resource into module.orders_queue. How do you prevent OpenTofu from destroying and recreating the live queue?",
+    options: [
+      { label: "Add a moved { from = aws_sqs_queue.orders to = module.orders_queue.aws_sqs_queue.this } block", description: "moved blocks update state addresses cleanly during plan/apply without destroying the resource.", correct: true },
+      { label: "Delete terraform.tfstate and re-run tofu apply", description: "Deleting state causes OpenTofu to attempt creating duplicate resources or fail on existing names." },
+      { label: "Set lifecycle { prevent_destroy = true } and ignore the error", description: "prevent_destroy only blocks the apply; it does not remap the address in state." }
+    ]
+  },
+  {
+    question: "Why should a reusable child module declare required_providers in versions.tf instead of a provider {} block?",
+    options: [
+      { label: "Root modules own credentials and regions; child modules with provider blocks cannot be used with count/for_each", description: "Child modules inherit provider configurations from the root caller.", correct: true },
+      { label: "Child modules are not allowed to use cloud providers", description: "Child modules create cloud resources using the root's provider configuration." },
+      { label: "required_providers automatically authenticates to AWS", description: "required_providers only declares version and source constraints." }
+    ]
+  }
+]} />
+
+## Sources
+- [OpenTofu Docs: Modules Overview](https://opentofu.org/docs/language/modules/)
+- [OpenTofu Docs: Standard Module Structure](https://opentofu.org/docs/language/modules/develop/structure/)
+- [OpenTofu Docs: Refactoring with moved blocks](https://opentofu.org/docs/language/modules/develop/refactoring/)
