@@ -1,0 +1,116 @@
+---
+title: Remote State and Locking in OpenTofu / Terraform
+description: Why local tfstate breaks in teams, how to configure S3 or GCS remote backends with state locking, and how OpenTofu encrypts state client-side.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: how-to
+level: intermediate
+tags: [iac, opentofu, terraform, state, locking, s3]
+tested_with:
+  opentofu: "1.13 (docs only)"
+cards:
+  - q: "Why does local terraform.tfstate break as soon as a second engineer or CI joins?"
+    a: "Local state lives on one laptop; concurrent runs overwrite infrastructure without knowing each other's changes, and state files contain sensitive outputs."
+  - q: "What does state locking prevent during tofu apply?"
+    a: "It prevents two concurrent runs from mutating the same state file simultaneously and corrupting resource mappings."
+  - q: "How does modern S3 backend locking work without a separate DynamoDB table?"
+    a: "Using use_lockfile = true (S3 conditional writes via If-None-Match), which writes a .tflock object directly in S3."
+  - q: "How does OpenTofu protect secrets inside remote state even if someone reads the S3 bucket?"
+    a: "OpenTofu supports client-side state encryption (encryption block with PBKDF2/KMS) so state is encrypted before upload."
+related:
+  - iac/first-project
+  - iac/plan-apply
+  - iac/terraform-vs-opentofu
+sources:
+  - title: "OpenTofu Docs: Backends — State Storage and Locking"
+    url: https://opentofu.org/docs/language/settings/backends/configuration/
+  - title: "OpenTofu Docs: S3 Backend"
+    url: https://opentofu.org/docs/language/settings/backends/s3/
+  - title: "OpenTofu Docs: State Encryption"
+    url: https://opentofu.org/docs/language/state/encryption/
+---
+
+## TL;DR
+Never store `terraform.tfstate` on a laptop or in Git. Put state in a **remote backend** (S3 or GCS) with **versioning** and **locking** (`use_lockfile = true` on S3, or DynamoDB for legacy setups), and enable **OpenTofu client-side state encryption** so secrets in state stay unreadable at rest.
+
+## Why it exists
+OpenTofu and Terraform track every managed resource ID in a JSON state file. If Alice runs `tofu apply` from her laptop and Bob runs it from CI using separate or stale local files, they silently destroy or duplicate cloud resources—and committing `.tfstate` to Git leaks database passwords and private keys in plaintext.
+
+## Mental model
+A remote backend splits state into two guarantees:
+1. **Shared durable storage:** S3 or GCS with bucket versioning so any CI runner reads the exact latest state and can recover from accidental state corruption.
+2. **Mutual exclusion (locking):** Before `plan` or `apply` writes, OpenTofu acquires a lock (`<key>.tflock` in S3 or a DynamoDB item). A second runner fails fast instead of racing.
+
+## Do it
+
+Configure an S3 remote backend with native S3 lockfile (`use_lockfile = true`) and OpenTofu client-side state encryption (`not run`—requires an S3 bucket and KMS key):
+
+```hcl
+# backend.tf (not run; requires AWS bucket & KMS key)
+terraform {
+  required_version = ">= 1.10.0"
+
+  backend "s3" {
+    bucket       = "acme-iac-state-prod"
+    key          = "network/terraform.tfstate"
+    region       = "us-east-1"
+    encrypt      = true
+    use_lockfile = true
+  }
+
+  encryption {
+    key_provider "aws_kms" "state" {
+      kms_key_id = "alias/tofu-state-key"
+      region     = "us-east-1"
+    }
+    method "aes_gcm" "encrypted" {
+      keys = key_provider.aws_kms.state
+    }
+    state {
+      method   = method.aes_gcm.encrypted
+      enforced = true
+    }
+  }
+}
+```
+
+For **GCS**, locking is built into the bucket automatically via object generation preconditions (`backend "gcs" { bucket = "..." prefix = "..." }`).
+
+## Gotchas
+- **No variables in `backend {}`:** standard backend blocks cannot reference `var.*` or `local.*`—pass environment-specific keys via `-backend-config=prod.s3.tfbackend` (or separate root directories).
+- **Stale locks after a killed CI job:** if a runner is `SIGKILL`ed mid-apply, the lock stays held. Verify no run is actually active before running `tofu force-unlock <LOCK_ID>`.
+- **DynamoDB deprecation path:** older guides require a `dynamodb_table` for S3 locking; modern OpenTofu (1.10+) and Terraform (1.10+) support native S3 conditional-write locking with `use_lockfile = true`.
+- **Bucket versioning is non-negotiable:** encryption protects confidentiality, but S3 versioning is what lets you roll back a corrupted state file.
+
+## Production checklist
+- [ ] Enable bucket versioning and block all public access on the state bucket
+- [ ] Enable state locking (`use_lockfile = true` for S3, native for GCS)
+- [ ] Enable OpenTofu client-side `encryption` with KMS (`enforced = true`)
+- [ ] Restrict state bucket IAM access to CI roles and break-glass admins only
+- [ ] Split state by blast radius (network, database, app) rather than one giant state file
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "Why does OpenTofu client-side state encryption matter if S3 already has server-side encryption (SSE-S3/SSE-KMS) enabled?",
+    options: [
+      { label: "Client-side encryption encrypts state before upload, so anyone with S3 read access but without the KMS state key cannot read secrets in tfstate", description: "Server-side encryption decrypts transparently for anyone who can call s3:GetObject; client-side encryption adds a second cryptographic boundary.", correct: true },
+      { label: "S3 server-side encryption does not work on JSON files", description: "S3 SSE encrypts any object regardless of file format." },
+      { label: "Client-side encryption replaces the need for state locking", description: "Encryption protects confidentiality, not concurrent writes." }
+    ]
+  },
+  {
+    question: "A CI job was cancelled mid-apply and the next run fails with 'Error acquiring the state lock'. What should you do before running force-unlock?",
+    options: [
+      { label: "Confirm no other CI job or engineer is actually running apply against that state", description: "Force-unlocking while another apply is still running can corrupt state and duplicate resources.", correct: true },
+      { label: "Delete the S3 bucket and re-run tofu init", description: "Deleting the bucket destroys your entire state history." },
+      { label: "Run tofu apply -lock=false in CI permanently", description: "Disabling locking in CI invites race conditions and state corruption." }
+    ]
+  }
+]} />
+
+## Sources
+- [OpenTofu Docs: Backends — State Storage and Locking](https://opentofu.org/docs/language/settings/backends/configuration/)
+- [OpenTofu Docs: S3 Backend](https://opentofu.org/docs/language/settings/backends/s3/)
+- [OpenTofu Docs: State Encryption](https://opentofu.org/docs/language/state/encryption/)
