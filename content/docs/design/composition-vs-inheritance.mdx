@@ -1,0 +1,155 @@
+---
+title: Composition vs Inheritance
+description: Why deep inheritance creates fragile base classes, how has-a composition and TypeScript mixins compare, and when extends is still the right tool.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: note
+type: explanation
+level: intermediate
+tags: [design-patterns, oop, typescript, architecture]
+tested_with:
+  typescript: "7.0.2"
+cards:
+  - q: "What is the fragile base class problem?"
+    a: "A seemingly safe change to a parent class (like calling an overridable method internally) silently breaks subclasses that depend on the old internal call order."
+  - q: "What is the core difference between is-a (inheritance) and has-a (composition)?"
+    a: "Inheritance (is-a) locks a subclass to one static parent hierarchy at compile time; composition (has-a) holds collaborators behind interfaces so behavior can be swapped at runtime."
+  - q: "How do TypeScript mixins differ from plain composition?"
+    a: "Mixins dynamically extend a class constructor to merge methods onto one prototype, whereas composition injects collaborators as fields—avoiding prototype collisions and hidden dependencies."
+  - q: "When is class inheritance (extends) completely fine?"
+    a: "For shallow (1-2 level) true is-a relationships like custom Error subclasses or a small Template Method base class with a single protected hook."
+related:
+  - design/oop-pillars
+  - design/solid
+  - design/bridge
+  - design/decorator
+sources:
+  - title: "TypeScript Handbook: Classes"
+    url: https://www.typescriptlang.org/docs/handbook/2/classes.html
+  - title: "TypeScript Handbook: Mixins"
+    url: https://www.typescriptlang.org/docs/handbook/mixins.html
+  - title: "Dive Into Design Patterns — Favor Composition Over Inheritance (Alexander Shvets)"
+    url: https://refactoring.guru/design-patterns/book
+---
+
+## TL;DR
+**Inheritance (`is-a`)** couples subclasses to a parent's internal implementation and multiplies classes when dimensions vary independently (**fragile base class**). **Composition (`has-a`)** delegates to small interfaces you can swap at runtime. Keep `extends` shallow (custom `Error` types, one-level base contracts) and reach for composition everywhere else.
+
+## Why it exists
+Inheritance looks like the quickest way to reuse code: `class CachedS3Store extends S3Store`. Two months later, `S3Store` changes how `put()` calls `putBatch()`, and `CachedS3Store` double-counts or skips cache invalidation. Meanwhile, you also need `CachedGcsStore` and `RetryingS3Store`, and JavaScript/TypeScript only allows single inheritance.
+
+## Mental model
+| Approach | Relationship | Coupling | Runtime swappable? | Best for |
+|---|---|---|---|---|
+| **Inheritance (`extends`)** | `is-a` | Tight (shares `protected` state & call order) | No | Shallow 1-level `Error`s or strict subtype hierarchies |
+| **TypeScript Mixin** | `is-a` (composed prototype) | Medium (name collisions possible) | No | Framework-level cross-cutting traits when `extends` is required |
+| **Composition (`has-a`)** | `has-a` | Loose (depends on `interface` only) | Yes | Swappable drivers, strategies, decorators, test fakes |
+
+## Do it
+
+### 1. The fragile base class problem
+When a base class calls one of its own public/protected methods internally, changing that internal call breaks subclasses that overrode the method:
+
+```ts
+class BaseMetrics {
+  protected count = 0;
+
+  increment(): void {
+    this.count += 1;
+  }
+
+  incrementBatch(n: number): void {
+    // Refactoring this to call `this.increment()` n times
+    // breaks any subclass that overrides `increment()` and also calls `super.incrementBatch()`.
+    this.count += n;
+  }
+}
+```
+
+### 2. Prefer `has-a` composition
+Give the class a collaborator behind a small interface instead of subclassing:
+
+```ts
+interface RetryPolicy {
+  run<T>(op: () => Promise<T>): Promise<T>;
+}
+
+class FixedRetry implements RetryPolicy {
+  constructor(private readonly maxAttempts: number) {}
+  async run<T>(op: () => Promise<T>): Promise<T> {
+    let lastErr: unknown;
+    for (let i = 0; i < this.maxAttempts; i++) {
+      try {
+        return await op();
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    throw lastErr;
+  }
+}
+
+// HealthChecker HAS-A RetryPolicy (not IS-A Retryable)
+class HealthChecker {
+  constructor(private readonly retry: RetryPolicy) {}
+
+  check(url: string): Promise<boolean> {
+    return this.retry.run(async () => url.startsWith('https://'));
+  }
+}
+```
+
+### 3. TypeScript mixins vs composition
+TypeScript supports class-expression mixins (`function WithTimestamps<TBase extends Constructor>(Base: TBase)`), which attach extra properties onto a subclass. Mixins are useful when a framework requires a single class prototype, **but** they still share one `this` namespace (risking silent property collisions) and are harder to type-check than injecting a `Clock` or `Logger` field. Prefer composition in application code.
+
+### 4. When inheritance IS fine
+- **Custom `Error` subclasses:** `class ConfigError extends Error` is a genuine `is-a` relationship that preserves `instanceof` and stack traces.
+- **Shallow (1-level) Template Method:** an abstract base class with one `protected abstract execute()` hook where subclasses never override concrete parent methods.
+
+### When NOT to use it
+
+Overengineering happens when you outlaw `extends` Dogmatically and wrap a 5-line `class ConfigError extends Error` in a `ConfigErrorWrapper` composition object. Equally, overusing composition by creating ten 1-method interfaces for helpers that never vary just adds indirection—plain functions are often better than both classes and mixins.
+
+### Real-world example in this stack
+
+This codebase uses **composition** everywhere: React components compose `<Flow>`, `<Diagram>`, `<Quiz>`, and `<Checklist>` rather than inheriting from a base `DocPage` class, and [Bridge](/docs/design/bridge) and [Decorator](/docs/design/decorator) show how `has-a` delegation replaces `M × N` class trees.
+
+## Gotchas
+- **TypeScript structural typing hides `is-a` mistakes:** Two unrelated classes with the same public fields are assignable to each other unless they have `private` or `#` fields.
+- **Liskov Substitution Principle (LSP) violations:** If your subclass throws `NotImplementedError` on an inherited method (e.g. `ReadOnlyCache extends Cache`), it is not a true `is-a` subtype—split the interface and compose instead.
+- **Mixin type complexity:** Complex generic mixins often trigger cryptic `TS2545: A mixin class must have a constructor with a single rest parameter` errors.
+
+## Production checklist
+- [ ] Keep inheritance trees at most 1–2 levels deep (`Base -> Concrete`).
+- [ ] Use `has-a` composition whenever you want to swap behavior in tests or at runtime.
+- [ ] Never subclass just to borrow utility methods—extract a plain module function instead.
+
+## Check yourself
+
+<MyTake>
+My rule of thumb in TypeScript: use `extends` for `Error` subclasses and almost nothing else. Everything else is either a plain function or a small class that takes its collaborators via constructor parameters.
+</MyTake>
+
+<Quiz questions={[
+  {
+    question: "Why can changing a seemingly internal implementation detail in a base class break subclasses?",
+    options: [
+      { label: "Subclasses may override methods that the base class starts or stops calling internally (the fragile base class problem)", description: "Because parent and child share `this` dispatch, internal refactors in the parent can trigger unexpected overrides or double-execution.", correct: true },
+      { label: "TypeScript forbids subclasses from calling super()", description: "TypeScript allows super() calls; the issue is implicit behavioral coupling." },
+      { label: "Composition does not allow interfaces in TypeScript", description: "Composition relies directly on TypeScript interfaces." }
+    ]
+  },
+  {
+    question: "When is class inheritance (extends) still a good choice in TypeScript?",
+    options: [
+      { label: "For a shallow 1-level true is-a hierarchy like custom Error subclasses", description: "Extending Error preserves stack traces and instanceof checks with minimal coupling.", correct: true },
+      { label: "When you have two independent dimensions like Exporters and StorageDrivers", description: "Orthogonal dimensions should use composition (Bridge), not inheritance." },
+      { label: "Whenever you want to borrow two helper methods from another class", description: "Borrowing helpers via inheritance creates unnecessary coupling; use a plain function or composition." }
+    ]
+  }
+]} />
+
+## Sources
+- [TypeScript Handbook: Classes](https://www.typescriptlang.org/docs/handbook/2/classes.html)
+- [TypeScript Handbook: Mixins](https://www.typescriptlang.org/docs/handbook/mixins.html)
+- *Dive Into Design Patterns* (Alexander Shvets), chapter "Software Design Principles: Favor Composition Over Inheritance"

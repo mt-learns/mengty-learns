@@ -3,6 +3,7 @@
   "pages": [
     "oop-pillars",
     "solid",
+    "composition-vs-inheritance",
     "factory-method",
     "adapter",
     "bridge",
