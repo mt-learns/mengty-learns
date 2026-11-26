@@ -68,6 +68,9 @@ Alternative considered: **Nextra 4** (Pagefind search, also static). It's fine, 
 /docs/<section>/...  Fumadocs pages (MDX)
 /projects            Project tiles + topic filter
 /about               About me, skills, contact links
+/review              Daily flashcard review (spaced repetition, localStorage)
+/radar               Personal Tech Radar (Adopt / Trial / Assess / Hold)
+/digest              Weekly or biweekly "5 things that matter"
 /404
 ```
 Optional, without a backend: a newsletter through an external form (Buttondown or Substack embed link), and quiz/progress saved only in `localStorage`.
@@ -181,7 +184,13 @@ tags:        string[]
 tested_with: Record<string, string>     // { docker: "27.x" }
 status:      'draft' | 'stable' | 'outdated'
 updated:     date
+verified:    date                       // last time I re-ran the commands/labs
+kind:        'note' | 'concept' | 'cheatsheet' | 'lab' | 'decision' | 'postmortem' | 'radar' | 'digest'
+cards:       { q: string; a: string }[] // 3–5 flashcards → /review (§9)
+related:     string[]                   // slugs → "Related" + backlinks
+sources:     { title: string; url: string }[]  // official docs first
 ```
+The note and concept-page templates are in §10. What to write, and in what order, is in `CONTENT-PLAN.md`.
 Projects are plain data in `content/projects.ts` (a typed array), so they need no extra loader.
 
 Sections (sidebar order through `meta.json`): Foundations → Containers → Kubernetes → IaC → CI/CD → GitOps → Design → Architecture → Security.
@@ -200,9 +209,152 @@ Sections (sidebar order through `meta.json`): Foundations → Containers → Kub
 
 ---
 
-## 9. Open questions for the owner
+## 9. Learning system (learn fast, remember long)
+
+The site is a **learning system, not a news site**. Every feature below works with static export, keeping state in `localStorage` with no backend.
+
+### 9.1 Content types
+| `kind` | What it is | Example |
+|---|---|---|
+| `note` | Evergreen how-to / explanation / reference (Diátaxis `type`) | "How Docker volumes work" |
+| `concept` | Full concept page with a `<Flow>` (§10.2) | "Bridge pattern", "Kubernetes Service routing" |
+| `cheatsheet` | One page of commands I reuse | kubectl, Terraform, git |
+| `lab` | Hands-on exercise. Its files live in `labs/<name>/` and CI runs them | "Multi-stage Dockerfile for Next.js" |
+| `decision` | "Why X over Y", ADR-style | "Argo CD vs Flux for my setup" |
+| `postmortem` | My mistakes and how I fixed them (most memorable) | "My pod was OOMKilled" |
+| `radar` | One Tech Radar entry: Adopt / Trial / Assess / Hold | "OpenTofu: Trial" |
+| `digest` | Weekly or biweekly "5 things that matter", in my own words, with links | "Week 48" |
+
+### 9.2 Correctness rules ("the correct way")
+1. **Facts link to their source.** Official docs first (kubernetes.io, the Terraform registry, OWASP, MDN). My opinions go in a `<MyTake>` aside.
+2. **`tested_with` + `verified`** on every note. The page shows **"⚠️ May be outdated"** automatically when `verified` is more than 12 months old, or when `status: outdated` is set.
+3. **Labs are tested code.** `labs/<name>/` holds real files. CI runs `docker build`, `hadolint`, `terraform fmt -check && terraform validate`, `tflint`, `kubeconform` and `actionlint`. If a lab breaks, the build fails.
+4. **No copied content.** Write in my own words, and quote briefly with a link.
+5. Internal and external link check in CI (weekly for external links).
+
+### 9.3 Remember: spaced repetition + active recall
+| Feature | Behaviour |
+|---|---|
+| **Flashcards** | 3–5 `cards` per note in the frontmatter. The build collects them into `public/cards.json`. |
+| **`/review` page** | Shows the cards due today. Each card is graded Again / Hard / Good / Easy, and an FSRS (or SM-2) schedule in `localStorage` decides when it comes back. Shows a streak and a due count. Export/import JSON as a backup. |
+| **"Check yourself"** | `<Quiz>` at the end of each note: answer first, then reveal. |
+| **TL;DR first** | Required: 3 lines max (the Feynman test). |
+| **Related + backlinks** | From `related`, so notes connect (Docker → Pods → Helm). |
+| **Learning paths** | An ordered path per section, with progress ("3 / 8 done") in `localStorage` and "Next in path →" at the bottom of every page. |
+
+### 9.4 News: a personal radar, not a news feed
+- **`/radar`**: the Thoughtworks-style rings (Adopt / Trial / Assess / Hold). Each item has 2 lines: what it is · why it matters to me · my action.
+- **`/digest`**: a weekly or biweekly post with 3–5 items, in my own words, with source links.
+- **Inbox automation, kept private:** a scheduled GitHub Action pulls RSS feeds (Kubernetes blog, CNCF, GitHub changelog, AWS What's New, OpenTofu/HashiCorp releases, OWASP, CISA KEV) into a GitHub issue or `inbox/*.json` that is **not published**. I pick 3–5 items a week and write radar or digest entries. Budget: 15 min a week.
+
+### 9.5 My routine
+- **Daily, 15 min:** `/review` cards, then read one note.
+- **Weekly, 1–2 h:** one lab, one new or updated note, and one digest or radar entry.
+- **Monthly:** fix "outdated" notes, and write one postmortem or decision plus one new `<Flow>`.
+
+### 9.6 Writing must stay easy
+- `pnpm new <kind> <section>/<slug>` creates the file from a template with the dates filled in.
+- Publish small (`status: draft` keeps it out of the paths), and improve later.
+
+---
+
+## 10. Docs UX: page templates and animated process flows
+
+**References (ideas only, no copied text or art):** the page structure of refactoring.guru (e.g. `/design-patterns/bridge`), and IcePanel's animated "flows" over architecture diagrams.
+
+### 10.1 Templates
+**Note template** (`kind: note`):
+TL;DR → Why it exists (the problem) → Mental model (one diagram or `<Flow>`) → Do it (commands) → Gotchas → Production checklist → Check yourself → Sources.
+
+**Concept page template** (`kind: concept`): a fixed order, so readers always know where to look:
+
+| # | Section | Component |
+|---|---|---|
+| 1 | Intent: TL;DR, 2–3 lines | `<Intent>` |
+| 2 | Problem: what hurts, with an illustration | `<Figure>` |
+| 3 | Solution in plain words | prose |
+| 4 | Real-world analogy | `<Analogy>` |
+| 5 | **▶ Flow: watch it work** | `<Flow>` |
+| 6 | Structure: static class or component diagram | `<Figure>` (SVG) |
+| 7 | Code: language tabs (TS / Go / Python) + "Run it" lab link | `<Tabs>` + `<LabLink>` |
+| 8 | When to use / when to avoid | `<Checklist>` |
+| 9 | How to implement: numbered steps | `<Steps>` |
+| 10 | Pros / Cons | `<ProsCons>` |
+| 11 | Relations: "Bridge vs Adapter vs Strategy" | `<Relations>` |
+| 12 | Check yourself (feeds `/review`) | `<Quiz>` + `cards` |
+
+### 10.2 `<Flow>`: an animated step-by-step process diagram
+```
+┌──────────────────────────────────────────────────────────────┐
+│   [User] ──●──▶ [Ingress] ─────▶ [Service] ─────▶ [Pod A]     │
+│                                     └──────────▶ [Pod B]      │
+│  Step 2 / 5  Ingress matches host + path and forwards to the  │
+│              Service "web" on port 80.                        │
+│  ◀  ▶  ⏯   ━━━━●━━━━━━━   1x   🔗 link to this step           │
+└──────────────────────────────────────────────────────────────┘
+```
+
+**Behaviour**
+- In each step, the active nodes and edges are highlighted and the others fade to 40%. A dot travels along the active edge.
+- Edges can be `request` (accent colour), `response` (dashed) or `error` (destructive colour).
+- The caption is synced to the step. A details drawer is optional.
+- Controls: previous/next, ← → keys, a scrubber, autoplay at 0.5× / 1× / 2×, replay, and a step deep link `?flow=<id>&step=3`.
+- A **compare toggle** (v2): "without pattern" vs "with pattern" (e.g. subclass explosion vs Bridge).
+- **Zoom levels** (v3, the C4 idea): clicking a group node drills into its own sub-flow, with a breadcrumb back.
+
+**Authoring as data:** written in MDX, or as `flows/<id>.ts` for big flows:
+```mdx
+<Flow id="k8s-request"
+  nodes={[
+    { id: 'user', label: 'User',    icon: 'user',    x: 0, y: 1 },
+    { id: 'ing',  label: 'Ingress', icon: 'gateway', x: 1, y: 1 },
+    { id: 'svc',  label: 'Service', icon: 'service', x: 2, y: 1 },
+    { id: 'podA', label: 'Pod A',   icon: 'pod',     x: 3, y: 0 },
+    { id: 'podB', label: 'Pod B',   icon: 'pod',     x: 3, y: 2 },
+  ]}
+  steps={[
+    { edge: 'user->ing', text: 'Browser sends GET /cart' },
+    { edge: 'ing->svc',  text: 'Ingress matches host + path, forwards to Service "web"' },
+    { edge: 'svc->podA', text: 'kube-proxy picks a healthy Pod endpoint' },
+    { edge: 'podA->svc', text: 'Pod A responds 200', kind: 'response' },
+    { edge: 'svc->user', text: 'Response returns to the user', kind: 'response' },
+  ]}
+/>
+```
+
+**Tech:** hand-built SVG on a grid layout (`x`/`y` × cell size), with edges drawn as SVG paths. The `motion` library (`motion/react`) animates the dot along each path and the highlight changes, using `--ease-ios`. Nodes use iOS styling: `rounded-panel` cards, a section-icon squircle, and a light material. Rejected: React Flow (heavy, looks like an editor) and Mermaid (can't animate a step sequence). An automatic ELK layout is a possible later addition.
+
+**Non-functional rules**
+- `'use client'`, rendered only inside docs pages. The JS budget is ≤ 35 KB gzip for `<Flow>` + motion. Pages without a flow ship none of it.
+- **Accessibility:** the same steps always render as a visible numbered list (`<ol>`) below the diagram. Controls are buttons with labels, and `aria-live="polite"` announces the caption.
+- **Reduced motion:** no travelling dot or transitions, only an instant highlight per step.
+- **Print and no-JS:** the SVG is static with all edges visible, plus the numbered list.
+- **Mobile:** the diagram scales to the width (min 320px), and the caption and controls sit below it.
+- Validate the data at build time: unknown node ids in a step fail the build.
+
+### 10.3 Learner journey
+```
+Home ─▶ Learning path (3/8) ─▶ Concept page
+   Intent → Problem → ▶ Flow → Structure → Code → Lab ─▶ Check yourself
+        └─ cards saved ─▶ /review (daily) ─▶ "Next in path →"
+```
+
+### 10.4 Rollout
+| Phase | Scope |
+|---|---|
+| **P1** | Note + concept templates, `pnpm new`, the `<Flow>` v1 (nodes, edges, steps, controls, list fallback, reduced motion), the first 2 flows: **Bridge** and **K8s request** |
+| **P2** | `/review` + `cards.json` + `<Quiz>`, learning-path progress, "May be outdated" badge, labs tested in CI, response/error edges, deep links |
+| **P3** | `<Flow>` compare toggle, `/radar` + `/digest`, the RSS inbox Action |
+| **P4** | Zoom levels, ELK auto-layout, 1–2 new flows a month (`CONTENT-PLAN.md`) |
+
+---
+
+## 11. Open questions for the owner
 1. **D3:** iOS blue, or another accent colour?
 2. Domain: mengtylearns.com is decided. Check it's free before buying.
 3. Mascot: kouprey calf, gecko, or none?
 4. Who makes the illustrations: by hand, AI-assisted, or commissioned?
 5. English only, or Khmer later?
+6. Flashcard scheduler: FSRS (better retention, slightly more code) or SM-2 (simple)? *Default: FSRS via the `ts-fsrs` package.*
+7. Digest cadence: weekly or biweekly? *Default: biweekly. It's easier to keep up.*
+8. Code-tab languages for concept pages: TS + Go + Python, or TS only to start? *Default: TS only in P1, then add Go.*
