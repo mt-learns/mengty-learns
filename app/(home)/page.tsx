@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { LargeTitle, Tile, GroupedList, SectionIcon } from '@/components/ios/tile';
+import { LargeTitle, Tile, SectionIcon } from '@/components/ios/tile';
+import { GroupedList, GroupedRow } from '@/components/ios/grouped-list';
 import { Button } from '@/components/ui/button';
 import { source } from '@/lib/source';
 import { projects } from '@/content/projects';
@@ -33,7 +34,7 @@ export default function HomePage() {
       </section>
 
       <section className="my-12">
-        <h2 className="text-2xl font-bold mb-6">Learning Paths</h2>
+        <h2 className="text-2xl font-bold mb-6 font-headline">Learning Paths</h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div className="md:col-span-2">
             <Tile
@@ -52,22 +53,22 @@ export default function HomePage() {
       </section>
 
       <section className="my-12">
-        <h2 className="text-2xl font-bold mb-6">Latest Notes</h2>
-        <GroupedList title="Recently Updated">
+        <h2 className="text-2xl font-bold mb-6 font-headline">Latest Notes</h2>
+        <GroupedList header="Recently Updated">
           {latest.map((page) => (
-            <Link key={page.url} href={page.url} className="flex items-center justify-between gap-4 p-4 min-h-tap hover:bg-muted/50 transition-colors">
-              <div>
-                <span className="font-medium block">{page.data.title}</span>
-                <span className="text-xs text-muted-foreground">{page.data.description}</span>
-              </div>
-              <span className="text-xs text-muted-foreground shrink-0 capitalize">{page.data.type ?? 'note'}</span>
-            </Link>
+            <GroupedRow
+              key={page.url}
+              title={page.data.title}
+              description={page.data.description}
+              href={page.url}
+              detail={page.data.type ?? 'note'}
+            />
           ))}
         </GroupedList>
       </section>
 
       <section className="my-12">
-        <h2 className="text-2xl font-bold mb-6">Featured Projects</h2>
+        <h2 className="text-2xl font-bold mb-6 font-headline">Featured Projects</h2>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {featuredProjects.map((project) => (
             <Tile
