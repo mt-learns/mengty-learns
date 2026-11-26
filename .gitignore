@@ -10,3 +10,10 @@ tsconfig.tsbuildinfo
 public/cards.json
 qa/
 .lighthouseci/
+
+# Impeccable design skill: per-developer consent + generated copy of DESIGN.md
+.impeccable/config.local.json
+.impeccable/design-full.md
+
+# QA screenshots (scripts/qa-shots.mjs)
+.shots/

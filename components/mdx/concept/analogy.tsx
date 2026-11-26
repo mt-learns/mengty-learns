@@ -17,7 +17,7 @@ export function Analogy({ children, title = 'Real-world analogy' }: AnalogyProps
     >
       <div className="mb-2 flex items-center gap-2 text-subheadline font-headline text-foreground">
         <span className="inline-flex size-7 items-center justify-center rounded-control bg-primary/10 text-primary">
-          <Lightbulb className="size-4 shrink-0" aria-hidden="true" />
+          <Lightbulb className="size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
         </span>
         <span>{title}</span>
       </div>

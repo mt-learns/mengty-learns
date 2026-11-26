@@ -1,4 +1,9 @@
 {
   "title": "Design",
-  "pages": ["oop-pillars", "solid", "bridge"]
+  "pages": [
+    "oop-pillars",
+    "solid",
+    "bridge"
+  ],
+  "icon": "design"
 }

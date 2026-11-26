@@ -29,7 +29,7 @@ sources:
     url: https://docs.docker.com/reference/dockerfile/#user
 ---
 
-### TL;DR
+## TL;DR
 A multi-stage `Dockerfile` uses one stage (`deps`) to install dependencies and a clean final stage (`runner`) that copies only what is needed to run the app as a non-root user (`nextjs`, UID `1001`).
 
 ## Why it exists

@@ -28,7 +28,7 @@ sources:
     url: https://docs.docker.com/build/cache/
 ---
 
-### TL;DR
+## TL;DR
 Every `RUN`, `COPY`, and `ADD` instruction in a `Dockerfile` creates an immutable layer. Once a layer's inputs change, Docker invalidates that layer and **every instruction after it**—so ordering instructions from least-frequently changed to most-frequently changed keeps builds fast.
 
 ## Why it exists

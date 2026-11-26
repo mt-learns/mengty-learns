@@ -43,7 +43,7 @@ export function Quiz({ questions }: QuizProps) {
                   <button
                     key={j}
                     onClick={() => handleSelect(i, j)}
-                    className={`text-left p-3 rounded-panel border transition-all ${borderClass} hover:border-primary/50 min-h-tap`}
+                    className={`text-left p-3 rounded-panel border transition-all motion-reduce:transition-none ${borderClass} hover:border-primary/50 min-h-tap`}
                   >
                     <span className="font-semibold block mb-0.5">{opt.label}</span>
                     <span className="text-muted-foreground text-subheadline">{opt.description}</span>

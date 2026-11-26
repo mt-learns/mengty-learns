@@ -1,12 +1,13 @@
 import type { BaseLayoutProps, LinkItemType } from 'fumadocs-ui/layouts/shared';
+import { LogoMark } from '@/components/brand/logo';
 import { appName, gitConfig } from './shared';
 
 export function baseOptions(): BaseLayoutProps {
   return {
     nav: {
       title: (
-        <span className="inline-flex items-center gap-2 font-semibold">
-          <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-primary text-primary-foreground text-xs font-bold">ML</span>
+        <span className="inline-flex items-center gap-2 font-semibold tracking-tight">
+          <LogoMark />
           {appName}
         </span>
       ),
@@ -15,12 +16,14 @@ export function baseOptions(): BaseLayoutProps {
   };
 }
 
+/** Top navigation for the home layout. Docs, Review, Radar and Digest only. */
+export const NAV_LINKS = [
+  { text: 'Docs', url: '/docs' },
+  { text: 'Review', url: '/review' },
+  { text: 'Radar', url: '/radar' },
+  { text: 'Digest', url: '/digest' },
+] as const;
+
 export function homeLinks(): LinkItemType[] {
-  return [
-    { text: 'Docs', url: '/docs', active: 'nested-url' },
-    { text: 'Radar', url: '/radar', active: 'nested-url' },
-    { text: 'Digest', url: '/digest', active: 'nested-url' },
-    { text: 'Projects', url: '/projects', active: 'nested-url' },
-    { text: 'About', url: '/about', active: 'nested-url' },
-  ];
+  return NAV_LINKS.map((link) => ({ ...link, active: 'nested-url' as const }));
 }

@@ -1,8 +1,10 @@
+import { createElement } from 'react';
 import { llms, loader } from 'fumadocs-core/source';
 import { docsRoute } from './shared';
 import { defineCollections, defineDocs } from 'fumadocs-mdx/macro';
 import { metaSchema, pageSchema } from 'fumadocs-core/source/schema';
 import { z } from 'zod';
+import { SectionIcon, SECTION_ICON_NAMES, type SectionIconName } from '@/components/illustrations';
 
 const frontmatterSchema = pageSchema.extend({
   type: z.enum(['tutorial', 'how-to', 'reference', 'explanation']).optional(),
@@ -31,10 +33,30 @@ const docs = defineDocs({
   },
 });
 
+const docsSource = docs.toFumadocsSource();
+const filteredDocsSource =
+  process.env.NODE_ENV === 'production'
+    ? {
+        ...docsSource,
+        files: docsSource.files.filter(
+          (file) => file.type !== 'page' || file.data.status !== 'draft'
+        ),
+      }
+    : docsSource;
+
 // See https://fumadocs.dev/docs/headless/source-api for more info
 export const source = loader({
   baseUrl: docsRoute,
-  source: docs.toFumadocsSource(),
+  source: filteredDocsSource,
+  icon(icon) {
+    if (icon && (SECTION_ICON_NAMES as readonly string[]).includes(icon)) {
+      return createElement(SectionIcon, {
+        name: icon as SectionIconName,
+        size: 24,
+        decorative: true,
+      });
+    }
+  },
   plugins: [],
 });
 

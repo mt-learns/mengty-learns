@@ -34,6 +34,7 @@ export function Relations({ items, children }: RelationsProps) {
               {item.href && (
                 <ArrowRight
                   className="size-4 shrink-0 text-muted-foreground"
+                  strokeWidth={1.75}
                   aria-hidden="true"
                 />
               )}
@@ -45,7 +46,7 @@ export function Relations({ items, children }: RelationsProps) {
               <Link
                 key={item.name}
                 href={item.href}
-                className="block no-underline transition-colors hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                className="block no-underline transition-colors motion-reduce:transition-none hover:bg-muted/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 {content}
               </Link>

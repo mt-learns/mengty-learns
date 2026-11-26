@@ -2,5 +2,6 @@
   "title": "IaC",
   "pages": [
     "first-project"
-  ]
+  ],
+  "icon": "iac"
 }

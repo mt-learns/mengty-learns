@@ -15,6 +15,7 @@ import { getPageImageUrl, gitConfig } from '@/lib/shared';
 import { OutdatedBanner } from '@/components/learn/OutdatedBanner';
 import { PageFooter } from '@/components/learn/PageFooter';
 import { MarkDone } from '@/components/learn/MarkDone';
+import { Illustration } from '@/components/illustrations';
 
 export default async function Page({ params }: { params: Promise<{ slug?: string[] }> }) {
   const resolvedParams = await params;
@@ -24,15 +25,19 @@ export default async function Page({ params }: { params: Promise<{ slug?: string
   const MDX = page.data.body;
   const markdownUrl = `/llms.mdx${page.url}.md`;
 
-  // Find next in path from section meta/pages
-  const allPages = source.getPages();
-  const currentIndex = allPages.findIndex((p) => p.url === page.url);
-  const nextInPath = currentIndex !== -1 && currentIndex + 1 < allPages.length ? allPages[currentIndex + 1] : null;
-
   return (
-    <DocsPage toc={page.data.toc} full={page.data.full}>
+    <DocsPage
+      toc={page.data.toc}
+      full={page.data.full}
+      tableOfContent={{
+        container: {
+          role: 'navigation',
+          'aria-label': 'On this page',
+        },
+      }}
+    >
       <OutdatedBanner verified={page.data.verified} status={page.data.status} />
-      <div className="flex justify-between items-start gap-4 mb-2">
+      <div className="flex flex-col items-start gap-4 mb-2 sm:flex-row sm:justify-between">
         <div>
           <DocsTitle>{page.data.title}</DocsTitle>
           <DocsDescription className="mb-0">{page.data.description}</DocsDescription>
@@ -41,7 +46,7 @@ export default async function Page({ params }: { params: Promise<{ slug?: string
       </div>
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground my-2">
         {page.data.type && (
-          <span className="inline-flex items-center rounded-full bg-primary/10 text-primary px-2.5 py-0.5 font-medium capitalize">
+          <span className="inline-flex items-center rounded-full bg-primary text-primary-foreground px-2.5 py-0.5 font-medium capitalize">
             {page.data.type}
           </span>
         )}
@@ -68,6 +73,11 @@ export default async function Page({ params }: { params: Promise<{ slug?: string
           githubUrl={`https://github.com/${gitConfig.user}/${gitConfig.repo}/blob/${gitConfig.branch}/content/docs/${encodeURI(page.path)}`}
         />
       </div>
+      {page.data.kind === 'lab' && (
+        <div className="my-6 flex justify-center sm:justify-start">
+          <Illustration name="lab-header" size={256} className="w-52 h-auto" decorative />
+        </div>
+      )}
       <DocsBody>
         <MDX
           components={getMDXComponents({
@@ -77,16 +87,6 @@ export default async function Page({ params }: { params: Promise<{ slug?: string
         />
       </DocsBody>
       <PageFooter related={page.data.related} sources={page.data.sources} slug={page.url} />
-      {nextInPath && (
-        <div className="mt-8 pt-6 border-t flex justify-end">
-          <a
-            href={nextInPath.url}
-            className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
-          >
-            Next in path: {nextInPath.data.title} →
-          </a>
-        </div>
-      )}
     </DocsPage>
   );
 }
