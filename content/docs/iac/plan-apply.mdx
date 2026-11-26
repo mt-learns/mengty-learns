@@ -1,0 +1,183 @@
+---
+title: "How Plan and Apply Work: State, Refresh, Diff"
+description: How OpenTofu combines .tf configuration and state to refresh real infrastructure, compute a diff, preview a plan, and apply changes.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: concept
+type: explanation
+level: beginner
+tags: [iac, opentofu, terraform, state, plan, apply]
+tested_with:
+  opentofu: "1.13 (docs; tofu not installed locally)"
+cards:
+  - q: "Why does OpenTofu need a state file in addition to .tf configuration files?"
+    a: "State maps resource addresses in .tf files to real-world resource IDs, tracks metadata/dependencies, and caches attributes for fast diffs."
+  - q: "What happens during the refresh phase of tofu plan?"
+    a: "OpenTofu asks providers to read the current attributes of tracked resources in the real environment so the plan reflects any manual drift."
+  - q: "Why should CI pipelines save the output of tofu plan -out=tfplan and pass it to tofu apply tfplan?"
+    a: "Applying a saved plan file guarantees OpenTofu executes the exact reviewed diff rather than recomputing a potentially different plan later."
+  - q: "What happens if you delete a resource block from .tf files without removing it from state?"
+    a: "OpenTofu sees the resource in state but missing from config, so the plan proposes destroying that real resource."
+related:
+  - iac/first-project
+  - ci-cd/this-site-pipeline
+sources:
+  - title: "OpenTofu Docs: State"
+    url: https://opentofu.org/docs/language/state/
+  - title: "OpenTofu Docs: Command — plan"
+    url: https://opentofu.org/docs/cli/commands/plan/
+  - title: "OpenTofu Docs: Command — apply"
+    url: https://opentofu.org/docs/cli/commands/apply/
+---
+
+## TL;DR
+`tofu plan` never guesses from `.tf` files alone: it loads your **configuration** and **prior state**, **refreshes** tracked resources against real infrastructure, computes the **diff**, and produces an execution **plan** that `tofu apply` executes and records into **new state**.
+
+## Intent
+<Intent>
+Understand the exact data flow behind `tofu plan` and `tofu apply` so you can predict creates, in-place updates, replacements, and destroys—and avoid accidental state drift.
+</Intent>
+
+## Problem
+If an IaC tool only read `.tf` files, it would have no way to know whether a resource already exists, which cloud ID corresponds to `local_file.manifest`, or whether someone changed a setting manually in the console. Without a state record, every run would risk recreating existing infrastructure or orphaning deleted resources.
+
+<Diagram
+  id="tofu-three-inputs"
+  ariaLabel="OpenTofu compares desired config against refreshed state to produce a plan"
+  caption="OpenTofu reconciles desired configuration (.tf) with real-world state via refresh before computing a diff."
+  layout="tree"
+  nodes={[
+    { id: 'plan', label: 'Execution Plan', subtitle: 'Add / Change / Destroy', icon: 'ci', category: 'service', rank: 0, order: 0 },
+    { id: 'cfg', label: 'Config (.tf)', subtitle: 'Desired state', icon: 'git', category: 'external', rank: 1, order: 0 },
+    { id: 'st', label: 'Refreshed State', subtitle: 'Actual infra', icon: 'db', category: 'data', rank: 1, order: 1 },
+  ]}
+  edges={[
+    { from: 'plan', to: 'cfg', kind: 'request' },
+    { from: 'plan', to: 'st', kind: 'request' },
+  ]}
+/>
+
+## Solution
+OpenTofu splits every change into a two-step preview-and-execute workflow:
+
+1. **Read Config + Prior State:** OpenTofu parses `.tf` files to build the dependency graph and loads `terraform.tfstate` (local or remote backend) to find existing resource IDs.
+2. **Refresh:** Providers query the real environment for every resource in state, updating the in-memory state snapshot with any out-of-band changes.
+3. **Diff:** OpenTofu compares desired attributes in `.tf` against the refreshed state and marks each resource as no-op, create (`+`), update-in-place (`~`), replace (`-/+`), or destroy (`-`).
+4. **Plan:** `tofu plan` prints the diff (and optionally writes a binary plan file with `-out=tfplan`) without mutating anything.
+5. **Apply → New State:** `tofu apply` executes the planned provider calls in dependency order and writes the resulting attributes back to state.
+
+## Real-world analogy
+<Analogy>
+Think of renovating a house with a blueprint (**config**) and an inspection clipboard (**prior state**). Before ordering materials, the contractor walks the rooms (**refresh**) to check what is actually there, compares the rooms to the blueprint (**diff**), hands you a written work order (**plan**), and only after you sign off does the crew build (**apply**) and update the as-built records (**new state**).
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="tofu-plan"
+  title="OpenTofu Lifecycle: Config + State → Plan → Apply"
+  nodes={[
+    { id: 'config', label: 'Config + State', subtitle: '.tf & .tfstate', icon: 'git', category: 'external', rank: 0, order: 0 },
+    { id: 'refresh', label: 'Refresh', subtitle: 'Query real infra', icon: 'service', category: 'network', rank: 1, order: 0 },
+    { id: 'diff', label: 'Diff & Graph', subtitle: 'Compare vs config', icon: 'interface', category: 'abstraction', rank: 2, order: 0 },
+    { id: 'plan', label: 'Execution Plan', subtitle: 'Add/Change/Destroy', icon: 'ci', category: 'service', rank: 3, order: 0 },
+    { id: 'apply', label: 'Apply & State', subtitle: 'Mutate + new state', icon: 'db', category: 'concrete', rank: 4, order: 0 },
+  ]}
+  steps={[
+    { edge: 'config->refresh', title: 'Load config and prior state', text: 'OpenTofu parses .tf files and reads terraform.tfstate for resource IDs.' },
+    { edge: 'refresh->diff', title: 'Refresh against real infra', text: 'Providers query tracked resources to detect any out-of-band drift.' },
+    { edge: 'diff->plan', title: 'Compute resource diff', text: 'OpenTofu compares desired config against refreshed state to build the plan.' },
+    { edge: 'plan->apply', title: 'Execute approved plan', text: 'tofu apply creates, updates, or destroys resources and writes new state.' },
+  ]}
+/>
+
+## Code
+Using the repo's `labs/tofu-local-file` project (note: `tofu` is not installed in this environment, so these commands are marked not run):
+
+```bash
+# Run against labs/tofu-local-file (not run — tofu binary not installed here)
+cd labs/tofu-local-file
+tofu init
+tofu plan -var="environment=dev" -out=tfplan
+tofu apply tfplan
+```
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'You want a reviewable diff before any infrastructure change is applied (for example, posting plan output on a pull request).',
+    'You need dependency-ordered provisioning and clean teardown (tofu destroy) using tracked state.',
+  ]}
+  avoid={[
+    'You are managing rapidly changing Kubernetes Pods/Deployments (use Kubernetes controllers or GitOps instead).',
+    'You have no remote state locking in a team environment—set up a remote backend with locking before sharing state.',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Initialize the working directory
+    Run `tofu init` to download providers and configure the state backend.
+  </Step>
+  <Step>
+    ### Generate and review a saved plan
+    Run `tofu plan -out=tfplan` and inspect `+`, `~`, and especially `-` / `-/+` (destroy/replace) lines.
+  </Step>
+  <Step>
+    ### Apply the exact plan
+    Run `tofu apply tfplan` so no unexpected drift slips in between review and execution.
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'Dry-run safety: tofu plan shows exact creates, updates, and destroys before mutating anything.',
+    'Saved plan files (-out=tfplan) make CI/CD approvals deterministic.',
+  ]}
+  cons={[
+    'State files can contain sensitive attributes and must be encrypted and locked in a remote backend for teams.',
+    'Manual console edits cause drift that can surprise the next plan.',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'OpenTofu First Project',
+      href: '/docs/iac/first-project',
+      summary: 'Hands-on walkthrough of labs/tofu-local-file using local and random providers.',
+    },
+    {
+      name: 'This Site Pipeline',
+      href: '/docs/ci-cd/this-site-pipeline',
+      summary: 'See how this repository validates OpenTofu labs in CI with tofu validate and tflint.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "Why does tofu plan run a refresh step before computing the diff?",
+    options: [
+      { label: "To read the current attributes of tracked resources so the diff accounts for any manual changes", description: "Comparing config against stale state could miss out-of-band drift.", correct: true },
+      { label: "To automatically rewrite your .tf files to match the cloud", description: "OpenTofu never modifies your .tf source files during plan." },
+      { label: "To delete all resources not listed in variables.tf", description: "Refresh is read-only against providers and does not destroy resources." }
+    ]
+  },
+  {
+    question: "What is the main benefit of running tofu apply tfplan with a saved plan file?",
+    options: [
+      { label: "It executes the exact reviewed plan without recomputing a new diff", description: "If someone else changed infra between plan and apply, a saved plan prevents silent surprises.", correct: true },
+      { label: "It skips state file updates", description: "tofu apply always updates state after applying changes." },
+      { label: "It bypasses provider authentication", description: "Providers still authenticate to execute the planned API calls." }
+    ]
+  }
+]} />
+
+## Sources
+- [OpenTofu Docs: State](https://opentofu.org/docs/language/state/)
+- [OpenTofu Docs: Command — plan](https://opentofu.org/docs/cli/commands/plan/)
+- [OpenTofu Docs: Command — apply](https://opentofu.org/docs/cli/commands/apply/)
