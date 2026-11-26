@@ -2,28 +2,20 @@
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { Flow } from './Flow';
 import {
   buildFlowDeepLinkRelative,
   buildFlowDeepLinkUrl,
   parseFlowDeepLink,
 } from './deep-link';
-import { computeEdgePath, parseEdge } from './edges';
+import { parseFlowProps, resolveNodeCategory } from './types';
+import { Player } from './v3/Player';
 import {
-  CELL_X,
-  CELL_Y,
-  GROUP_PAD_BOTTOM,
-  GROUP_PAD_TOP,
-  GROUP_PAD_X,
-  NODE_HEIGHT,
-  NODE_WIDTH,
-  PADDING_X,
-  PADDING_Y,
-  getCanvasDimensions,
-  getGroupBox,
-  getNodePosition,
-} from './layout';
-import { parseFlowProps } from './types';
+  DESKTOP_CELL_X,
+  DESKTOP_CELL_Y,
+  computeDesktopPositions,
+  computeFlowGraph,
+  computeMobileDagrePositions,
+} from './v3/layout';
 
 afterEach(() => {
   cleanup();
@@ -31,72 +23,46 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-const SAMPLE_FLOW = {
+const SAMPLE_FLOW = parseFlowProps({
   id: 'sample-flow',
   title: 'Sample Request Flow',
   nodes: [
-    { id: 'user', label: 'User', icon: 'user' as const, x: 0, y: 0 },
-    { id: 'svc', label: 'Service', icon: 'service' as const, x: 1, y: 0 },
-    { id: 'pod', label: 'Pod', icon: 'pod' as const, x: 1, y: 1 },
+    { id: 'user', label: 'User', icon: 'user', category: 'client', x: 0, y: 0 },
+    { id: 'svc', label: 'Service', icon: 'service', x: 1, y: 0 },
+    { id: 'pod', label: 'Pod', icon: 'pod', x: 1, y: 1 },
   ],
   steps: [
-    { edge: 'user->svc', text: 'User sends request to Service' },
-    { edge: 'svc->pod', text: 'Service forwards request to Pod' },
-    { edge: 'pod->svc', text: 'Pod returns 200 OK', kind: 'response' as const },
+    { edge: 'user->svc', title: 'Send request', text: 'User sends request to Service' },
+    { edge: 'svc->pod', title: 'Forward to pod', text: 'Service forwards request to Pod' },
+    { edge: 'pod->svc', title: 'Return 200 OK', text: 'Pod returns 200 OK', kind: 'response' },
   ],
-};
-
-describe('Flow layout and edge math', () => {
-  it('computes grid node coordinates and canvas dimensions', () => {
-    const pos = getNodePosition({ x: 1, y: 2 });
-    expect(pos).toEqual({
-      x: PADDING_X + CELL_X,
-      y: PADDING_Y + 2 * CELL_Y,
-      cx: PADDING_X + CELL_X + NODE_WIDTH / 2,
-      cy: PADDING_Y + 2 * CELL_Y + NODE_HEIGHT / 2,
-      width: NODE_WIDTH,
-      height: NODE_HEIGHT,
-    });
-
-    const dims = getCanvasDimensions(SAMPLE_FLOW.nodes);
-    expect(dims).toEqual({
-      width: PADDING_X * 2 + CELL_X + NODE_WIDTH,
-      height: PADDING_Y * 2 + CELL_Y + NODE_HEIGHT,
-    });
-  });
-
-  it('parses valid edges and rejects malformed ones', () => {
-    expect(parseEdge('user -> svc')).toEqual({ from: 'user', to: 'svc' });
-    expect(() => parseEdge('invalid-edge')).toThrow();
-  });
-
-  it('computes straight horizontal, vertical, and curved bidirectional paths', () => {
-    const horizontal = computeEdgePath({ x: 0, y: 0 }, { x: 1, y: 0 });
-    expect(horizontal.start.x).toBe(PADDING_X + NODE_WIDTH);
-    expect(horizontal.end.x).toBe(PADDING_X + CELL_X);
-    expect(horizontal.d).toMatch(/^M .+ L .+$/);
-
-    const vertical = computeEdgePath({ x: 1, y: 0 }, { x: 1, y: 1 });
-    expect(vertical.start.y).toBe(PADDING_Y + NODE_HEIGHT);
-    expect(vertical.end.y).toBe(PADDING_Y + CELL_Y);
-    expect(vertical.d).toMatch(/^M .+ L .+$/);
-
-    const curved = computeEdgePath({ x: 1, y: 1 }, { x: 1, y: 0 }, 20);
-    expect(curved.d).toMatch(/^M .+ Q .+$/);
-  });
 });
 
-describe('Flow Zod validation', () => {
-  it('accepts valid flow props', () => {
-    const parsed = parseFlowProps(SAMPLE_FLOW);
+describe('Flow Zod validation & defaults', () => {
+  it('accepts valid flow props with optional title and category', () => {
+    const parsed = parseFlowProps({
+      id: 'compat-flow',
+      nodes: [
+        { id: 'a', label: 'A', icon: 'user', x: 0, y: 0 },
+        { id: 'b', label: 'B', icon: 'db', x: 1, y: 0 },
+      ],
+      steps: [{ edge: 'a->b', text: 'A calls B' }],
+    });
+
     expect(parsed.steps?.[0].kind).toBe('request');
-    expect(parsed.steps?.[2].kind).toBe('response');
+    expect(parsed.steps?.[0].title).toBeUndefined();
+    expect(resolveNodeCategory(parsed.nodes![0])).toBe('client');
+    expect(resolveNodeCategory(parsed.nodes![1])).toBe('data');
   });
 
   it('throws when a step references an unknown node id', () => {
     expect(() =>
       parseFlowProps({
-        ...SAMPLE_FLOW,
+        id: 'bad-edge',
+        nodes: [
+          { id: 'user', label: 'User', x: 0, y: 0 },
+          { id: 'svc', label: 'Service', x: 1, y: 0 },
+        ],
         steps: [{ edge: 'user->ghost', text: 'Broken edge' }],
       }),
     ).toThrow(/Unknown node id .*ghost/);
@@ -116,63 +82,108 @@ describe('Flow Zod validation', () => {
   });
 });
 
-describe('Flow keyboard navigation and controls', () => {
-  it('renders the caption, controls, and always-visible step list', () => {
-    render(<Flow {...SAMPLE_FLOW} />);
+describe('Flow v3 layout switch & visited edges', () => {
+  it('uses hand-placed grid on desktop and top-to-bottom dagre on mobile', () => {
+    const desktop = computeDesktopPositions(SAMPLE_FLOW.nodes!);
+    expect(desktop.get('user')?.x).toBe(0);
+    expect(desktop.get('svc')?.x).toBe(DESKTOP_CELL_X);
+    expect(desktop.get('pod')?.y).toBe(DESKTOP_CELL_Y);
 
-    expect(screen.getByText('Step 1 / 3')).toBeInTheDocument();
-    expect(
-      screen.getAllByText('User sends request to Service').length,
-    ).toBeGreaterThanOrEqual(2);
-
-    const listItems = screen.getAllByRole('listitem');
-    expect(listItems).toHaveLength(3);
+    const mobile = computeMobileDagrePositions(SAMPLE_FLOW.nodes!, SAMPLE_FLOW.steps!);
+    const userPos = mobile.get('user')!;
+    const svcPos = mobile.get('svc')!;
+    const podPos = mobile.get('pod')!;
+    expect(userPos.y).toBeLessThan(svcPos.y);
+    expect(svcPos.y).toBeLessThan(podPos.y);
   });
 
-  it('navigates steps with ArrowRight, ArrowLeft, End, and Home keys', () => {
-    render(<Flow {...SAMPLE_FLOW} />);
+  it('marks overview, active, and visited edges accurately', () => {
+    const overviewGraph = computeFlowGraph({
+      nodes: SAMPLE_FLOW.nodes!,
+      steps: SAMPLE_FLOW.steps!,
+      isMobile: false,
+      activeStepIndex: -1,
+      reducedMotion: false,
+    });
+    expect(overviewGraph.edges.every((e) => !e.data?.isActive && !e.data?.isVisited)).toBe(true);
+
+    const step2Graph = computeFlowGraph({
+      nodes: SAMPLE_FLOW.nodes!,
+      steps: SAMPLE_FLOW.steps!,
+      isMobile: false,
+      activeStepIndex: 1,
+      reducedMotion: false,
+    });
+    const edge1 = step2Graph.edges.find((e) => e.id === 'user->svc:request');
+    const edge2 = step2Graph.edges.find((e) => e.id === 'svc->pod:request');
+    const edge3 = step2Graph.edges.find((e) => e.id === 'pod->svc:response');
+
+    expect(edge1?.data?.isVisited).toBe(true);
+    expect(edge1?.data?.isActive).toBe(false);
+    expect(edge2?.data?.isActive).toBe(true);
+    expect(edge2?.data?.isVisited).toBe(false);
+    expect(edge3?.data?.isActive).toBe(false);
+    expect(edge3?.data?.isVisited).toBe(false);
+  });
+});
+
+describe('Flow v3 Player controls, keyboard, and <details> list', () => {
+  it('starts in Overview state with Start CTA and server-rendered <details> list', () => {
+    render(<Player {...SAMPLE_FLOW} />);
+
+    expect(screen.getByText('Overview')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument();
+    expect(screen.getByText('All steps (3)')).toBeInTheDocument();
+    expect(screen.getAllByRole('listitem')).toHaveLength(3);
+  });
+
+  it('navigates steps via ‹ ›, dots, Replay at end, and <details> rows', () => {
+    render(<Player {...SAMPLE_FLOW} />);
+
+    const prevBtn = screen.getByRole('button', { name: 'Previous step' });
+    const nextBtn = screen.getByRole('button', { name: 'Next step' });
+    expect(prevBtn).toBeDisabled();
+
+    fireEvent.click(nextBtn);
+    expect(screen.getAllByText('Send request').length).toBeGreaterThanOrEqual(2);
+    expect(prevBtn).not.toBeDisabled();
+
+    const dot3 = screen.getByRole('button', { name: /Go to step 3/ });
+    fireEvent.click(dot3);
+    expect(nextBtn).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Replay' })).toBeInTheDocument();
+
+    // Tapping a row in <details> jumps to that step
+    const step2Row = screen.getByRole('button', { name: /Service forwards request to Pod/i });
+    fireEvent.click(step2Row);
+    expect(screen.getByRole('button', { name: 'Play' })).toBeInTheDocument();
+  });
+
+  it('supports ArrowRight, ArrowLeft, Home, End, and Space keys', () => {
+    render(<Player {...SAMPLE_FLOW} />);
 
     const region = screen.getByRole('region', { name: 'Sample Request Flow' });
     region.focus();
 
     fireEvent.keyDown(region, { key: 'ArrowRight' });
-    expect(screen.getByText('Step 2 / 3')).toBeInTheDocument();
+    expect(screen.getAllByText('Send request').length).toBeGreaterThanOrEqual(2);
 
     fireEvent.keyDown(region, { key: 'End' });
-    expect(screen.getByText('Step 3 / 3')).toBeInTheDocument();
-    expect(screen.getByText('response')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Replay' })).toBeInTheDocument();
 
     fireEvent.keyDown(region, { key: 'ArrowLeft' });
-    expect(screen.getByText('Step 2 / 3')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Play' })).toBeInTheDocument();
+
+    fireEvent.keyDown(region, { key: ' ' });
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeInTheDocument();
 
     fireEvent.keyDown(region, { key: 'Home' });
-    expect(screen.getByText('Step 1 / 3')).toBeInTheDocument();
-  });
-
-  it('updates active step via buttons, scrubber, and speed toggles', () => {
-    render(<Flow {...SAMPLE_FLOW} />);
-
-    const nextBtn = screen.getByRole('button', { name: 'Next step' });
-    const prevBtn = screen.getByRole('button', { name: 'Previous step' });
-    expect(prevBtn).toBeDisabled();
-
-    fireEvent.click(nextBtn);
-    expect(screen.getByText('Step 2 / 3')).toBeInTheDocument();
-    expect(prevBtn).not.toBeDisabled();
-
-    const scrubber = screen.getByRole('slider', { name: 'Step scrubber' });
-    fireEvent.change(scrubber, { target: { value: '2' } });
-    expect(screen.getByText('Step 3 / 3')).toBeInTheDocument();
-    expect(nextBtn).toBeDisabled();
-
-    const speed2x = screen.getByRole('button', { name: '2x' });
-    fireEvent.click(speed2x);
-    expect(speed2x).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getAllByText('Send request').length).toBeGreaterThanOrEqual(2);
   });
 });
 
-describe('Flow v2: variants, deep links, and group nodes', () => {
-  const VARIANT_FLOW = {
+describe('Flow v3 variants and deep links', () => {
+  const VARIANT_FLOW = parseFlowProps({
     id: 'compare-flow',
     title: 'Compare Variants',
     variants: [
@@ -185,8 +196,8 @@ describe('Flow v2: variants, deep links, and group nodes', () => {
           { id: 'domain', label: 'Domain', x: 1, y: 0 },
         ],
         steps: [
-          { edge: 'client->domain', text: 'A step 1' },
-          { edge: 'domain->client', text: 'A step 2', kind: 'response' as const },
+          { edge: 'client->domain', title: 'A1', text: 'A step 1' },
+          { edge: 'domain->client', title: 'A2', text: 'A step 2', kind: 'response' },
         ],
       },
       {
@@ -197,8 +208,8 @@ describe('Flow v2: variants, deep links, and group nodes', () => {
           { id: 'port', label: 'Port', x: 1, y: 0 },
         ],
         steps: [
-          { edge: 'client->port', text: 'B step 1' },
-          { edge: 'port->client', text: 'B step 2', kind: 'response' as const },
+          { edge: 'client->port', title: 'B1', text: 'B step 1' },
+          { edge: 'port->client', title: 'B2', text: 'B step 2', kind: 'response' },
         ],
       },
       {
@@ -210,60 +221,26 @@ describe('Flow v2: variants, deep links, and group nodes', () => {
           { id: 'db', label: 'DB', x: 2, y: 0 },
         ],
         steps: [
-          { edge: 'client->layer', text: 'C step 1' },
-          { edge: 'layer->db', text: 'C step 2' },
-          { edge: 'db->client', text: 'C step 3', kind: 'response' as const },
+          { edge: 'client->layer', title: 'C1', text: 'C step 1' },
+          { edge: 'layer->db', title: 'C2', text: 'C step 2' },
+          { edge: 'db->client', title: 'C3', text: 'C step 3', kind: 'response' },
         ],
       },
     ],
-  };
-
-  it('validates variants and group boxes with Zod and layout helpers', () => {
-    const parsed = parseFlowProps(VARIANT_FLOW);
-    expect(parsed.variants).toHaveLength(3);
-
-    const box = getGroupBox({ x: 1, y: 0, width: 1, height: 1 });
-    expect(box).toEqual({
-      x: PADDING_X + CELL_X - GROUP_PAD_X,
-      y: PADDING_Y - GROUP_PAD_TOP,
-      width: NODE_WIDTH + GROUP_PAD_X * 2,
-      height: NODE_HEIGHT + GROUP_PAD_TOP + GROUP_PAD_BOTTOM,
-    });
-
-    expect(() =>
-      parseFlowProps({
-        id: 'bad-variant',
-        variants: [
-          {
-            id: 'v1',
-            label: 'V1',
-            nodes: [
-              { id: 'a', label: 'A', x: 0, y: 0 },
-              { id: 'b', label: 'B', x: 1, y: 0 },
-            ],
-            steps: [{ edge: 'a->missing', text: 'Broken' }],
-          },
-        ],
-      }),
-    ).toThrow(/Unknown node id .*missing/);
   });
 
   it('switches variants, preserves step index on matching step counts, and resets on mismatch', () => {
-    render(<Flow {...VARIANT_FLOW} />);
+    render(<Player {...VARIANT_FLOW} />);
 
-    expect(screen.getByText('Domain Core')).toBeInTheDocument();
     fireEvent.click(screen.getByRole('button', { name: 'Next step' }));
-    expect(screen.getByText('Step 2 / 2')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Next step' }));
+    expect(screen.getAllByText('A step 2').length).toBeGreaterThanOrEqual(2);
 
-    // Variant B also has 2 steps -> keep step index 1 ("Step 2 / 2")
     fireEvent.click(screen.getByRole('button', { name: 'Variant B' }));
-    expect(screen.getByText('Step 2 / 2')).toBeInTheDocument();
     expect(screen.getAllByText('B step 2').length).toBeGreaterThanOrEqual(2);
 
-    // Variant C has 3 steps -> reset to step index 0 ("Step 1 / 3")
     fireEvent.click(screen.getByRole('button', { name: 'Variant C' }));
-    expect(screen.getByText('Step 1 / 3')).toBeInTheDocument();
-    expect(screen.getAllByText('C step 1').length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByText('Overview')).toBeInTheDocument();
   });
 
   it('parses and builds step deep links', () => {
@@ -282,7 +259,7 @@ describe('Flow v2: variants, deep links, and group nodes', () => {
     ).toBe('https://mengtylearns.com/docs/design/bridge/?flow=bridge&step=2');
   });
 
-  it('reads deep link on mount, updates URL with replaceState, and copies step link', async () => {
+  it('reads deep link on mount, updates URL with replaceState, and copies link from ⋯ menu', async () => {
     window.history.replaceState(null, '', '/docs/test?flow=sample-flow&step=3');
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.defineProperty(navigator, 'clipboard', {
@@ -290,19 +267,17 @@ describe('Flow v2: variants, deep links, and group nodes', () => {
       configurable: true,
     });
 
-    render(<Flow {...SAMPLE_FLOW} />);
-    expect(screen.getByText('Step 3 / 3')).toBeInTheDocument();
+    render(<Player {...SAMPLE_FLOW} />);
+    expect(screen.getAllByText('Return 200 OK').length).toBeGreaterThanOrEqual(2);
 
     fireEvent.click(screen.getByRole('button', { name: 'Previous step' }));
-    expect(screen.getByText('Step 2 / 3')).toBeInTheDocument();
     expect(window.location.search).toContain('flow=sample-flow');
     expect(window.location.search).toContain('step=2');
 
-    const copyBtn = screen.getByRole('button', { name: 'Copy link to this step' });
-    fireEvent.click(copyBtn);
+    fireEvent.click(screen.getByRole('button', { name: 'Flow options' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /Copy link/i }));
     expect(writeText).toHaveBeenCalledWith(
-      expect.stringContaining('?flow=sample-flow&step=2'),
+      expect.stringContaining('flow=sample-flow&step=2'),
     );
-    expect(await screen.findByRole('button', { name: 'Link copied' })).toBeInTheDocument();
   });
 });

@@ -1,0 +1,45 @@
+/* Scoped iOS category tints & React Flow theme overrides */
+:root {
+  --flow-cat-client-bg: #f2f2f7;
+  --flow-cat-client-fg: #48484a;
+  --flow-cat-edge-bg: #e5f1ff;
+  --flow-cat-edge-fg: #0066cc;
+  --flow-cat-service-bg: #eef0ff;
+  --flow-cat-service-fg: #4338ca;
+  --flow-cat-data-bg: #e7f8ed;
+  --flow-cat-data-fg: #15803d;
+  --flow-cat-external-bg: #fff2e5;
+  --flow-cat-external-fg: #c2410c;
+}
+
+.dark {
+  --flow-cat-client-bg: #2c2c2e;
+  --flow-cat-client-fg: #d1d1d6;
+  --flow-cat-edge-bg: color-mix(in oklab, #409cff 18%, transparent);
+  --flow-cat-edge-fg: #66b2ff;
+  --flow-cat-service-bg: color-mix(in oklab, #818cf8 18%, transparent);
+  --flow-cat-service-fg: #a5b4fc;
+  --flow-cat-data-bg: color-mix(in oklab, #34d399 18%, transparent);
+  --flow-cat-data-fg: #6ee7b7;
+  --flow-cat-external-bg: color-mix(in oklab, #fb923c 18%, transparent);
+  --flow-cat-external-fg: #fdba74;
+}
+
+.flow-v3-canvas .react-flow__renderer,
+.flow-v3-canvas .react-flow__pane {
+  background: transparent;
+}
+
+.flow-v3-canvas .react-flow__node {
+  cursor: default;
+}
+
+.flow-v3-canvas .react-flow__edge-path {
+  transition: stroke 260ms var(--ease-ios), stroke-width 260ms var(--ease-ios), opacity 260ms var(--ease-ios);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .flow-v3-canvas .react-flow__edge-path {
+    transition: none;
+  }
+}

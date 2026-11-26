@@ -39,7 +39,9 @@ html > body[data-scroll-locked] {
   @apply rounded-panel;
 }
 
-pre {
-  @apply rounded-xl;
-  border: 1px solid var(--border);
+@layer components {
+  figure.shiki {
+    border-radius: var(--radius-control);
+    background-color: var(--card);
+  }
 }

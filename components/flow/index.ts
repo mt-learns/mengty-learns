@@ -1,17 +1,24 @@
-export { Flow } from './Flow';
+export { FlowServer } from './FlowServer';
+export { FlowLazy } from './FlowLazy';
+export { FlowSkeleton } from './FlowSkeleton';
+export { Player } from './v3/Player';
 export {
   FLOW_ICON_NAMES,
+  FLOW_NODE_CATEGORIES,
   FlowEdgeKindSchema,
   FlowGroupSchema,
+  FlowNodeCategorySchema,
   FlowNodeSchema,
   FlowPropsSchema,
   FlowStepSchema,
   FlowVariantSchema,
   parseFlowProps,
+  resolveNodeCategory,
   type FlowEdgeKind,
   type FlowGroup,
   type FlowIconName,
   type FlowNode,
+  type FlowNodeCategory,
   type FlowProps,
   type FlowStep,
   type FlowVariant,
@@ -20,26 +27,23 @@ export {
   type ParsedFlowStep,
   type ParsedFlowVariant,
 } from './types';
-export { computeEdgePath, parseEdge, type EdgeGeometry, type ParsedEdge } from './edges';
 export {
   buildFlowDeepLinkRelative,
   buildFlowDeepLinkUrl,
   parseFlowDeepLink,
 } from './deep-link';
 export {
-  CELL_X,
-  CELL_Y,
-  GROUP_PAD_BOTTOM,
-  GROUP_PAD_TOP,
-  GROUP_PAD_X,
-  NODE_HEIGHT,
-  NODE_WIDTH,
-  PADDING_X,
-  PADDING_Y,
-  getCanvasDimensions,
-  getGroupBox,
-  getNodePosition,
-  type CanvasDimensions,
-  type GroupBox,
-  type NodePosition,
-} from './layout';
+  DESKTOP_CELL_X,
+  DESKTOP_CELL_Y,
+  DESKTOP_NODE_H,
+  DESKTOP_NODE_W,
+  MOBILE_BREAKPOINT,
+  MOBILE_NODE_H,
+  MOBILE_NODE_W,
+  computeDesktopPositions,
+  computeFlowGraph,
+  computeMobileDagrePositions,
+  parseStepEdge,
+  type ComputedFlowGraph,
+  type FlowPosition,
+} from './v3/layout';
