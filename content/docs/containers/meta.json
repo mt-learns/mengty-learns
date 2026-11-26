@@ -6,6 +6,7 @@
     "multi-stage-nextjs",
     "dockerfile-best-practices",
     "compose",
+    "non-root-and-scanning",
     "docker-cheatsheet"
   ],
   "icon": "containers"
