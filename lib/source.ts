@@ -1,6 +1,6 @@
 import { llms, loader } from 'fumadocs-core/source';
 import { docsRoute } from './shared';
-import { defineDocs } from 'fumadocs-mdx/macro';
+import { defineCollections, defineDocs } from 'fumadocs-mdx/macro';
 import { metaSchema, pageSchema } from 'fumadocs-core/source/schema';
 import { z } from 'zod';
 
@@ -44,4 +44,26 @@ export const docsLlms = llms(source, {
 ${await page.data.getText('processed')}`,
   // link to the files under `/llms.mdx`
   renderUrl: (item) => (/^\/.*\.(md|txt)$/.test(item.url) ? `/llms.mdx${item.url}` : item.url),
+});
+
+const radarSchema = pageSchema.extend({
+  ring: z.enum(['adopt', 'trial', 'assess', 'hold']),
+  quadrant: z.enum(['tools', 'platforms', 'techniques', 'languages']),
+  what: z.string().min(1),
+  why: z.string().min(1),
+  action: z.string().min(1),
+  updated: z.string().min(1),
+  sources: z.array(z.object({ title: z.string().min(1), url: z.string().url() })).default([]),
+  related: z.array(z.string()).default([]),
+});
+
+const radar = defineCollections({
+  type: 'doc',
+  dir: 'content/radar',
+  schema: radarSchema,
+});
+
+export const radarSource = loader({
+  baseUrl: '/radar',
+  source: radar.toFumadocsSource(),
 });
