@@ -15,6 +15,7 @@ function walk(dir) {
     } else if (file.endsWith('.mdx')) {
       const content = fs.readFileSync(fullPath, 'utf8');
       const { data } = matter(content);
+      if (data.status === 'draft') continue;
       const relativeSlug = path
         .relative(docsDir, fullPath)
         .replace(/\\.mdx$/, '')
