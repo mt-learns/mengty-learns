@@ -1,0 +1,197 @@
+---
+title: "Event-Driven Architecture & the Transactional Outbox"
+description: Distinguish commands from events, avoid the dual-write bug, and guarantee reliable event publishing with the transactional outbox pattern.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: concept
+type: explanation
+level: intermediate
+tags: [architecture, event-driven, outbox, kafka, reliability]
+tested_with:
+  typescript: "7.0.2"
+cards:
+  - q: "What is the key difference between a Command and an Event?"
+    a: "A Command is an imperative request directed at a specific handler that can be rejected (PlaceOrder); an Event is an immutable past-tense fact broadcast to unknown consumers (OrderPlaced)."
+  - q: "What is the 'dual-write problem' when publishing events after a database write?"
+    a: "If you commit to Postgres and then call broker.publish(), a crash or network error between the two leaves the DB updated with no event published (or vice versa)."
+  - q: "How does the Transactional Outbox pattern solve the dual-write problem?"
+    a: "You insert the business row and the outbox event row in the SAME local ACID database transaction; a separate relay then reads the outbox table and publishes to the broker."
+  - q: "What delivery guarantee does a Transactional Outbox provide, and what must consumers do?"
+    a: "At-least-once delivery—if the relay crashes after publishing before marking the row sent, it will replay it, so consumers must be idempotent."
+related:
+  - architecture/ddd-tactical
+  - architecture/monolith-vs-microservices
+  - architecture/cqrs
+sources:
+  - title: "Microservices.io: Transactional Outbox Pattern"
+    url: https://microservices.io/patterns/data/transactional-outbox.html
+  - title: "Martin Fowler: What do you mean by Event-Driven?"
+    url: https://martinfowler.com/articles/201701-event-driven.html
+---
+
+## TL;DR
+**Events** (`OrderPlaced`) decouple producers from consumers, unlike **Commands** (`ChargeCard`). Never update your database and publish to Kafka/RabbitMQ in two separate calls (**dual-write bug**)—write the event to an **`outbox` table inside the same DB transaction**, and let a relay publish it with at-least-once delivery.
+
+## Intent
+<Intent>
+Guarantee that every committed state change in your database reliably produces its corresponding domain event—with zero lost events and zero phantom events on rollback.
+</Intent>
+
+## Problem
+Consider the naive dual-write:
+1. `await db.orders.insert(order)` succeeds.
+2. `await broker.publish('OrderPlaced', ...)` times out or the pod crashes.
+
+Now the order exists in Postgres, but Inventory and Billing never hear about it. Wrapping it the other way (`publish` before `COMMIT`) is worse: if the transaction rolls back, consumers react to an order that doesn't exist.
+
+<Diagram
+  id="outbox-dual-write-problem"
+  ariaLabel="Dual-write failure when writing to Database and Broker separately without an outbox"
+  caption="Two separate writes (DB + Broker) cannot be atomic; a crash between them loses or fakes events."
+  nodes={[
+    { id: 'svc', label: 'Order Service', subtitle: 'Writes DB then MQ', icon: 'service', category: 'service', rank: 0, order: 0, variant: 'problem' },
+    { id: 'db', label: 'Orders DB', subtitle: 'Commits row', icon: 'db', category: 'data', rank: 1, order: 0 },
+    { id: 'mq', label: 'Message Broker', subtitle: 'Fails / drops msg', icon: 'queue', category: 'external', rank: 1, order: 1 },
+  ]}
+  edges={[
+    { from: 'svc', to: 'db', kind: 'request' },
+    { from: 'svc', to: 'mq', kind: 'error', label: 'Crash gap' },
+  ]}
+/>
+
+## Solution
+The **Transactional Outbox** uses your database's own ACID transaction as the bridge:
+
+1. **Single ACID transaction:** inside `BEGIN ... COMMIT`, insert into `orders` **and** insert `{ event_id, type: 'OrderPlaced', payload }` into `outbox`. Either both commit or both roll back.
+2. **Outbox Relay:** a background worker polls `outbox WHERE published_at IS NULL` (or tails Postgres WAL via Debezium CDC) and pushes messages to the broker.
+3. **Idempotent Consumers:** because the relay provides **at-least-once** delivery, consumers record `processed_event_id` so duplicate deliveries are harmless no-ops.
+
+## Real-world analogy
+<Analogy>
+Think of a **hotel front desk logbook**. When a guest checks in, the clerk writes the room assignment and drops a notification slip into the **physical outbox tray** in one motion. A bellhop (the relay) periodically empties the tray and delivers slips to housekeeping—even if the bellhop takes a break, no slip is lost.
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="outbox-flow"
+  title="Transactional Outbox: DB + Outbox → Relay → Broker → Consumer"
+  nodes={[
+    { id: 'svc', label: 'Order Service', subtitle: 'Single DB tx', icon: 'service', category: 'service', rank: 0, order: 0 },
+    { id: 'db', label: 'DB + Outbox', subtitle: 'orders + outbox', icon: 'db', category: 'data', rank: 1, order: 0 },
+    { id: 'relay', label: 'Outbox Relay', subtitle: 'Poll or CDC', icon: 'pod', category: 'concrete', rank: 2, order: 0 },
+    { id: 'mq', label: 'Broker', subtitle: 'Kafka / RabbitMQ', icon: 'queue', category: 'edge', rank: 3, order: 0 },
+    { id: 'cons', label: 'Billing Consumer', subtitle: 'Idempotent', icon: 'service', category: 'external', rank: 4, order: 0 },
+  ]}
+  steps={[
+    { edge: 'svc->db', title: 'Commit order + outbox row', text: 'One ACID transaction writes both the Order row and the Outbox event row.' },
+    { edge: 'db->svc', title: 'Confirm atomic commit', text: 'Postgres commits both rows together or rolls back both.', kind: 'response' },
+    { edge: 'db->relay', title: 'Relay reads unpublished rows', text: 'Outbox relay polls unpublished rows (or streams WAL via Debezium).' },
+    { edge: 'relay->mq', title: 'Publish event to broker', text: 'Relay publishes OrderPlaced to the message broker and marks row sent.' },
+    { edge: 'mq->cons', title: 'Deliver to consumer', text: 'Billing consumer receives OrderPlaced and checks event_id for idempotency.' },
+  ]}
+/>
+
+## Code
+Writing business state and the outbox event in one SQL transaction:
+
+```ts
+// TypeScript 7.0.2 (illustrative SQL transaction)
+export interface DbTx {
+  exec(sql: string, params: unknown[]): Promise<void>;
+}
+
+export async function placeOrderWithOutbox(
+  tx: DbTx,
+  order: { id: string; customerId: string; totalCents: number },
+) {
+  await tx.exec(
+    'INSERT INTO orders (id, customer_id, total_cents) VALUES ($1, $2, $3)',
+    [order.id, order.customerId, order.totalCents],
+  );
+
+  const eventId = crypto.randomUUID();
+  await tx.exec(
+    'INSERT INTO outbox (id, event_type, payload) VALUES ($1, $2, $3)',
+    [eventId, 'OrderPlaced', JSON.stringify(order)],
+  );
+}
+```
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'You publish domain events to a message broker (Kafka, RabbitMQ, SQS) and cannot afford lost or phantom events.',
+    'You are decoupling modules or services asynchronously via eventual consistency.',
+  ]}
+  avoid={[
+    'Simple synchronous in-process calls inside a Modular Monolith where everything shares one DB transaction anyway.',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Create an `outbox` table
+    Include `id` (UUID), `event_type`, `payload` (JSONB), `created_at`, and `published_at`.
+  </Step>
+  <Step>
+    ### Write in the same transaction
+    Insert into `outbox` inside the same DB transaction as your domain table.
+  </Step>
+  <Step>
+    ### Relay and deduplicate
+    Publish via polling (`FOR UPDATE SKIP LOCKED`) or Debezium CDC, and deduplicate by `event_id` on every consumer.
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'Eliminates the dual-write race condition without slow two-phase commit (2PC) protocols.',
+    'Works with any relational database (PostgreSQL, MySQL).',
+  ]}
+  cons={[
+    'Adds an outbox table, relay worker (or CDC), and periodic cleanup of old published rows.',
+    'Consumers must handle duplicate deliveries (idempotency).',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'DDD Tactical Patterns',
+      href: '/docs/architecture/ddd-tactical',
+      summary: 'Domain Events emitted by Aggregates are what the Outbox reliably publishes.',
+    },
+    {
+      name: 'Monolith vs Microservices',
+      href: '/docs/architecture/monolith-vs-microservices',
+      summary: 'Async events + outbox avoid fragile synchronous call chains across services.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "Why does calling db.insert(order) followed by kafka.send(event) fail in production?",
+    options: [
+      { label: "A crash or timeout between the two calls leaves the order committed in the DB with no event published (the dual-write problem)", description: "Two separate network calls to different systems cannot be made atomic without an outbox or 2PC.", correct: true },
+      { label: "Kafka rejects events that come from TypeScript services", description: "Kafka accepts events from any language; the bug is non-atomicity." },
+      { label: "Postgres automatically publishes to Kafka on INSERT", description: "Postgres does not publish to Kafka unless you configure an outbox relay or CDC." }
+    ]
+  },
+  {
+    question: "Why must consumers of an Outbox-backed event stream be idempotent?",
+    options: [
+      { label: "If the relay crashes after publishing to the broker but before marking the outbox row published, it will send the event again", description: "Transactional Outbox guarantees at-least-once delivery, not exactly-once delivery.", correct: true },
+      { label: "Databases randomly duplicate rows inside ACID transactions", description: "ACID transactions don't duplicate rows; the at-least-once relay can." },
+      { label: "Idempotency makes SQL queries run faster", description: "Idempotency is about safe duplicate handling, not query speed." }
+    ]
+  }
+]} />
+
+## Sources
+- [Microservices.io: Transactional Outbox Pattern](https://microservices.io/patterns/data/transactional-outbox.html)
+- [Martin Fowler: What do you mean by Event-Driven?](https://martinfowler.com/articles/201701-event-driven.html)
