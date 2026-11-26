@@ -1,3 +1,9 @@
 {
-    "title":  "Architecture"
+  "title": "Architecture",
+  "pages": [
+    "layered",
+    "hexagonal",
+    "compare-styles",
+    "dependency-inversion"
+  ]
 }

@@ -1,0 +1,316 @@
+---
+title: Hexagonal Architecture (Ports & Adapters)
+description: Isolate core business logic inside ports and plug in external drivers—REST, CLI, Postgres, or in-memory fakes—as interchangeable adapters.
+type: explanation
+level: intermediate
+tags: [architecture, hexagonal, ports-and-adapters, typescript]
+tested_with:
+  typescript: "5.x"
+status: stable
+updated: "2026-11-26"
+---
+
+{/* TODO(schema-v2): Add kind: 'concept', verified, cards, related, and sources to frontmatter once lib/source.ts supports them. */}
+
+## 1. Intent
+
+<Intent>
+Put your **application core** at the center, surrounded by explicit **ports** (interfaces) and **adapters** (REST, CLI, Postgres, in-memory fakes), so the business logic can be driven and tested identically without a real database or HTTP server.
+</Intent>
+
+## 2. Problem
+
+In a traditional layered Order service, `OrderService` imports `OrderRepo` (which imports the Postgres driver). Two things break down as the app matures:
+
+1. **Slow, brittle tests:** Testing `placeOrder` requires spinning up Postgres or stubbing SQL client internals.
+2. **Rigid entry points:** Adding a CLI command, a queue consumer, or a webhook that places orders forces you to untangle HTTP assumptions from the service layer.
+
+<figure className="my-6">
+  <svg
+    viewBox="0 0 560 180"
+    className="w-full h-auto rounded-card border border-border bg-card p-3"
+    role="img"
+    aria-label="Coupled OrderService tied directly to Express HTTP and Postgres"
+  >
+    <rect x="20" y="60" width="120" height="48" rx="12" fill="var(--muted)" stroke="var(--border)" />
+    <text x="80" y="88" textAnchor="middle" fill="var(--foreground)" fontSize="12" fontWeight="600">REST / Express</text>
+
+    <line x1="140" y1="84" x2="210" y2="84" stroke="var(--destructive)" strokeWidth="2" />
+
+    <rect x="210" y="54" width="140" height="60" rx="12" fill="var(--card)" stroke="var(--destructive)" strokeWidth="1.5" />
+    <text x="280" y="81" textAnchor="middle" fill="var(--foreground)" fontSize="13" fontWeight="600">OrderService</text>
+    <text x="280" y="99" textAnchor="middle" fill="var(--muted-foreground)" fontSize="11">imports pg + req</text>
+
+    <line x1="350" y1="84" x2="420" y2="84" stroke="var(--destructive)" strokeWidth="2" />
+
+    <rect x="420" y="60" width="120" height="48" rx="12" fill="var(--muted)" stroke="var(--border)" />
+    <text x="480" y="88" textAnchor="middle" fill="var(--foreground)" fontSize="12" fontWeight="600">Postgres Driver</text>
+
+    <text x="280" y="152" textAnchor="middle" fill="var(--muted-foreground)" fontSize="11">
+      Core logic cannot run in a unit test without HTTP or Postgres dependencies.
+    </text>
+  </svg>
+  <figcaption className="mt-2 text-center text-caption-1 text-muted-foreground">
+    Direct imports lock OrderService to one transport and one database driver.
+  </figcaption>
+</figure>
+
+## 3. Solution
+
+Alistair Cockburn's **Ports & Adapters** (Hexagonal Architecture) draws a clear boundary around the application core:
+
+- **Driving (Primary) Adapters** sit on the left: REST controllers, CLI commands, or automated tests. They *call into* the core through an **Inbound Port**.
+- **The Application Core** contains the **Domain** (`Order` entity, pricing rules) and use cases (`PlaceOrderUseCase`), plus both **Inbound** and **Outbound Ports** (TypeScript interfaces).
+- **Driven (Secondary) Adapters** sit on the right: `PostgresOrderRepository` for production, or `InMemoryOrderRepository` for fast tests. They *implement* an **Outbound Port**.
+
+Notice the asymmetry: the core **defines** the outbound port interface, and the database adapter **implements** it. Dependencies always point inward toward the core.
+
+## 4. Real-world analogy
+
+<Analogy>
+Think of a USB-C port on a laptop. The laptop (the **core**) defines the USB-C specification (the **port**). You can plug in a wall charger, an external monitor, or a battery pack (the **adapters**) without opening the laptop case or rewiring its motherboard.
+</Analogy>
+
+## 5. Flow: watch it work
+
+Toggle between **Production (Postgres)** and **Unit Test (InMemory)** to see how the exact same domain core runs with different driven adapters.
+
+<Flow
+  id="hexagonal-order"
+  title="Hexagonal Order Service: Ports & Adapters"
+  variants={[
+    {
+      id: 'prod-postgres',
+      label: 'Production (Postgres)',
+      groups: [
+        { id: 'hexagon', label: 'Application Core (Hexagon)', x: 1, y: 0, width: 3, height: 1 },
+      ],
+      nodes: [
+        { id: 'rest', label: 'REST Adapter', subtitle: 'Driving', icon: 'gateway', x: 0, y: 0 },
+        { id: 'inport', label: 'PlaceOrderPort', subtitle: 'Inbound port', icon: 'interface', x: 1, y: 0 },
+        { id: 'domain', label: 'OrderDomain', subtitle: 'Core logic', icon: 'service', x: 2, y: 0 },
+        { id: 'outport', label: 'OrderRepoPort', subtitle: 'Outbound port', icon: 'interface', x: 3, y: 0 },
+        { id: 'pg', label: 'PostgresAdapter', subtitle: 'Driven (SQL)', icon: 'db', x: 4, y: 0 },
+      ],
+      steps: [
+        { edge: 'rest->inport', text: 'REST adapter parses POST /orders and invokes PlaceOrderPort' },
+        { edge: 'inport->domain', text: 'Use case creates Order entity and validates line items' },
+        { edge: 'domain->outport', text: 'Core calls OrderRepoPort.save(order) without knowing SQL' },
+        { edge: 'outport->pg', text: 'PostgresAdapter runs INSERT INTO orders in production DB' },
+        { edge: 'pg->outport', text: 'PostgresAdapter returns the saved Order domain object', kind: 'response' },
+        { edge: 'outport->domain', text: 'Core receives confirmation and returns OrderResult', kind: 'response' },
+        { edge: 'domain->rest', text: 'REST adapter maps OrderResult to 201 Created JSON', kind: 'response' },
+      ],
+    },
+    {
+      id: 'test-inmemory',
+      label: 'Test (InMemory)',
+      groups: [
+        { id: 'hexagon', label: 'Application Core (Hexagon)', x: 1, y: 0, width: 3, height: 1 },
+      ],
+      nodes: [
+        { id: 'test', label: 'Vitest Runner', subtitle: 'Driving test', icon: 'ci', x: 0, y: 0 },
+        { id: 'inport', label: 'PlaceOrderPort', subtitle: 'Inbound port', icon: 'interface', x: 1, y: 0 },
+        { id: 'domain', label: 'OrderDomain', subtitle: 'Core logic', icon: 'service', x: 2, y: 0 },
+        { id: 'outport', label: 'OrderRepoPort', subtitle: 'Outbound port', icon: 'interface', x: 3, y: 0 },
+        { id: 'mem', label: 'InMemoryAdapter', subtitle: 'Driven (Map)', icon: 'class', x: 4, y: 0 },
+      ],
+      steps: [
+        { edge: 'test->inport', text: 'Vitest calls PlaceOrderPort directly—no HTTP server needed' },
+        { edge: 'inport->domain', text: 'Exact same Order entity and pricing rules execute' },
+        { edge: 'domain->outport', text: 'Core calls OrderRepoPort.save(order) through the interface' },
+        { edge: 'outport->mem', text: 'InMemoryAdapter stores the order in a local Map<string, Order>' },
+        { edge: 'mem->outport', text: 'InMemoryAdapter resolves immediately in < 1 ms', kind: 'response' },
+        { edge: 'outport->domain', text: 'Core returns OrderResult', kind: 'response' },
+        { edge: 'domain->test', text: 'Vitest asserts the total and saved state in memory', kind: 'response' },
+      ],
+    },
+  ]}
+/>
+
+## 6. Structure: Dependency Rule
+
+All source-code dependencies point **inward** toward the Hexagon. Adapters depend on Ports; Ports and Domain never import Adapters.
+
+<figure className="my-6">
+  <svg
+    viewBox="0 0 560 200"
+    className="w-full h-auto rounded-card border border-border bg-card p-3"
+    role="img"
+    aria-label="Hexagonal dependency rule: Driving and Driven adapters both point inward to the Application Core ports"
+  >
+    <rect x="20" y="54" width="120" height="54" rx="12" fill="var(--muted)" stroke="var(--border)" />
+    <text x="80" y="77" textAnchor="middle" fill="var(--foreground)" fontSize="12" fontWeight="600">REST / CLI</text>
+    <text x="80" y="95" textAnchor="middle" fill="var(--muted-foreground)" fontSize="10">Driving Adapter</text>
+
+    <line x1="140" y1="81" x2="176" y2="81" stroke="var(--primary)" strokeWidth="2" />
+    <polygon points="172,76 172,86 180,81" fill="var(--primary)" />
+
+    <rect x="180" y="24" width="200" height="114" rx="18" fill="var(--card)" stroke="var(--primary)" strokeWidth="2" />
+    <text x="280" y="52" textAnchor="middle" fill="var(--primary)" fontSize="12" fontWeight="600">Application Core</text>
+    <text x="280" y="76" textAnchor="middle" fill="var(--foreground)" fontSize="13" fontWeight="600">Order Domain + Ports</text>
+    <text x="280" y="98" textAnchor="middle" fill="var(--muted-foreground)" fontSize="11">«interface» PlaceOrderPort</text>
+    <text x="280" y="114" textAnchor="middle" fill="var(--muted-foreground)" fontSize="11">«interface» OrderRepoPort</text>
+
+    <line x1="420" y1="81" x2="384" y2="81" stroke="var(--primary)" strokeWidth="2" />
+    <polygon points="388,76 388,86 380,81" fill="var(--primary)" />
+
+    <rect x="420" y="54" width="120" height="54" rx="12" fill="var(--muted)" stroke="var(--border)" />
+    <text x="480" y="77" textAnchor="middle" fill="var(--foreground)" fontSize="12" fontWeight="600">Postgres / Mem</text>
+    <text x="480" y="95" textAnchor="middle" fill="var(--muted-foreground)" fontSize="10">Driven Adapter</text>
+
+    <text x="280" y="174" textAnchor="middle" fill="var(--muted-foreground)" fontSize="11">
+      Dependency Rule: arrows point inward. PostgresAdapter implements OrderRepoPort.
+    </text>
+  </svg>
+  <figcaption className="mt-2 text-center text-caption-1 text-muted-foreground">
+    Both left and right adapters depend on the core's interfaces; the core imports neither.
+  </figcaption>
+</figure>
+
+## 7. Code
+
+<Tabs items={['TypeScript']}>
+  <Tab value="TypeScript">
+```ts
+// --- Core Domain & Ports (src/core/) ---
+export interface OrderItem {
+  sku: string;
+  priceCents: number;
+  qty: number;
+}
+
+export interface Order {
+  id: string;
+  customerId: string;
+  totalCents: number;
+}
+
+export interface PlaceOrderPort {
+  execute(customerId: string, items: OrderItem[]): Promise<Order>;
+}
+
+export interface OrderRepoPort {
+  save(order: Order): Promise<Order>;
+}
+
+export class PlaceOrderService implements PlaceOrderPort {
+  constructor(private readonly repo: OrderRepoPort) {}
+
+  async execute(customerId: string, items: OrderItem[]): Promise<Order> {
+    if (items.length === 0) throw new Error('Empty order');
+    const totalCents = items.reduce((sum, i) => sum + i.priceCents * i.qty, 0);
+    return this.repo.save({ id: crypto.randomUUID(), customerId, totalCents });
+  }
+}
+
+// --- Driven Adapter: Postgres (src/adapters/driven/postgres-order-repo.ts) ---
+export class PostgresOrderRepo implements OrderRepoPort {
+  async save(order: Order): Promise<Order> {
+    // Runs SQL INSERT INTO orders ...
+    return order;
+  }
+}
+
+// --- Driven Adapter: In-Memory for tests (src/adapters/driven/in-memory-order-repo.ts) ---
+export class InMemoryOrderRepo implements OrderRepoPort {
+  public readonly store = new Map<string, Order>();
+
+  async save(order: Order): Promise<Order> {
+    this.store.set(order.id, order);
+    return order;
+  }
+}
+```
+  </Tab>
+</Tabs>
+
+<LabLink
+  name="arch-order-service"
+  description="Run the Order service tests with InMemoryOrderRepo and compare with Layered."
+  command="pnpm test"
+/>
+
+## 8. When to use / when to avoid
+
+<Checklist
+  use={[
+    'Your domain logic has meaningful rules and you want fast, isolated unit tests without databases.',
+    'You support multiple entry points (REST API, CLI, background queue) for the same core use cases.',
+    'External integrations (payment gateways, databases, email) are likely to change or need test fakes.',
+  ]}
+  avoid={[
+    'The service is pure CRUD pass-through where ports only mirror database tables.',
+    'You are building a short-lived script or prototype where extra interfaces slow you down.',
+  ]}
+/>
+
+## 9. How to implement
+
+<Steps>
+  <Step>
+    ### Define the domain model and ports inside `core/`
+    Write `Order`, `PlaceOrderPort`, and `OrderRepoPort` using only TypeScript types—no HTTP or SQL imports.
+  </Step>
+  <Step>
+    ### Implement the use case against outbound ports
+    Inject `OrderRepoPort` into `PlaceOrderService` via its constructor.
+  </Step>
+  <Step>
+    ### Build driving and driven adapters outside `core/`
+    Place REST controllers in `adapters/driving/` and `PostgresOrderRepo` / `InMemoryOrderRepo` in `adapters/driven/`.
+  </Step>
+  <Step>
+    ### Wire adapters at the composition root
+    Instantiate `new PlaceOrderService(new PostgresOrderRepo())` in `main.ts` for production, and swap in `InMemoryOrderRepo` in tests.
+  </Step>
+</Steps>
+
+## 10. Pros / Cons
+
+<ProsCons
+  pros={[
+    'Domain logic is 100% decoupled from frameworks, HTTP, and database drivers.',
+    'Test suites run in milliseconds by plugging in an InMemory adapter.',
+    'Easy to add new driving adapters (e.g. GraphQL or CLI) without duplicating business rules.',
+  ]}
+  cons={[
+    'More files and mapping between domain objects and database/HTTP DTOs.',
+    'Can feel over-engineered for simple CRUD endpoints with no real domain rules.',
+  ]}
+/>
+
+## 11. Relations
+
+<Relations
+  items={[
+    {
+      name: 'Dependency Inversion',
+      summary: 'Hexagonal Architecture is Dependency Inversion applied at the application boundary.',
+      href: '/docs/architecture/dependency-inversion',
+    },
+    {
+      name: 'Layered Architecture',
+      summary: 'Simpler top-down layers where Business depends directly on Data.',
+      href: '/docs/architecture/layered',
+    },
+    {
+      name: 'Compare Architecture Styles',
+      summary: 'See Hexagonal alongside Layered, Onion, and Clean on the same Order request.',
+      href: '/docs/architecture/compare-styles',
+    },
+  ]}
+/>
+
+## 12. Check yourself
+
+<MyTake>
+When I use Hexagonal Architecture, I skip creating an inbound port interface if there is only one implementation (`PlaceOrderService`)—concrete use cases are fine for driving adapters, while outbound ports (`OrderRepoPort`) are where testability pays off immediately.
+</MyTake>
+
+{/* TODO(step-11): Add <Quiz> component once Step 11 is merged. */}
+
+### Sources
+
+- [Alistair Cockburn: Hexagonal Architecture (Ports and Adapters)](https://alistair.cockburn.us/hexagonal-architecture/)
+- [Martin Fowler: PresentationDomainDataLayering](https://martinfowler.com/bliki/PresentationDomainDataLayering.html)
