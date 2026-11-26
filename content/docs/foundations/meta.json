@@ -3,7 +3,8 @@
   "pages": [
     "git-cheatsheet",
     "networking-basics",
-    "linux-processes-signals"
+    "linux-processes-signals",
+    "reverse-proxy-tls"
   ],
   "icon": "foundations"
 }
