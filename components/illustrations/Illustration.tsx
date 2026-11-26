@@ -51,7 +51,7 @@ export function Illustration({
         </linearGradient>
         <linearGradient id={`${uid}-blue`} x1="15%" y1="10%" x2="85%" y2="90%">
           <stop offset="0%" stopColor="#60a5fa" />
-          <stop offset="100%" stopColor="var(--primary, #0066CC)" />
+          <stop offset="100%" stopColor="var(--primary, #0F766E)" />
         </linearGradient>
         <linearGradient id={`${uid}-amber`} x1="15%" y1="10%" x2="85%" y2="90%">
           <stop offset="0%" stopColor="#fde68a" />
@@ -118,7 +118,7 @@ export function Illustration({
                 <circle cx="9.95" cy="-24.02" r="3" />
                 <circle cx="24.02" cy="-9.95" r="3" />
               </g>
-              <circle cx="0" cy="0" r="5" fill="#dbeafe" stroke="var(--primary, #0066CC)" strokeWidth="1.8" />
+              <circle cx="0" cy="0" r="5" fill="#CCFBF1" stroke="var(--primary, #0F766E)" strokeWidth="1.8" />
             </g>
 
             {/* Container crate */}
@@ -197,7 +197,7 @@ export function Illustration({
             <circle cx="60" cy="56" r="3.5" fill="#f97316" />
             <circle cx="71" cy="56" r="3.5" fill="#fbbf24" />
             <circle cx="82" cy="56" r="3.5" fill="#10b981" />
-            <path d="M 58 76 L 68 82 L 58 88 M 74 88 H 104" fill="none" stroke="var(--primary, #0066CC)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M 58 76 L 68 82 L 58 88 M 74 88 H 104" fill="none" stroke="var(--primary, #0F766E)" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round" />
             {/* Flask */}
             <path d="M 156 44 H 176 L 172 68 L 192 108 A 10 10 0 0 1 183 122 H 149 A 10 10 0 0 1 140 108 L 160 68 Z" fill={`url(#${uid}-mint)`} />
             <circle cx="166" cy="30" r="6" fill={`url(#${uid}-amber)`} />
@@ -211,9 +211,9 @@ export function Illustration({
           <ellipse cx="120" cy="138" rx="60" ry="7" fill="#000000" fillOpacity="0.08" />
           <g filter={`url(#${uid}-soft)`}>
             <circle cx="120" cy="80" r="56" fill={`url(#${uid}-surface)`} stroke="var(--border, #ebebeb)" strokeWidth="1.5" />
-            <circle cx="120" cy="80" r="40" fill="none" stroke="var(--primary, #0066CC)" strokeOpacity="0.22" strokeWidth="2" />
-            <circle cx="120" cy="80" r="22" fill="none" stroke="var(--primary, #0066CC)" strokeOpacity="0.35" strokeWidth="2" />
-            <path d="M 120 80 L 166 48 A 56 56 0 0 1 174 96 Z" fill="var(--primary, #0066CC)" fillOpacity="0.16" />
+            <circle cx="120" cy="80" r="40" fill="none" stroke="var(--primary, #0F766E)" strokeOpacity="0.22" strokeWidth="2" />
+            <circle cx="120" cy="80" r="22" fill="none" stroke="var(--primary, #0F766E)" strokeOpacity="0.35" strokeWidth="2" />
+            <path d="M 120 80 L 166 48 A 56 56 0 0 1 174 96 Z" fill="var(--primary, #0F766E)" fillOpacity="0.16" />
             <circle cx="120" cy="80" r="7" fill={`url(#${uid}-blue)`} />
             <circle cx="148" cy="58" r="6" fill={`url(#${uid}-mint)`} />
             <circle cx="96" cy="64" r="5" fill={`url(#${uid}-amber)`} />

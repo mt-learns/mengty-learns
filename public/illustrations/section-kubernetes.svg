@@ -6,13 +6,13 @@
       <stop offset="100%" stop-color="var(--muted, #f2f2f2)"/>
     </linearGradient>
     <radialGradient id="mt-k8s-key" cx="22%" cy="18%" r="72%">
-      <stop offset="0%" stop-color="var(--primary, #0066CC)" stop-opacity="0.18"/>
-      <stop offset="60%" stop-color="var(--primary, #0066CC)" stop-opacity="0.04"/>
-      <stop offset="100%" stop-color="var(--primary, #0066CC)" stop-opacity="0"/>
+      <stop offset="0%" stop-color="var(--primary, #0F766E)" stop-opacity="0.18"/>
+      <stop offset="60%" stop-color="var(--primary, #0F766E)" stop-opacity="0.04"/>
+      <stop offset="100%" stop-color="var(--primary, #0F766E)" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="mt-k8s-clay" x1="15%" y1="10%" x2="85%" y2="90%">
       <stop offset="0%" stop-color="#60a5fa"/>
-      <stop offset="100%" stop-color="var(--primary, #0066CC)"/>
+      <stop offset="100%" stop-color="var(--primary, #0F766E)"/>
     </linearGradient>
     <linearGradient id="mt-k8s-knob" x1="20%" y1="10%" x2="80%" y2="90%">
       <stop offset="0%" stop-color="#93c5fd"/>
@@ -49,7 +49,7 @@
       <circle cx="60.82" cy="17.05" r="3.6"/>
       <circle cx="78.95" cy="35.18" r="3.6"/>
     </g>
-    <circle cx="48" cy="48" r="6" fill="#dbeafe" stroke="var(--primary, #0066CC)" stroke-width="2"/>
+    <circle cx="48" cy="48" r="6" fill="#CCFBF1" stroke="var(--primary, #0F766E)" stroke-width="2"/>
     <circle cx="46.5" cy="46.5" r="1.6" fill="#ffffff" fill-opacity="0.9"/>
   </g>
 </svg>

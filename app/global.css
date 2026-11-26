@@ -2,6 +2,7 @@
 @import 'fumadocs-ui/css/neutral.css';
 @import 'fumadocs-ui/css/preset.css';
 @import './tokens.css';
+@import './code-theme.css';
 
 @layer base {
   * {
@@ -21,8 +22,43 @@
   --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", monospace;
 }
 
+/*
+ * Fumadocs colours. Fumadocs ships its own unlayered values (and a grey
+ * override on `.dark #nd-sidebar`), so map them to our tokens here, after
+ * its stylesheets, with at least the same specificity.
+ */
+:root,
+.dark,
+.dark #nd-sidebar {
+  --color-fd-background: var(--background);
+  --color-fd-foreground: var(--foreground);
+  --color-fd-card: var(--card);
+  --color-fd-card-foreground: var(--card-foreground);
+  --color-fd-popover: var(--popover);
+  --color-fd-popover-foreground: var(--popover-foreground);
+  --color-fd-primary: var(--primary);
+  --color-fd-primary-foreground: var(--primary-foreground);
+  --color-fd-secondary: var(--secondary);
+  --color-fd-secondary-foreground: var(--secondary-foreground);
+  --color-fd-muted: var(--muted);
+  --color-fd-muted-foreground: var(--muted-foreground);
+  --color-fd-accent: var(--accent);
+  --color-fd-accent-foreground: var(--accent-foreground);
+  --color-fd-border: var(--border);
+  --color-fd-ring: var(--ring);
+  --color-fd-overlay: color-mix(in oklab, var(--foreground) 30%, transparent);
+}
+
 html {
   scrollbar-gutter: stable;
+  scrollbar-color: var(--border-strong) transparent;
+  accent-color: var(--primary);
+  caret-color: var(--primary);
+}
+
+::selection {
+  background-color: color-mix(in oklab, var(--primary) 22%, transparent);
+  color: var(--foreground);
 }
 
 html > body[data-scroll-locked] {
@@ -47,12 +83,6 @@ html > body[data-scroll-locked] {
   }
   figure.shiki {
     border-radius: var(--radius-control);
-    background-color: var(--card);
-  }
-  figure.shiki span[style*="--shiki-light:#e36209" i] {
-    --shiki-light: #b34700;
-  }
-  figure.shiki span[style*="--shiki-dark:#6a737d" i] {
-    --shiki-dark: #8b949e;
+    background-color: var(--code-bg);
   }
 }

@@ -23,3 +23,13 @@ Only issues in `app/layout.tsx`, `app/(home)/page.tsx`, and `lib/layout.shared.t
 ## 4. All 4 routes — Lighthouse Best Practices `0.96` (`errors-in-console`)
 
 - Next.js 16 static export client-side prefetching requests `__next.*.txt` RSC payload files that do not exist in `out/` when served by a static file server (`serve` / `lhci`), logging 404 console errors.
+
+---
+
+# Landing redesign (`landing-redesign` branch): open items for other owners
+
+## A. Diagram category tints must switch to the new tokens (owner: diagram-rules worker)
+
+- `app/tokens.css` now defines `--diagram-{client,network,service,data,external,abstraction,concrete}` (icon colour) and `--diagram-*-soft` (tile fill) for both themes, measured in `DESIGN.md` (every icon ≥ 4.5:1 on its tile).
+- **After the diagram-rules merge, `components/diagram/category.ts` must use these tokens** instead of its own values.
+- `components/flow/v3/flow.css` still declares `--flow-cat-*` with the old Apple blues (`#0066cc`, `#409cff`). It is outside this branch's scope, so `grep -i "0066cc\|409cff" components` is not empty until the diagram worker replaces or deletes that file. Map `edge` → `--diagram-network`, `service` → `--diagram-service`, `data` → `--diagram-data`, `external` → `--diagram-external`, `client` → `--diagram-client`.

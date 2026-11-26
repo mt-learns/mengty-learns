@@ -187,7 +187,7 @@ export function ReviewClient() {
       ) : loadError ? (
         <div
           role="alert"
-          className="rounded-card border border-destructive/25 bg-destructive/10 p-6 text-subheadline text-destructive"
+          className="rounded-card border border-destructive/25 bg-destructive-soft p-6 text-subheadline text-destructive-text"
         >
           <p className="font-headline">Could not load your flashcards.</p>
           <p className="mt-1 text-muted-foreground">
@@ -285,8 +285,8 @@ export function ReviewClient() {
             aria-live={importStatus.kind === 'error' ? 'assertive' : 'polite'}
             className={`flex items-start gap-2 rounded-panel border p-3 text-subheadline ${
               importStatus.kind === 'success'
-                ? 'border-success/25 bg-success/10 text-success'
-                : 'border-destructive/25 bg-destructive/10 text-destructive'
+                ? 'border-success/25 bg-success-soft text-success-text'
+                : 'border-destructive/25 bg-destructive-soft text-destructive-text'
             }`}
           >
             {importStatus.kind === 'success' ? (
