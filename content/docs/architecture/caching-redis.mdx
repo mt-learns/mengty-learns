@@ -1,0 +1,207 @@
+---
+title: Caching Strategies & Redis
+description: Compare cache-aside, write-through, and write-behind caching, handle TTLs, stampedes, Redis RDB/AOF persistence, and degrade gracefully when the cache is down.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: concept
+type: explanation
+level: intermediate
+tags: [architecture, caching, redis, performance, resilience]
+tested_with:
+  redis: "8.12.0 (docs)"
+cards:
+  - q: "In cache-aside (lazy loading), what happens on a cache miss?"
+    a: "The application reads the data from the primary database, writes the result into the cache with a TTL, and returns it to the caller."
+  - q: "What is a cache stampede (dogpile) and one common way to prevent it?"
+    a: "Many concurrent requests miss an expired hot key and hit the database at once; prevent it with per-key request coalescing (singleflight/mutex) or jittered TTLs."
+  - q: "How do Redis RDB snapshots and AOF logs differ?"
+    a: "RDB takes periodic point-in-time binary snapshots (faster restarts, possible minutes of data loss); AOF logs every write operation (better durability, larger file)."
+  - q: "How should an application behave if Redis is unreachable on a cache-aside read?"
+    a: "Log/metric the error and fall back to the primary database (degrade gracefully) rather than failing the request—unless your DB cannot survive the extra load."
+related:
+  - architecture/layered
+  - foundations/networking-basics
+sources:
+  - title: "Redis Docs: Client-side caching & patterns"
+    url: https://redis.io/docs/latest/develop/use/patterns/
+  - title: "Redis Docs: Persistence (RDB and AOF)"
+    url: https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/
+  - title: "Redis Docs: Key eviction policies"
+    url: https://redis.io/docs/latest/develop/reference/eviction/
+---
+
+## TL;DR
+**Cache-aside** is the default pattern: read Redis first, fall back to the DB on a miss, and populate Redis with a **TTL**. Guard hot keys against **stampedes**, pick **RDB/AOF** only if your cached/session data needs durability, and always **degrade instead of crashing** if Redis is down.
+
+## Intent
+<Intent>
+Choose the right caching write/read strategy, prevent cache invalidation bugs and thundering herds, and understand Redis persistence and failure modes.
+</Intent>
+
+## Problem
+Every uncached API call that hits Postgres pays disk/network latency and connection-pool contention. Adding Redis blindly creates a second set of problems: stale data after updates, simultaneous DB spikes when a popular key expires (**cache stampede**), and total site outages if the app treats a Redis timeout as a fatal 500 error.
+
+## Solution
+
+### 1. Three core caching patterns
+| Pattern | Read path | Write path | Trade-off |
+|---|---|---|---|
+| **Cache-aside** (lazy) | App checks cache → miss → reads DB → fills cache | App writes DB, then deletes/updates cache key | Simple and resilient; first read after expiry is a miss |
+| **Write-through** | App reads cache | App writes cache + DB synchronously | Cache stays warm and consistent, but every write pays double latency |
+| **Write-behind** (write-back) | App reads cache | App writes cache, flushes to DB asynchronously | Fastest writes, but risk of data loss if cache crashes before flush |
+
+### 2. TTLs, invalidation, and stampede protection
+- **Always set a TTL** (`SET key val EX 60`) and configure `maxmemory-policy` (e.g., `allkeys-lru`) so Redis never runs out of RAM.
+- **Prefer deleting** the cache key after a DB update rather than writing the new value from two concurrent requests (which can race and leave stale data).
+- **Prevent stampedes (dogpiles):** Add random jitter to TTLs (`60s + rand(0..10s)`), coalesce concurrent misses for the same key in-process (`singleflight`), or refresh hot keys asynchronously before expiry.
+
+### 3. Redis persistence (RDB vs AOF) and failure handling
+- **Pure cache:** You can disable disk persistence or use **RDB** snapshots—if Redis restarts empty, the DB repopulates it.
+- **Sessions / queues / rate limits:** Enable **AOF** (`appendonly yes`, `appendfsync everysec`) or RDB+AOF so restarts lose at most ~1 second of writes.
+- **Degrade, don't fail:** Wrap Redis calls in short timeouts (e.g., 50–100 ms) and circuit breakers. On error, fall back to the DB (with rate limiting if needed so the DB doesn't melt).
+
+## Real-world analogy
+<Analogy>
+Cache-aside is like keeping sticky notes of frequent phone numbers on your monitor (**Redis**) instead of walking to the filing cabinet (**Postgres**) every time. If a sticky note is missing or smudged (TTL expired), you check the cabinet once and write a fresh note; if your sticky-note pad disappears, you can still walk to the cabinet.
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="caching-redis"
+  title="Cache-Aside Lifecycle: Miss → DB → Fill → Hit"
+  nodes={[
+    { id: 'app', label: 'API Service', subtitle: 'Reads cache first', icon: 'pod', category: 'service', rank: 0, order: 0 },
+    { id: 'redis', label: 'Redis Cache', subtitle: 'In-memory KV', icon: 'db', category: 'data', rank: 1, order: 0 },
+    { id: 'db', label: 'Primary DB', subtitle: 'Source of truth', icon: 'db', category: 'concrete', rank: 2, order: 0 },
+  ]}
+  steps={[
+    { edge: 'app->redis', title: 'Check Redis for key', text: 'API requests user:42 from Redis before touching the database.', label: 'GET key' },
+    { edge: 'redis->app', title: 'Cache miss (nil)', text: 'Key is absent or TTL expired; Redis returns nil.', kind: 'response', label: 'nil' },
+    { edge: 'app->db', title: 'Query primary database', text: 'API falls back to Postgres to fetch the authoritative row.', label: 'SELECT' },
+    { edge: 'db->app', title: 'DB returns record', text: 'Postgres returns the row to the API service.', kind: 'response', label: 'Row' },
+    { edge: 'app->redis', title: 'Populate cache with TTL', text: 'API writes user:42 to Redis with a jittered TTL for future reads.', label: 'SET EX 60' },
+    { edge: 'redis->app', title: 'Next read is a cache hit', text: 'Subsequent requests get the value straight from Redis.', kind: 'response', label: 'Hit' },
+  ]}
+/>
+
+## Code
+Minimal cache-aside helper in TypeScript showing a short timeout, graceful degradation on Redis failure, and jittered TTL:
+
+```typescript
+// Minimal cache-aside pattern with graceful degradation (not run)
+interface CacheClient {
+  get(key: string): Promise<string | null>;
+  set(key: string, value: string, opts: { EX: number }): Promise<void>;
+}
+
+export async function getUserCached(
+  cache: CacheClient,
+  fetchFromDb: (id: string) => Promise<{ id: string; name: string } | null>,
+  id: string,
+) {
+  const key = `user:${id}`;
+  try {
+    const hit = await cache.get(key);
+    if (hit) return JSON.parse(hit);
+  } catch {
+    // Cache down: degrade gracefully to the primary DB instead of throwing 500
+  }
+
+  const row = await fetchFromDb(id);
+  if (!row) return null;
+
+  const ttlSeconds = 60 + Math.floor(Math.random() * 10);
+  try {
+    await cache.set(key, JSON.stringify(row), { EX: ttlSeconds });
+  } catch {
+    // Best-effort cache fill; do not fail the user request
+  }
+  return row;
+}
+```
+
+## When you DON'T need this
+- **Static sites or CDN-cacheable pages:** This site pre-renders every page at build time and serves it from Cloudflare's edge cache—adding Redis would add cost and a failure mode for zero benefit.
+- **Fast enough primary DB:** If your Postgres queries already take `< 10 ms` at your current traffic and you can scale with a read replica or better indexes, don't introduce cache invalidation complexity early.
+- **Cost / complexity trade-off:** Redis adds another stateful service to monitor, patch, and size in memory (RAM is much pricier per GB than disk). In return, you cut p99 read latency from milliseconds of DB work to sub-millisecond in-memory lookups.
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'Repeated, expensive read queries or aggregations that tolerate seconds of staleness.',
+    'Shared rate-limiting counters, distributed locks, or ephemeral session state across multiple app instances.',
+  ]}
+  avoid={[
+    'Financial balances or inventory counts where stale reads cause double-spending.',
+    'Caching an entire database in RAM before you have added basic SQL indexes.',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Start with cache-aside and a short TTL
+    Read Redis first, fall back to the DB on miss, and write back with `EX` plus small random jitter.
+  </Step>
+  <Step>
+    ### Set `maxmemory` and an eviction policy
+    Configure `maxmemory-policy allkeys-lru` (or `volatile-ttl`) so Redis evicts old keys instead of failing writes with `OOM`.
+  </Step>
+  <Step>
+    ### Test Redis failure in staging
+    Kill or block Redis and verify your app degrades cleanly (slower responses, zero 500 errors).
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'Sub-millisecond read latency and huge reduction in primary DB CPU/connection load.',
+    'Cache-aside naturally tolerates cold starts and Redis restarts.',
+  ]}
+  cons={[
+    'Cache invalidation bugs (stale reads) and stampedes on hot-key expiry.',
+    'RAM-bound cost and another operational dependency to monitor.',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'Layered (N-Tier) Architecture',
+      href: '/docs/architecture/layered',
+      summary: 'See where caching sits between Business and Data layers.',
+    },
+    {
+      name: 'Networking Basics',
+      href: '/docs/foundations/networking-basics',
+      summary: 'Understand why an extra network hop to Redis still needs tight timeouts.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "A popular homepage key expires at 12:00:00 and 500 concurrent requests immediately query Postgres at once. What is this failure mode called?",
+    options: [
+      { label: "Cache stampede (thundering herd / dogpile)", description: "Mitigate it with per-key request coalescing (singleflight), jittered TTLs, or early background refresh.", correct: true },
+      { label: "Write-behind data loss", description: "Write-behind data loss happens when un-flushed writes in cache are lost on crash." },
+      { label: "AOF rewrite stall", description: "AOF rewrite is a Redis persistence operation, not concurrent miss amplification." }
+    ]
+  },
+  {
+    question: "In a cache-aside architecture, what should happen if Redis times out during a GET?",
+    options: [
+      { label: "Log the error, emit a metric, and fall back to querying the primary database", description: "A cache outage should degrade latency, not turn every read into an HTTP 500.", correct: true },
+      { label: "Immediately return HTTP 503 to the user", description: "Failing closed on a read cache turns a non-critical dependency into a full outage." },
+      { label: "Switch automatically to write-behind mode", description: "Write-behind is a write strategy and does not help when Redis itself is unreachable." }
+    ]
+  }
+]} />
+
+## Sources
+- [Redis Docs: Client-side caching & patterns](https://redis.io/docs/latest/develop/use/patterns/)
+- [Redis Docs: Persistence (RDB and AOF)](https://redis.io/docs/latest/operate/oss_and_stack/management/persistence/)
+- [Redis Docs: Key eviction policies](https://redis.io/docs/latest/develop/reference/eviction/)

@@ -2,7 +2,11 @@
   "title": "Foundations",
   "pages": [
     "git-cheatsheet",
-    "networking-basics"
+    "networking-basics",
+    "linux-processes-signals",
+    "reverse-proxy-tls",
+    "backups-and-dr",
+    "observability"
   ],
   "icon": "foundations"
 }

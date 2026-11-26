@@ -1,0 +1,192 @@
+---
+title: "Observability: Logs, Metrics & Traces"
+description: Use logs, metrics, and traces with RED/USE, symptom-based alerts, SLO error budgets, and OpenTelemetry—and know what a static site needs vs a backend.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: concept
+type: explanation
+level: intermediate
+tags: [observability, opentelemetry, metrics, logs, slo]
+tested_with:
+  opentelemetry-collector: "0.166.0 (docs)"
+  opentelemetry-js: "3.0 (docs)"
+cards:
+  - q: "What are the three metrics in the RED method for request-driven services?"
+    a: "Rate (requests per second), Errors (failed requests per second), and Duration (latency distribution such as p95/p99)."
+  - q: "What are the three metrics in the USE method for infrastructure resources?"
+    a: "Utilization (% busy), Saturation (queue depth / waiting work), and Errors (hardware or kernel error count)."
+  - q: "Why should paging alerts fire on symptoms (user-facing SLOs) rather than causes (high CPU)?"
+    a: "High CPU that doesn't hurt latency or error rates shouldn't wake someone at 3 a.m.; paging on symptoms catches real user impact while causes stay on dashboards."
+  - q: "What is an error budget in an SLO?"
+    a: "100% minus the SLO target (for example, a 99.9% monthly availability SLO gives a 0.1% / ~43-minute error budget) to balance reliability with release velocity."
+related:
+  - foundations/networking-basics
+  - architecture/queues-async
+  - ci-cd/deploy-and-rollback
+sources:
+  - title: "OpenTelemetry Docs: Signals (Traces, Metrics, Logs)"
+    url: https://opentelemetry.io/docs/concepts/signals/
+  - title: "OpenTelemetry Docs: Collector"
+    url: https://opentelemetry.io/docs/collector/
+  - title: "Google SRE Book: Monitoring Distributed Systems"
+    url: https://sre.google/sre-book/monitoring-distributed-systems/
+  - title: "Cloudflare Workers Docs: Observability"
+    url: https://developers.cloudflare.com/workers/observability/
+---
+
+## TL;DR
+**Metrics** tell you *something is wrong* (RED for services, USE for resources), **traces** show *where* a slow request spent time across services, and **logs** explain *why* a specific request failed. Page only on **user-facing symptoms** (SLO burn), and standardize instrumentation with **OpenTelemetry**.
+
+## Intent
+<Intent>
+Understand how logs, metrics, and traces complement each other, how SLOs and error budgets stop alert fatigue, and how much observability a static site needs compared to a distributed backend.
+</Intent>
+
+## Problem
+Without structured observability, teams either fly blind ("users say it's slow") or drown in noisy alerts ("CPU > 80% on node 4") while real checkout failures go unnoticed. Dumping unstructured `console.log` lines without `trace_id` or latency histograms makes debugging multi-service incidents guesswork.
+
+## Solution
+
+### 1. Logs vs Metrics vs Traces
+| Signal | What it is | Best question it answers |
+|---|---|---|
+| **Metrics** | Numeric time-series (`rate`, `histogram`) | *Is error rate or p99 latency spiking right now?* |
+| **Traces** | Distributed call tree (`trace_id` + spans) | *Which downstream service or SQL query took 800 ms?* |
+| **Logs** | Structured JSON events with `trace_id` | *What exact payload or exception caused this request to fail?* |
+
+### 2. RED, USE, and symptom-based alerting
+- **RED (services):** **R**ate, **E**rrors, **D**uration.
+- **USE (resources — CPU, RAM, disk, pools):** **U**tilization, **S**aturation, **E**rrors.
+- **Alert on symptoms, debug with causes:** Page an engineer when an **SLO** (e.g., 99.9% of requests `< 500 ms` and non-5xx) burns its **error budget** too fast—not every time a single Pod hits 85% CPU.
+
+### 3. Static site vs backend needs
+- **A static site like Mengty Learns:** Pre-rendered HTML/CSS/JS has no database, no queue, and no microservices. When deployed to Cloudflare Workers (`docs/deploy/CLOUDFLARE-WORKERS-PLAN.md`), built-in **Workers Logs & Analytics** (status codes, edge latency, 4xx/5xx counts) plus synthetic uptime checks are plenty. Running Prometheus + Tempo + Loki for static files would be pure overhead.
+- **A multi-service backend:** Needs **OpenTelemetry** SDKs emitting OTLP metrics, traces, and structured logs through an **OTel Collector** so you can correlate a 500 spike across API, Redis, Postgres, and async workers.
+
+## Real-world analogy
+<Analogy>
+Think of a car dashboard: **metrics** are the speedometer and check-engine warning light (alerts you to a symptom), a **trace** is the mechanic's OBD-II timing breakdown across engine cylinders, and **logs** are the detailed fault-code event entries explaining the exact misfire.
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="observability"
+  title="OpenTelemetry Pipeline: App → Collector → Metrics & Traces"
+  nodes={[
+    { id: 'app', label: 'App + OTel SDK', subtitle: 'Emits OTLP', icon: 'pod', category: 'service', rank: 0, order: 0 },
+    { id: 'otel', label: 'OTel Collector', subtitle: 'Batches & routes', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+    { id: 'metrics', label: 'Metrics & Alerts', subtitle: 'SLO burn rate', icon: 'ci', category: 'concrete', rank: 2, order: 0 },
+    { id: 'traces', label: 'Logs & Traces', subtitle: 'trace_id debug', icon: 'db', category: 'data', rank: 2, order: 1 },
+    { id: 'oncall', label: 'On-Call Engineer', subtitle: 'Triage & fix', icon: 'user', category: 'client', rank: 3, order: 0 },
+  ]}
+  steps={[
+    { edge: 'app->otel', title: 'Emit OTLP telemetry', text: 'App SDK exports RED metrics, trace spans, and structured JSON logs over OTLP.', label: 'OTLP' },
+    { edge: 'otel->metrics', title: 'Aggregate RED metrics', text: 'Collector forwards request rate, error rate, and latency histograms to metrics storage.', label: 'Metrics' },
+    { edge: 'otel->traces', title: 'Ship correlated logs & traces', text: 'Collector samples and stores trace spans alongside logs sharing the same trace_id.', label: 'Traces' },
+    { edge: 'metrics->oncall', title: 'Page on symptom SLO', text: 'An SLO burn-rate alert pages on-call only when user-facing errors or latency spike.', label: 'Alert' },
+    { edge: 'traces->oncall', title: 'Inspect trace_id context', text: 'Engineer opens the slow/failing trace_id to pinpoint the exact failing span and log.', kind: 'response', label: 'Debug' },
+  ]}
+/>
+
+## Code
+Emit structured JSON logs with `trace_id` and `duration_ms`—never `console.log("error")` strings or PII:
+
+```typescript
+// Structured JSON log helper (not run)
+export function logRequest(entry: {
+  traceId: string;
+  route: string;
+  status: number;
+  durationMs: number;
+}) {
+  // Never log passwords, Authorization headers, or raw session tokens
+  console.log(JSON.stringify({ ts: new Date().toISOString(), ...entry }));
+}
+```
+
+## When you DON'T need this
+- **Static sites and small personal apps (like this one):** Platform analytics (Cloudflare Workers Observability / HTTP status logs) + CI checks cover 99% of needs without self-hosting Grafana, Prometheus, or Jaeger.
+- **High-cardinality metrics traps:** Putting `user_id` or full URLs with query strings as Prometheus metric labels explodes time-series cardinality and can crash your metrics server—keep high-cardinality IDs in logs and traces, not metric labels.
+- **Cost / complexity trade-off:** Full observability stacks can easily cost 10–25% of your compute bill (ingestion + retention for verbose debug logs and 100% trace sampling). Control cost with structured `info`/`error` log levels, tail/head trace sampling, and short raw-log retention.
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'Any production backend where you need to prove SLO compliance and debug latency across DBs/queues.',
+    'Standardizing instrumentation with OpenTelemetry so you can swap backends without rewriting app code.',
+  ]}
+  avoid={[
+    'Putting unbounded user IDs or request IDs into metric labels (cardinality explosion).',
+    'Logging secrets, tokens, or raw PII into centralized log stores.',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Start with structured JSON logs and RED metrics
+    Log JSON with `traceId`, `status`, and `durationMs`, and track request rate, errors, and p95/p99 latency.
+  </Step>
+  <Step>
+    ### Define one simple SLO and error budget
+    For example: 99.9% of `/api/*` requests return non-5xx within 500 ms over a rolling 30-day window.
+  </Step>
+  <Step>
+    ### Add OpenTelemetry tracing when calls cross services
+    Propagate W3C `traceparent` headers across HTTP and queues so one `trace_id` ties every hop together.
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'OpenTelemetry prevents vendor lock-in across Grafana, Honeycomb, Datadog, or cloud native tools.',
+    'Symptom-based SLO alerts cut midnight false alarms dramatically.',
+  ]}
+  cons={[
+    'High ingestion and storage costs if log levels and trace sampling are left unbounded.',
+    'Operating a self-hosted telemetry stack adds its own maintenance burden.',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'Networking Basics',
+      href: '/docs/foundations/networking-basics',
+      summary: 'Trace latency breakdown across DNS, TCP, TLS, and HTTP.',
+    },
+    {
+      name: 'Queues & Asynchronous Work',
+      href: '/docs/architecture/queues-async',
+      summary: 'Propagate trace context through async queues and monitor DLQ depth.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "Why should paging alerts trigger on user-facing symptoms (such as 5xx error-budget burn) rather than CPU > 80%?",
+    options: [
+      { label: "High CPU with normal latency and zero errors does not affect users, whereas symptom alerts catch real user impact", description: "Keep cause metrics (CPU, disk) on dashboards for debugging, and page on user-facing symptoms.", correct: true },
+      { label: "CPU metrics cannot be collected by OpenTelemetry", description: "OTel collects host and runtime CPU metrics via hostmetrics/USE." },
+      { label: "5xx errors never occur when CPU is below 80%", description: "5xx errors often happen at low CPU (for example, DB deadlocks or bad deploys)." }
+    ]
+  },
+  {
+    question: "Why is adding user_id as a label on a Prometheus HTTP request counter dangerous?",
+    options: [
+      { label: "Every unique user_id creates a new time series (cardinality explosion), exhausting memory and slowing queries", description: "Keep high-cardinality IDs like user_id and trace_id in logs and traces, not metric labels.", correct: true },
+      { label: "Prometheus only accepts integer label values", description: "Prometheus labels are strings; the problem is unbounded unique series count." },
+      { label: "user_id prevents HTTP 200 responses", description: "Metric labels do not affect HTTP responses." }
+    ]
+  }
+]} />
+
+## Sources
+- [OpenTelemetry Docs: Signals (Traces, Metrics, Logs)](https://opentelemetry.io/docs/concepts/signals/)
+- [OpenTelemetry Docs: Collector](https://opentelemetry.io/docs/collector/)
+- [Google SRE Book: Monitoring Distributed Systems](https://sre.google/sre-book/monitoring-distributed-systems/)
+- [Cloudflare Workers Docs: Observability](https://developers.cloudflare.com/workers/observability/)

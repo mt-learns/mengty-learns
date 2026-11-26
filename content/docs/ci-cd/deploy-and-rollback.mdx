@@ -1,0 +1,188 @@
+---
+title: Deploy & Rollback Strategies
+description: Compare rolling, blue-green, canary, feature flags, expand/contract DB migrations, and rollback vs roll-forward, using this site's planned Workers flow.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: concept
+type: explanation
+level: intermediate
+tags: [ci-cd, deployment, canary, rollback, migrations]
+tested_with:
+  kubernetes: "1.37 (docs)"
+  wrangler: "3.99+ (planned)"
+cards:
+  - q: "How does a canary deployment limit the blast radius of a bad release?"
+    a: "It routes only a small percentage of live traffic (for example 5%) to the new version while monitoring error rates and latency before promoting to 100%."
+  - q: "What is the expand/contract pattern for zero-downtime database migrations?"
+    a: "Expand the schema additively first so both old and new code work, deploy the new code, backfill data, and only contract (drop old columns) in a later release."
+  - q: "Why is rolling back a destructive database migration usually harder than rolling back app code?"
+    a: "App binaries are stateless, whereas dropping a column or mutating rows destroys data or breaks the previous app version's queries."
+  - q: "What is the difference between a release (deployment) and a feature flag?"
+    a: "A deployment puts new code onto servers; a feature flag toggles whether users execute that code path at runtime without redeploying."
+related:
+  - ci-cd/pipeline-anatomy
+  - ci-cd/this-site-pipeline
+  - kubernetes/pods-deployments
+sources:
+  - title: "Cloudflare Workers Docs: Versions and Deployments"
+    url: https://developers.cloudflare.com/workers/configuration/versions-and-deployments/
+  - title: "Kubernetes Docs: Deployments (Rolling Update & Rollback)"
+    url: https://kubernetes.io/docs/concepts/workloads/controllers/deployment/
+  - title: "Martin Fowler: Canary Release"
+    url: https://martinfowler.com/bliki/CanaryRelease.html
+---
+
+## TL;DR
+Choose your rollout strategy by blast radius: **rolling updates** replace instances gradually, **blue-green** swaps two full environments for instant cutover, and **canary** sends a small traffic slice (e.g., 5%) to the new version first. Keep DB migrations **expand/contract** so rollbacks don't break schemas.
+
+## Intent
+<Intent>
+Pick the right deployment and rollback strategy for your app's risk profile, decouple code deploys from feature releases with flags, and avoid breaking rollbacks with destructive schema changes.
+</Intent>
+
+## Problem
+Deploying a new version to 100% of users at once turns every missed edge case into a full outage. Worse, if a release drops a database column that the previous version still queries, hitting "rollback" fails too—leaving you stuck between two broken states.
+
+## Solution
+
+### 1. Deployment strategies compared
+| Strategy | How traffic shifts | Rollback speed | Extra capacity needed |
+|---|---|---|---|
+| **Rolling** | Replace N pods/VMs at a time | Medium (re-replace or `rollout undo`) | Small (`maxSurge`) |
+| **Blue-Green** | Switch router from Blue (v1) to Green (v2) | Instant (flip router back to Blue) | 2x compute during deploy |
+| **Canary** | Send 5% → 25% → 100% to v2 while watching SLOs | Instant (set v2 weight to 0%) | Small + traffic-splitting router |
+
+### 2. Feature flags & expand/contract DB migrations
+- **Feature flags** separate *deploying* code from *releasing* a feature. If a new checkout path misbehaves, you flip a flag off in seconds without a CI rebuild.
+- **Expand/contract migrations** keep rollbacks safe:
+  1. **Expand:** Add the new column/table as nullable while old code still writes the old column.
+  2. **Migrate & deploy:** Dual-write or backfill, deploy code that reads the new column.
+  3. **Contract:** Drop the old column only after you are confident you won't roll back.
+
+### 3. Rollback vs roll-forward
+- **Roll back** immediately when a new deploy causes a user-facing 5xx spike or latency regression—stop the bleeding first, debug second.
+- **Roll forward** only when the fix is trivial and faster/safer than reverting, or when an irreversible data migration prevents running the old binary.
+
+### 4. Real example: this site's planned Cloudflare Workers flow
+In `docs/deploy/CLOUDFLARE-WORKERS-PLAN.md` (this workflow is **planned and not live yet**—the site currently builds as a static export and has not been deployed to `learn.limmengty.com` yet), PRs will upload an immutable preview version with `wrangler versions upload` while `main` deploys with `wrangler deploy`. If a production Worker deploy ever misbehaves, `wrangler rollback` (or gradual version splitting in the dashboard) reverts to the previous uploaded version in seconds.
+
+## Real-world analogy
+<Analogy>
+A **canary** deployment is like opening a new highway lane for 5% of cars while watching for traffic jams before opening it to everyone; **blue-green** is building a parallel bridge and flipping the gate; and **expand/contract** is keeping the old bridge standing until every driver has moved to the new one.
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="deploy-and-rollback"
+  title="Canary Deployment: 5% Traffic Slice & Health Gate"
+  nodes={[
+    { id: 'router', label: 'Traffic Router', subtitle: 'Weighted split', icon: 'gateway', category: 'edge', rank: 0, order: 0 },
+    { id: 'stable', label: 'Stable (v1)', subtitle: '95% traffic', icon: 'pod', category: 'service', rank: 1, order: 0 },
+    { id: 'canary', label: 'Canary (v2)', subtitle: '5% traffic', icon: 'pod', category: 'concrete', rank: 1, order: 1 },
+    { id: 'metrics', label: 'Error Monitor', subtitle: '5xx & latency', icon: 'ci', category: 'external', rank: 2, order: 1 },
+  ]}
+  steps={[
+    { edge: 'router->stable', title: 'Route 95% to stable v1', text: 'Traffic router keeps the vast majority of users on the proven v1 release.', label: '95%' },
+    { edge: 'router->canary', title: 'Send 5% slice to canary v2', text: 'A small fraction of live requests is routed to the new v2 version.', label: '5%' },
+    { edge: 'canary->metrics', title: 'Emit canary telemetry', text: 'Canary reports HTTP 5xx rate and p99 latency to the monitor.', label: 'Telemetry' },
+    { edge: 'metrics->canary', title: 'Gate: promote or roll back', text: 'If healthy, promote v2 to 100%; if errors spike, drop v2 weight to 0%.', kind: 'response', label: 'Gate' },
+  ]}
+/>
+
+## Code
+Planned Cloudflare Workers rollback and Kubernetes Deployment rollback commands:
+
+```bash
+# Planned Cloudflare Workers rollback (not run; site deploy is not live yet)
+npx wrangler versions upload
+npx wrangler rollback
+
+# Kubernetes Deployment rollback to previous ReplicaSet (not run)
+kubectl rollout undo deployment/web
+```
+
+## When you DON'T need this
+- **Low-traffic personal projects or static docs:** A single `main`-branch atomic deploy (like Cloudflare Pages/Workers static assets) is enough—running blue-green clusters or weighted canary traffic for 10 visitors/day adds complexity without statistical signal.
+- **No observability:** Canary deployments are pointless if you don't have metrics/error alerts comparing v1 vs v2; without telemetry, a 5% canary just breaks 5% of users silently.
+- **Cost / complexity trade-off:** Rolling updates are built into Kubernetes and cheap. Blue-green doubles peak compute cost during deploys, and automated canary controllers (Argo Rollouts/Flagger) add CRDs, Prometheus queries, and traffic-mesh complexity.
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'Production services where a bad release affects paying users or SLAs.',
+    'Any schema change in a live database—always use expand/contract so rollback stays possible.',
+  ]}
+  avoid={[
+    'Canary releases when traffic is too low to detect a 1% error rate within minutes.',
+    'Destructive DROP COLUMN migrations in the same PR as application code changes.',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Make every deploy artifact immutable and versioned
+    Tag images by Git SHA (never `:latest`) or use versioned Worker uploads so you know exactly what to revert to.
+  </Step>
+  <Step>
+    ### Separate schema expansion from contraction
+    Ship additive DB changes first, deploy app code second, and drop old columns in a follow-up PR.
+  </Step>
+  <Step>
+    ### Practice the rollback path
+    Test `kubectl rollout undo` or `wrangler rollback` in staging before an incident forces you to learn it under pressure.
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'Canary and blue-green reduce downtime and blast radius during risky releases.',
+    'Expand/contract migrations keep instant code rollbacks safe.',
+  ]}
+  cons={[
+    'Blue-green temporarily doubles infrastructure capacity.',
+    'Feature flags add conditional branches that must be cleaned up after rollout.',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'Pipeline Anatomy',
+      href: '/docs/ci-cd/pipeline-anatomy',
+      summary: 'See how build, test, and artifact stages feed into the deploy gate.',
+    },
+    {
+      name: 'Pods, ReplicaSets, and Deployments',
+      href: '/docs/kubernetes/pods-deployments',
+      summary: 'How Kubernetes retains old ReplicaSets for kubectl rollout undo.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "Why should you avoid dropping an old database column in the same deploy that stops reading it?",
+    options: [
+      { label: "If you need to roll back the application code, the old code will crash querying the missing column", description: "Use expand/contract: keep the old column until the new app version is stable and rollback is no longer needed.", correct: true },
+      { label: "PostgreSQL does not allow ALTER TABLE DROP COLUMN", description: "Postgres supports DROP COLUMN, but doing it in the same release breaks rollbacks." },
+      { label: "Canary routers inspect SQL columns before routing", description: "HTTP routers do not inspect database schemas." }
+    ]
+  },
+  {
+    question: "What is the main advantage of a canary release over an all-at-once deploy?",
+    options: [
+      { label: "It limits the blast radius of a bad release to a small percentage of traffic while telemetry is checked", description: "If errors or latency spike on the 5% slice, traffic shifts back to v1 before 100% of users are impacted.", correct: true },
+      { label: "It eliminates the need for automated tests in CI", description: "Canaries complement CI tests; they never replace them." },
+      { label: "It requires zero monitoring or error metrics", description: "A canary only works if you actively compare its error rate and latency against baseline." }
+    ]
+  }
+]} />
+
+## Sources
+- [Cloudflare Workers Docs: Versions and Deployments](https://developers.cloudflare.com/workers/configuration/versions-and-deployments/)
+- [Kubernetes Docs: Deployments (Rolling Update & Rollback)](https://kubernetes.io/docs/concepts/workloads/controllers/deployment/)
+- [Martin Fowler: Canary Release](https://martinfowler.com/bliki/CanaryRelease.html)

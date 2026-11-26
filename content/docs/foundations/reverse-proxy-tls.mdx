@@ -1,0 +1,205 @@
+---
+title: Reverse Proxy & TLS Termination
+description: How a reverse proxy terminates TLS with ACME/Let's Encrypt, routes traffic, sets forwarding headers, and compares Nginx, Caddy, and managed edges.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: concept
+type: explanation
+level: beginner
+tags: [reverse-proxy, tls, nginx, caddy, acme]
+tested_with:
+  nginx: "1.30.8 (docs)"
+  caddy: "2.11.9 (docs)"
+cards:
+  - q: "What does TLS termination at a reverse proxy mean?"
+    a: "The proxy decrypts incoming HTTPS from clients using its TLS certificate and forwards plain HTTP (or re-encrypted traffic) to internal upstream apps."
+  - q: "Which HTTP headers should a reverse proxy set so the upstream app knows the real client IP and protocol?"
+    a: "X-Forwarded-For (or Forwarded), X-Forwarded-Proto, and Host."
+  - q: "How does Caddy differ operationally from Nginx for TLS certificates?"
+    a: "Caddy automates ACME (Let's Encrypt) certificate issuance and renewal by default, whereas Nginx typically relies on Certbot or an external ACME client."
+  - q: "What is the ACME protocol (RFC 8555) used for?"
+    a: "Automated domain-control verification (HTTP-01 or DNS-01) and issuance/renewal of X.509 TLS certificates from CAs like Let's Encrypt."
+related:
+  - foundations/networking-basics
+  - kubernetes/service-routing
+  - containers/compose
+sources:
+  - title: "Nginx Documentation: Reverse Proxy"
+    url: https://docs.nginx.com/nginx/admin-guide/web-server/reverse-proxy/
+  - title: "Caddy Docs: Automatic HTTPS"
+    url: https://caddyserver.com/docs/automatic-https
+  - title: "Let's Encrypt: How It Works"
+    url: https://letsencrypt.org/how-it-works/
+  - title: "RFC 8555: Automatic Certificate Management Environment (ACME)"
+    url: https://datatracker.ietf.org/doc/html/rfc8555
+---
+
+## TL;DR
+A **reverse proxy** sits in front of your app servers to handle **TLS termination** (via **ACME / Let's Encrypt**), virtual-host routing, compression, and forwarding headers (`Host`, `X-Forwarded-For`, `X-Forwarded-Proto`). Pick **Caddy** for zero-config HTTPS on a single server, **Nginx** for high-throughput tuning, or a **managed edge** (Cloudflare) when you don't want to run a proxy VM at all.
+
+## Intent
+<Intent>
+Understand what a reverse proxy does at the edge of your backend, how ACME automates TLS certificates, and when to choose Nginx, Caddy, or a managed edge.
+</Intent>
+
+## Problem
+Application runtimes (Node.js, Go, Python) are built to run business logic, not to juggle TLS certificates, HTTP/2/HTTP/3 upgrades, gzip/Brotli compression, or host-based routing across multiple services on port `443`. Exposing app ports directly forces every service to manage certificates and leaves them open to slow-client attacks.
+
+## Solution
+Place a reverse proxy on ports `80`/`443` while keeping upstream apps bound to `127.0.0.1` or a private network:
+
+1. **TLS termination & ACME:** The proxy proves domain ownership to a Certificate Authority (like Let's Encrypt) via **ACME** (`HTTP-01` challenge on port `80` or `DNS-01` TXT record), obtains a short-lived certificate, and renews it automatically before expiry.
+2. **Routing & headers:** The proxy inspects `Host` and path, forwards requests to the right upstream (`127.0.0.1:3000`), and passes `Host`, `X-Forwarded-For`, and `X-Forwarded-Proto` so the app knows the original client IP and scheme.
+3. **Compression & buffering:** The proxy compresses responses (`gzip`/`zstd`) and buffers slow clients so upstream worker threads aren't tied up waiting on mobile networks.
+
+| Option | Strengths | Trade-offs |
+|---|---|---|
+| **Caddy** | Automatic ACME HTTPS, HTTP/3, tiny `Caddyfile` | Smaller third-party module ecosystem than Nginx |
+| **Nginx** | Battle-tested performance, rich directive control | Manual Certbot/ACME setup and reload plumbing |
+| **Managed edge (Cloudflare)** | Anycast DDoS protection, auto certs, zero VM upkeep | Vendor coupling; traffic passes through third-party edge |
+
+## Real-world analogy
+<Analogy>
+A reverse proxy is like a building's **security reception desk**: visitors present their ID at one front door (**port 443 / TLS**), the desk logs who they are (`X-Forwarded-For`) and sends them to the right internal suite (`:3000` or `:8080`), while the teams inside never have to guard the street entrance themselves.
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="reverse-proxy-tls"
+  title="Client → TLS Reverse Proxy → Upstream App"
+  nodes={[
+    { id: 'client', label: 'Client', subtitle: 'Browser / curl', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'proxy', label: 'Reverse Proxy', subtitle: 'TLS + ACME :443', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+    { id: 'app', label: 'Upstream App', subtitle: '127.0.0.1:3000', icon: 'pod', category: 'service', rank: 2, order: 0 },
+  ]}
+  steps={[
+    { edge: 'client->proxy', title: 'HTTPS request & TLS handshake', text: 'Client connects on :443; proxy terminates TLS 1.3 with its ACME certificate.', label: 'HTTPS :443' },
+    { edge: 'proxy->app', title: 'Forward HTTP with headers', text: 'Proxy sends plain HTTP to 127.0.0.1:3000 with Host, X-Forwarded-For, and X-Forwarded-Proto.', label: 'HTTP :3000' },
+    { edge: 'app->proxy', title: 'Upstream returns 200 OK', text: 'App processes the request and returns the response body to the proxy.', kind: 'response', label: '200 OK' },
+    { edge: 'proxy->client', title: 'Compress and encrypt reply', text: 'Proxy applies compression and encrypts the response back over the client TLS tunnel.', kind: 'response', label: 'TLS + gzip' },
+  ]}
+/>
+
+## Code
+Compare a minimal **Caddyfile** (automatic HTTPS included) with a minimal **Nginx** `server` block (paired with Certbot certificates):
+
+<Tabs items={['Caddyfile', 'Nginx']}>
+  <Tab value="Caddyfile">
+```text
+# /etc/caddy/Caddyfile (not run)
+app.example.com {
+    encode zstd gzip
+    reverse_proxy 127.0.0.1:3000
+}
+```
+  </Tab>
+  <Tab value="Nginx">
+```nginx
+# /etc/nginx/conf.d/app.conf (not run)
+server {
+    listen 443 ssl;
+    http2 on;
+    server_name app.example.com;
+
+    ssl_certificate     /etc/letsencrypt/live/app.example.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/app.example.com/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+}
+```
+  </Tab>
+</Tabs>
+
+## When you DON'T need this
+- **Static sites on a managed edge (like this site):** Cloudflare Workers/Pages or Vercel already terminate TLS, issue certificates, and compress assets—running Nginx in front would add a redundant hop and a VM to patch.
+- **Internal cluster-only services:** If a service is only called by other Pods inside a private VPC or service mesh, you don't need a public-facing Nginx/Caddy instance on every node.
+- **Cost / complexity trade-off:** Running your own Caddy/Nginx on a VM is cheap ($5–$10/mo), but you own OS patching, firewall rules (`80`/`443` open, `3000` blocked externally), and certificate renewal alerts. A managed load balancer or edge eliminates VM maintenance in exchange for per-hour or per-request pricing.
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'You are hosting one or more backend apps on a VM or Docker Compose host and need HTTPS on port 443.',
+    'You want centralized rate limiting, security headers, and compression in front of multiple services.',
+  ]}
+  avoid={[
+    'Your app is already deployed on a managed edge platform that handles TLS and routing.',
+    'You bind your upstream app to 0.0.0.0:3000 without a firewall, letting clients bypass the proxy.',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Bind the upstream app to loopback or a private network
+    Listen on `127.0.0.1:3000` (or an internal Docker network) so callers cannot bypass the proxy.
+  </Step>
+  <Step>
+    ### Configure ACME TLS and forwarding headers
+    Point DNS `A`/`AAAA` records to the proxy, open ports `80` and `443`, and forward `Host`, `X-Forwarded-For`, and `X-Forwarded-Proto`.
+  </Step>
+  <Step>
+    ### Test renewal and headers
+    Verify `curl -I https://app.example.com` shows a valid certificate and that your app reads `X-Forwarded-Proto` safely only from trusted proxy IPs.
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'Single TLS and security-header boundary in front of any language or framework.',
+    'ACME automates certificate issuance and renewal without manual CSRs.',
+    'Buffers slow clients and serves static/compressed responses efficiently.',
+  ]}
+  cons={[
+    'Self-hosted proxies add a single point of failure unless paired with DNS/LB failover.',
+    'Misconfigured X-Forwarded-For trust lets clients spoof their IP address.',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'Networking Basics',
+      href: '/docs/foundations/networking-basics',
+      summary: 'See the DNS, TCP 3-way handshake, and TLS 1.3 steps that happen before the proxy forwards HTTP.',
+    },
+    {
+      name: 'Kubernetes Service Routing',
+      href: '/docs/kubernetes/service-routing',
+      summary: 'In Kubernetes, an Ingress controller is a reverse proxy managed by cluster manifests.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "Why should your upstream app bind to 127.0.0.1:3000 (or an internal network) when sitting behind Nginx or Caddy?",
+    options: [
+      { label: "So external clients cannot bypass the reverse proxy, TLS, and security headers by hitting port 3000 directly", description: "Binding to loopback or a private network forces all public traffic through port 443 on the proxy.", correct: true },
+      { label: "Nginx cannot proxy to 0.0.0.0", description: "Nginx can proxy to any reachable IP, but exposing 0.0.0.0:3000 publicly bypasses the proxy." },
+      { label: "ACME HTTP-01 challenges require port 3000", description: "ACME HTTP-01 challenges use port 80 on the public proxy." }
+    ]
+  },
+  {
+    question: "What happens if an Nginx reverse proxy omits proxy_set_header X-Forwarded-Proto $scheme;?",
+    options: [
+      { label: "The upstream app sees plain HTTP and may generate http:// redirect URLs or reject secure cookies", description: "Because the proxy terminates TLS, the upstream only sees HTTP unless told the original scheme.", correct: true },
+      { label: "TLS 1.3 fails to negotiate with the browser", description: "TLS happens between the browser and proxy regardless of upstream headers." },
+      { label: "ACME certificate renewal stops working", description: "ACME renewal runs on the proxy, not on upstream proxy_set_header directives." }
+    ]
+  }
+]} />
+
+## Sources
+- [Nginx Documentation: Reverse Proxy](https://docs.nginx.com/nginx/admin-guide/web-server/reverse-proxy/)
+- [Caddy Docs: Automatic HTTPS](https://caddyserver.com/docs/automatic-https)
+- [Let's Encrypt: How It Works](https://letsencrypt.org/how-it-works/)
+- [RFC 8555: Automatic Certificate Management Environment (ACME)](https://datatracker.ietf.org/doc/html/rfc8555)

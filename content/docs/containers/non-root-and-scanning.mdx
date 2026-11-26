@@ -1,0 +1,136 @@
+---
+title: Non-Root Containers & Image Scanning
+description: Harden containers with numeric non-root UIDs, read-only root filesystems, dropped Linux capabilities, minimal base images, and CI vulnerability scanning.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: note
+type: how-to
+level: intermediate
+tags: [docker, security, non-root, trivy, distroless]
+tested_with:
+  docker: "29.4.3"
+  trivy: "0.76.2 (docs)"
+cards:
+  - q: "Why should a Dockerfile specify a numeric UID (such as USER 1001:1001) instead of only a username?"
+    a: "Kubernetes runAsNonRoot: true rejects images whose USER is a name unless it can verify the UID is non-zero without parsing /etc/passwd."
+  - q: "What does running a container with --read-only (or readOnlyRootFilesystem: true) prevent?"
+    a: "It mounts the container root filesystem read-only so attackers or bugs cannot modify binaries, scripts, or config files at runtime."
+  - q: "Why drop ALL Linux capabilities and add back only what is needed?"
+    a: "Default container runtimes still grant several root capabilities (like NET_RAW or CHOWN); dropping ALL enforces least privilege."
+  - q: "What is the main operational difference between Alpine and Distroless base images?"
+    a: "Alpine includes a shell (sh) and apk package manager for debugging, whereas Distroless omits shells and package managers to shrink the attack surface."
+related:
+  - containers/dockerfile-best-practices
+  - containers/multi-stage-nextjs
+  - ci-cd/this-site-pipeline
+sources:
+  - title: "Docker Docs: Building best practices — User"
+    url: https://docs.docker.com/build/building/best-practices/#user
+  - title: "Docker Engine: Runtime privilege and Linux capabilities"
+    url: https://docs.docker.com/engine/containers/run/#runtime-privilege-and-linux-capabilities
+  - title: "Trivy Docs: Container Image Scanning"
+    url: https://trivy.dev/docs/latest/guide/target/container_image/
+  - title: "Kubernetes Docs: Configure a Security Context for a Pod or Container"
+    url: https://kubernetes.io/docs/tasks/configure-pod-container/security-context/
+---
+
+## TL;DR
+Default containers run as `root` with a writable root filesystem and extra Linux capabilities. Run as a **numeric non-root UID**, mount the root filesystem **read-only** (with `--tmpfs` for `/tmp`), **drop `ALL` capabilities**, pick **Alpine or Distroless**, and gate CI with **Trivy** or **Grype**.
+
+## Why it exists
+A container shares the host Linux kernel. If a web framework RCE gives an attacker a shell inside a container running as UID `0`, they own every writable path in the container and hold default kernel capabilities—turning a minor app bug into a much easier container escape or lateral-movement pivot.
+
+## Mental model
+Container hardening works in four independent layers:
+
+| Layer | Control | What it blocks |
+|---|---|---|
+| **Identity** | `USER 1001:1001` (numeric UID/GID) | Root ownership inside the container; satisfies Kubernetes `runAsNonRoot: true` |
+| **Filesystem** | `--read-only` + `--tmpfs /tmp` | Runtime binary tampering and webshell drops on `/` |
+| **Kernel surface** | `--cap-drop=ALL` (`--security-opt=no-new-privileges`) | Privileged syscalls and setuid escalation |
+| **Image contents** | Multi-stage + Alpine/Distroless + Trivy/Grype | Unneeded shells, compilers, and known OS/library CVEs |
+
+### Distroless vs Alpine
+- **Alpine (`node:22-alpine3.21`):** ~5 MB base with `musl` libc, `busybox`, `sh`, and `apk`. Easy to debug (`docker exec -it ... sh`), though `musl` can occasionally differ from `glibc` for native C/C++ addons.
+- **Distroless (`gcr.io/distroless/nodejs22-debian12`):** `glibc`-based with **no shell and no package manager**. Smaller CVE count and harder for an attacker to run post-exploitation commands, at the cost of needing ephemeral debug containers (`kubectl debug`) for troubleshooting.
+
+## Do it
+
+### 1. Numeric non-root `USER` in the Dockerfile
+Look at `labs/docker-multistage-next/Dockerfile` in this repo—it creates `nextjs` at UID `1001` and switches before `CMD`:
+
+```dockerfile
+# Snippet adapted from labs/docker-multistage-next/Dockerfile
+RUN addgroup -g 1001 -S nodejs \
+  && adduser -S nextjs -u 1001 -G nodejs
+
+COPY --from=deps --chown=nextjs:nodejs /app/node_modules ./node_modules
+COPY --chown=nextjs:nodejs server.mjs ./
+
+USER 1001:1001
+```
+
+### 2. Run with read-only rootfs and dropped capabilities
+```bash
+# not run (example runtime hardening flags)
+docker run --rm -p 3000:3000 \
+  --read-only \
+  --tmpfs /tmp:rw,noexec,nosuid,size=64m \
+  --cap-drop=ALL \
+  --security-opt=no-new-privileges:true \
+  mt-multistage-next:lab
+```
+
+### 3. Scan the built image in CI with Trivy or Grype
+Trivy scans both OS packages (`apk`/`dpkg`/`rpm`) and language lockfiles (`package-lock.json`, `node_modules`) for known CVEs and accidentally baked secrets:
+
+```bash
+# not run (trivy/grype not installed on this workstation)
+docker build -t mt-multistage-next:lab labs/docker-multistage-next
+trivy image --severity HIGH,CRITICAL --ignore-unfixed --exit-code 1 mt-multistage-next:lab
+```
+
+In GitHub Actions, fail the build on fixable `HIGH` or `CRITICAL` vulnerabilities, or upload SARIF to the repository Security tab so every CVE is tracked without blocking unrelated PRs during an upstream outage.
+
+## When you DON'T need this
+- **Static sites with no container runtime:** This site builds to static assets served on an edge network—there is no Linux container in production to harden.
+- **Ephemeral local build/test containers:** During local unit tests or throwaway `docker build` stages, `--read-only` and `--cap-drop=ALL` add friction without meaningful risk reduction.
+- **Cost / complexity trade-off:** Numeric `USER` + `--cap-drop=ALL` are nearly free once set up. Distroless and strict `--read-only` cost debugging convenience (no `sh`, explicit `tmpfs` mounts for Next.js `.next/cache` or `/tmp`), and strict Trivy `--exit-code 1` gates can block urgent deploys when a zero-day CVE has no upstream patch yet (mitigate with `--ignore-unfixed`).
+
+## Gotchas
+- **`USER nextjs` without a numeric UID in Kubernetes:** `runAsNonRoot: true` fails with `CreateContainerConfigError` because kubelet cannot verify a username maps to a non-zero UID without inspecting `/etc/passwd`. Always use `USER 1001:1001` or set `runAsUser: 1001` in the Pod `securityContext`.
+- **Apps that write to `/tmp` or cache dirs under `--read-only`:** Next.js, Nginx, and Node tools often write temp files; mount explicit writable `tmpfs` or `emptyDir` volumes for those paths.
+- **Scanning without `--ignore-unfixed`:** Failing CI on unpatched OS CVEs halts releases when there is literally no upgrade available.
+
+## Production checklist
+- [ ] Final stage sets a numeric `USER <uid>:<gid>` (not `0`).
+- [ ] Runtime drops `ALL` Linux capabilities and enables `no-new-privileges`.
+- [ ] Root filesystem is read-only, with explicit `tmpfs`/`emptyDir` mounts for `/tmp` or cache paths.
+- [ ] Base image is minimal (`alpine`, `slim`, or `distroless`) and pinned by tag or digest.
+- [ ] CI scans every built image with Trivy or Grype on push and on a nightly schedule (new CVEs appear after build time).
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "Why does Kubernetes reject a container with USER appuser when runAsNonRoot: true is set?",
+    options: [
+      { label: "kubelet requires a numeric UID to verify the user is non-zero without reading /etc/passwd", description: "Setting USER 1001:1001 in the Dockerfile or runAsUser: 1001 in Pod securityContext satisfies runAsNonRoot.", correct: true },
+      { label: "Kubernetes does not support the Dockerfile USER instruction", description: "Kubernetes honours numeric USER directives from the image config." },
+      { label: "appuser is a reserved root alias in Alpine Linux", description: "Only UID 0 is root; the issue is that a name cannot be verified as non-zero statically." }
+    ]
+  },
+  {
+    question: "Why add --ignore-unfixed when gating a CI pipeline with trivy image --exit-code 1?",
+    options: [
+      { label: "To avoid failing builds on CVEs that have no upstream patch available yet", description: "Unfixed CVEs cannot be resolved by rebuilding; tracking them in SARIF while gating on fixable HIGH/CRITICAL CVEs keeps deploys moving.", correct: true },
+      { label: "To skip scanning node_modules dependencies", description: "--ignore-unfixed applies to all scanners based on fix availability, not just OS packages." },
+      { label: "To disable Trivy's secret scanner", description: "Use --scanners vuln to disable secret scanning; --ignore-unfixed filters vulnerabilities without a fixed version." }
+    ]
+  }
+]} />
+
+## Sources
+- [Docker Docs: Building best practices — User](https://docs.docker.com/build/building/best-practices/#user)
+- [Docker Engine: Runtime privilege and Linux capabilities](https://docs.docker.com/engine/containers/run/#runtime-privilege-and-linux-capabilities)
+- [Trivy Docs: Container Image Scanning](https://trivy.dev/docs/latest/guide/target/container_image/)
+- [Kubernetes Docs: Configure a Security Context for a Pod or Container](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/)

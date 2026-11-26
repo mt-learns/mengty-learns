@@ -1,0 +1,189 @@
+---
+title: "Kubernetes Probes: Liveness, Readiness, Startup"
+description: How livenessProbe, readinessProbe, and startupProbe differ, what each failure triggers, and how failing readiness removes a Pod from EndpointSlices.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: concept
+type: explanation
+level: intermediate
+tags: [kubernetes, probes, readiness, liveness, endpointslices]
+tested_with:
+  kubernetes: "1.37 (docs)"
+cards:
+  - q: "What does kubelet do when a container's readinessProbe fails?"
+    a: "It keeps the container running and marks the Pod Ready=False, so the EndpointSlice removes the Pod's IP and the Service stops sending it traffic."
+  - q: "What does kubelet do when a container's livenessProbe fails?"
+    a: "It kills and restarts the container (incrementing RESTARTS and potentially hitting CrashLoopBackOff)."
+  - q: "When should you add a startupProbe?"
+    a: "For slow-starting apps (such as JVM or large model loaders) so livenessProbe and readinessProbe do not kill or fail the container before startup finishes."
+  - q: "Why should a readinessProbe usually avoid checking external shared databases on every tick?"
+    a: "If the database blips, every Pod fails readiness at once, removing all endpoints and causing a total outage instead of serving cached/degraded responses."
+related:
+  - kubernetes/service-routing
+  - kubernetes/pods-deployments
+  - kubernetes/kubectl-apply
+sources:
+  - title: "Kubernetes Docs: Liveness, Readiness, and Startup Probes"
+    url: https://kubernetes.io/docs/concepts/configuration/liveness-readiness-startup-probes/
+  - title: "Kubernetes Docs: Configure Liveness, Readiness and Startup Probes"
+    url: https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/
+  - title: "Kubernetes Docs: EndpointSlices"
+    url: https://kubernetes.io/docs/concepts/services-networking/endpoint-slices/
+---
+
+## TL;DR
+**Readiness** controls *traffic* (failure removes the Pod from `EndpointSlices` without restarting it), **liveness** controls *restarts* (failure kills a deadlocked container), and **startup** protects *slow boots* by delaying liveness and readiness until the first success.
+
+## Intent
+<Intent>
+Separate traffic-gating (`readinessProbe`) from process-restarting (`livenessProbe`) and slow-boot protection (`startupProbe`) so you don't trigger restart loops or cascading outages.
+</Intent>
+
+## Problem
+Without probes, Kubernetes assumes a Pod is ready the millisecond its container process starts—sending user traffic to an app that is still warming caches or loading config. Conversely, putting a heavy database check inside `livenessProbe` causes kubelet to restart every Pod in the fleet whenever the database has a 5-second hiccup.
+
+## Solution
+| Probe | Failure action | Use it for |
+|---|---|---|
+| **`readinessProbe`** | Sets `Ready=False`; removes Pod IP from `EndpointSlice` | Temporary inability to serve traffic (warming up, draining, overloaded) |
+| **`livenessProbe`** | Kills and restarts the container | Unrecoverable deadlocks where only a restart fixes the process |
+| **`startupProbe`** | Delays liveness & readiness; kills container if `failureThreshold` expires | Legacy/heavy apps that take 30–120s to boot |
+
+## Real-world analogy
+<Analogy>
+A **startupProbe** is waiting for a chef to finish preheating the oven before opening; a **readinessProbe** is flipping the door sign to "Be right back" when the kitchen is temporarily backed up; and a **livenessProbe** is calling the manager to restart the shift because the kitchen has completely frozen.
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="kubernetes-probes"
+  title="Failing Readiness Probe → Removed from EndpointSlice → No Traffic"
+  nodes={[
+    { id: 'kubelet', label: 'kubelet', subtitle: 'Runs HTTP probe', icon: 'gateway', category: 'edge', rank: 0, order: 0 },
+    { id: 'pod', label: 'Pod B', subtitle: 'Readiness fails', icon: 'pod', category: 'service', rank: 1, order: 0, variant: 'problem' },
+    { id: 'ep', label: 'EndpointSlice', subtitle: 'Drops Pod B IP', icon: 'service', category: 'concrete', rank: 2, order: 0 },
+    { id: 'svc', label: 'Service', subtitle: 'Routes to healthy', icon: 'service', category: 'network', rank: 3, order: 0 },
+  ]}
+  steps={[
+    { edge: 'kubelet->pod', title: 'kubelet probes /readyz', text: 'kubelet sends an HTTP GET /readyz request to Pod B every periodSeconds.', label: '/readyz' },
+    { edge: 'pod->kubelet', title: 'Pod B returns 503', text: 'Pod B fails the check; kubelet marks Pod B Ready=False (container keeps running).', kind: 'error', label: '503' },
+    { edge: 'kubelet->ep', title: 'Remove IP from EndpointSlice', text: 'Control plane updates the EndpointSlice to exclude Pod B from ready addresses.', label: 'Remove IP' },
+    { edge: 'ep->svc', title: 'Service skips Pod B', text: 'kube-proxy updates node rules so Service traffic routes only to remaining Ready Pods.', kind: 'response', label: 'No traffic' },
+  ]}
+/>
+
+## Code
+Minimal Deployment probe configuration for an HTTP service (such as `labs/docker-multistage-next` serving `/healthz`):
+
+```yaml
+# Partial Pod container spec (not run against a cluster)
+containers:
+  - name: web
+    image: ghcr.io/example/web:1.0.0
+    ports:
+      - containerPort: 3000
+    startupProbe:
+      httpGet:
+        path: /healthz
+        port: 3000
+      failureThreshold: 12
+      periodSeconds: 5
+    readinessProbe:
+      httpGet:
+        path: /readyz
+        port: 3000
+      periodSeconds: 5
+      failureThreshold: 2
+    livenessProbe:
+      httpGet:
+        path: /healthz
+        port: 3000
+      periodSeconds: 15
+      failureThreshold: 3
+```
+
+## When you DON'T need this
+- **Non-Kubernetes platforms:** Static sites on Cloudflare Workers/Pages, Docker Compose (`HEALTHCHECK`), or serverless functions don't use Kubernetes probes or `EndpointSlices`.
+- **Kubernetes `Job` / `CronJob` batch Pods:** Batch jobs run to completion and exit; they don't serve Service traffic and shouldn't have `readinessProbe` or `livenessProbe`.
+- **Cost / complexity trade-off:** Probes cost almost nothing in CPU (a lightweight `/healthz` handler returning `200 OK` takes microseconds), but poorly tuned timeouts (`timeoutSeconds: 1` on a GC-pausing app) or DB-coupled liveness probes can cause self-inflicted outages. Keep `/healthz` cheap and local to the process.
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'Every long-running Kubernetes Deployment behind a Service should define a readinessProbe.',
+    'Add startupProbe if cold start can exceed liveness initialDelaySeconds.',
+  ]}
+  avoid={[
+    'Checking external databases or third-party APIs inside livenessProbe (causes cascading restarts).',
+    'Setting identical aggressive thresholds for liveness and readiness.',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Expose cheap local health endpoints
+    Have `/healthz` verify the process event loop is alive (no external DB calls) and `/readyz` verify local initialization is complete.
+  </Step>
+  <Step>
+    ### Configure `readinessProbe` first
+    Set `periodSeconds` and `failureThreshold` so rolling updates only shift traffic once new Pods are ready.
+  </Step>
+  <Step>
+    ### Add `startupProbe` for slow starters
+    Use `startupProbe` instead of a huge `initialDelaySeconds` on `livenessProbe` so fast boots become ready immediately while slow boots aren't killed.
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'Zero-downtime rolling updates: new Pods receive traffic only after passing readiness.',
+    'Self-healing for wedged processes via livenessProbe.',
+  ]}
+  cons={[
+    'Badly designed liveness probes (calling external DBs) turn brief downstream blips into CrashLoopBackOff storms.',
+    'Too-tight timeoutSeconds can fail under normal GC or CPU spikes.',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'Service Routing: Ingress → Service → Pod',
+      href: '/docs/kubernetes/service-routing',
+      summary: 'See how EndpointSlices feed kube-proxy DNAT rules for Ready Pods.',
+    },
+    {
+      name: 'Pods, ReplicaSets, and Deployments',
+      href: '/docs/kubernetes/pods-deployments',
+      summary: 'Understand how Deployment rolling updates rely on Pod readiness.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "A Pod's readinessProbe fails 3 times, while its livenessProbe continues to pass. What happens?",
+    options: [
+      { label: "The container keeps running, Ready becomes False, and the Pod IP is removed from the Service's EndpointSlice", description: "Readiness failures stop new Service traffic without killing the container.", correct: true },
+      { label: "kubelet immediately kills and restarts the container", description: "Only livenessProbe (or startupProbe) failures restart a container." },
+      { label: "The Deployment deletes the Pod permanently", description: "Deployments do not delete unready Pods; they keep them running so they can recover." }
+    ]
+  },
+  {
+    question: "Why is querying Postgres inside a livenessProbe usually an anti-pattern?",
+    options: [
+      { label: "A brief Postgres outage makes every Pod fail liveness and restart simultaneously, worsening the recovery storm", description: "Keep liveness checks local to the process; restarting healthy app Pods won't fix Postgres.", correct: true },
+      { label: "kubelet cannot run HTTP probes on ports other than 80", description: "kubelet probes any configured container port." },
+      { label: "livenessProbe only supports TCP sockets", description: "livenessProbe supports HTTP GET, gRPC, TCP, and exec." }
+    ]
+  }
+]} />
+
+## Sources
+- [Kubernetes Docs: Liveness, Readiness, and Startup Probes](https://kubernetes.io/docs/concepts/configuration/liveness-readiness-startup-probes/)
+- [Kubernetes Docs: Configure Liveness, Readiness and Startup Probes](https://kubernetes.io/docs/tasks/configure-pod-container/configure-liveness-readiness-startup-probes/)
+- [Kubernetes Docs: EndpointSlices](https://kubernetes.io/docs/concepts/services-networking/endpoint-slices/)

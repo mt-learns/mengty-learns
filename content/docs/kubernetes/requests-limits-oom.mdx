@@ -1,0 +1,119 @@
+---
+title: "Requests, Limits, QoS & OOMKilled"
+description: How Kubernetes CPU/memory requests and limits shape QoS classes, CPU throttling vs OOMKilled (exit 137), plus a fictional training postmortem example.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: note
+type: explanation
+level: intermediate
+tags: [kubernetes, resources, oomkilled, qos, postmortem]
+tested_with:
+  kubernetes: "1.37 (docs)"
+cards:
+  - q: "What is the difference between resource requests and limits in Kubernetes?"
+    a: "Requests are what kube-scheduler guarantees when placing a Pod on a node; limits are the hard ceiling enforced by cgroups on the node."
+  - q: "What happens when a container exceeds its CPU limit vs its memory limit?"
+    a: "Exceeding CPU limit causes CFS CPU throttling (slower, no restart); exceeding memory limit triggers the kernel OOM killer (OOMKilled, exit code 137)."
+  - q: "What are the three Kubernetes Pod QoS classes?"
+    a: "Guaranteed (requests == limits for CPU and memory on all containers), Burstable (at least one request/limit set, not Guaranteed), and BestEffort (no requests or limits)."
+  - q: "In what order does kubelet evict Pods when a node runs low on memory?"
+    a: "BestEffort first, then Burstable exceeding requests, and Guaranteed last."
+related:
+  - kubernetes/pods-deployments
+  - foundations/linux-processes-signals
+  - kubernetes/kubectl-cheatsheet
+sources:
+  - title: "Kubernetes Docs: Resource Management for Pods and Containers"
+    url: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
+  - title: "Kubernetes Docs: Pod Quality of Service Classes"
+    url: https://kubernetes.io/docs/concepts/workloads/pods/pod-qos/
+  - title: "Kubernetes Docs: Assign Memory Resources to Containers and Pods"
+    url: https://kubernetes.io/docs/tasks/configure-pod-container/assign-memory-resource/
+---
+
+## TL;DR
+**Requests** reserve capacity for scheduling; **limits** cap usage via Linux cgroups. Going over **CPU limits** throttles your app silently; going over **memory limits** triggers **`OOMKilled` (exit `137`)**. Together, requests and limits determine your Pod's **QoS class** (`Guaranteed`, `Burstable`, or `BestEffort`).
+
+## Why it exists
+Without resource boundaries, one memory-leaking Pod can starve every other Pod on the same node, causing node-wide kernel OOM kills and cascading evictions. Requests let `kube-scheduler` bin-pack Pods safely; limits isolate noisy neighbors.
+
+## Mental model
+
+### 1. Compressible (CPU) vs Incompressible (Memory)
+- **CPU (`requests.cpu` / `limits.cpu`):** Compressible. If a container hits `limits.cpu`, the Linux CFS quota throttles it until the next 100 ms period—requests get slower, but the Pod is **not** killed.
+- **Memory (`requests.memory` / `limits.memory`):** Incompressible. If a container exceeds `limits.memory`, the kernel OOM killer terminates it with **`SIGKILL` (`OOMKilled`, exit `137`)**.
+
+### 2. QoS classes
+| QoS Class | Condition | Eviction priority under node pressure |
+|---|---|---|
+| **`Guaranteed`** | Every container sets `requests == limits` for both CPU and memory | Evicted **last** |
+| **`Burstable`** | At least one container sets a request or limit, but not `Guaranteed` | Evicted **second** |
+| **`BestEffort`** | Zero CPU/memory requests or limits anywhere in the Pod | Evicted **first** |
+
+## Do it
+Set realistic memory `requests == limits` (to avoid surprise node-pressure OOMs) and inspect OOM events with `kubectl describe pod`:
+
+```yaml
+# Partial Pod container spec (not run against a cluster)
+resources:
+  requests:
+    cpu: "250m"
+    memory: "512Mi"
+  limits:
+    memory: "512Mi"
+    # Many teams omit limits.cpu (or set it generously) to avoid CFS throttling spikes
+```
+
+```bash
+# Check if a Pod was OOMKilled (not run)
+kubectl describe pod web-7d9f8c-abc12 | grep -A5 "Last State"
+```
+
+## Postmortem example (fictional training scenario)
+> **Note:** The incident below is a **fictional training scenario** written to illustrate the `kind: postmortem` structure—it is not a real outage of this site.
+
+- **Incident:** `api-reports` Pods entered `CrashLoopBackOff` with `Reason: OOMKilled` (`Exit Code: 137`) every Monday at 09:00 UTC.
+- **Root cause:** A weekly CSV export loaded the entire query result into memory (`~680 MiB` peak) inside a container with `limits.memory: 512Mi`.
+- **Detection & mitigation:** `kubelet` emitted `OOMKilled`; on-call rolled back/bumped `limits.memory` to `1Gi` temporarily to restore service.
+- **Permanent fix:** Streamed the SQL cursor directly to the HTTP response (constant ~40 MiB memory) and added a memory saturation alert at 80% of `limits.memory`.
+
+## When you DON'T need this
+- **Static sites and serverless isolates (like this site):** Cloudflare Workers / static asset hosting enforces fixed per-isolate memory caps in the platform—there are no Kubernetes `requests`, `limits`, or QoS classes to tune.
+- **Single-tenant dev clusters:** On a local `kind` or `minikube` cluster with plenty of RAM, omit strict `limits.cpu` so builds and dev servers aren't artificially throttled.
+- **Cost / complexity trade-off:** Over-sized `requests` waste cloud money on idle node CPU/RAM; under-sized `limits.memory` cause `OOMKilled` crashes. Use vertical/historical metrics (VPA recommendations or 7-day p99 memory usage) to right-size requests rather than guessing.
+
+## Gotchas
+- **Exit code `137` isn't always OOMKilled:** `137` means `SIGKILL` (`128 + 9`), which happens on both `OOMKilled` and `terminationGracePeriodSeconds` timeout. Always check `Last State: Terminated (Reason: OOMKilled)` in `kubectl describe pod`.
+- **Node.js / JVM ignoring cgroup limits (older runtimes):** Always ensure your runtime respects container cgroup memory limits (modern Node 22+ and JVM 17+/21+ do; set `--max-old-space-size` explicitly if needed so Node GCs before hitting the hard cgroup limit).
+- **Tight `limits.cpu` causing mysterious p99 latency spikes:** Even when node CPU is 70% idle, a strict `limits.cpu: 200m` throttles bursty startup or JSON parsing.
+
+## Production checklist
+- [ ] Every production Pod sets `requests.cpu` and `requests.memory` (no `BestEffort` workloads in prod).
+- [ ] `limits.memory` equals `requests.memory` (or is sized within node capacity) so OOMs are predictable.
+- [ ] Alerts watch container memory working-set approaching `limits.memory` (e.g., > 85%).
+- [ ] Node.js / JVM heap flags leave headroom below `limits.memory` for native/off-heap buffers.
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "A container briefly uses more CPU than its limits.cpu value while the node has plenty of spare CPU. What does Kubernetes do?",
+    options: [
+      { label: "Linux CFS throttles the container's CPU time until the next quota period, without killing it", description: "CPU is compressible: exceeding limits.cpu causes throttling (latency), never OOMKilled.", correct: true },
+      { label: "kubelet terminates the container with OOMKilled (exit 137)", description: "OOMKilled only happens when exceeding memory limits." },
+      { label: "kube-scheduler immediately moves the Pod to a larger node", description: "kube-scheduler never live-migrates running Pods." }
+    ]
+  },
+  {
+    question: "Which Pod QoS class is evicted FIRST when a Kubernetes node runs out of memory?",
+    options: [
+      { label: "BestEffort (Pods with no CPU or memory requests/limits)", description: "Eviction order under memory pressure is BestEffort -> Burstable -> Guaranteed.", correct: true },
+      { label: "Guaranteed (Pods where requests == limits for CPU and memory)", description: "Guaranteed Pods are evicted last." },
+      { label: "Burstable", description: "Burstable Pods are evicted after BestEffort Pods." }
+    ]
+  }
+]} />
+
+## Sources
+- [Kubernetes Docs: Resource Management for Pods and Containers](https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/)
+- [Kubernetes Docs: Pod Quality of Service Classes](https://kubernetes.io/docs/concepts/workloads/pods/pod-qos/)
+- [Kubernetes Docs: Assign Memory Resources to Containers and Pods](https://kubernetes.io/docs/tasks/configure-pod-container/assign-memory-resource/)
