@@ -1,3 +1,6 @@
 {
-    "title":  "Iac"
+  "title": "IaC",
+  "pages": [
+    "first-project"
+  ]
 }

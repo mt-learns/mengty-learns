@@ -1,0 +1,109 @@
+---
+title: OpenTofu First Project
+description: Write and run a self-contained OpenTofu project using only the local and random providers with variables and outputs.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: lab
+type: tutorial
+level: beginner
+tags: [iac, opentofu, terraform, providers]
+tested_with:
+  opentofu: "1.8+ (CI-validated)"
+cards:
+  - q: "What does tofu init do in a new OpenTofu project?"
+    a: "It initializes the working directory, configures the backend, and downloads the required provider plugins declared in required_providers."
+  - q: "What is the difference between tofu plan and tofu apply?"
+    a: "tofu plan previews the changes OpenTofu will make without modifying resources, while tofu apply executes the plan and updates state."
+  - q: "Why declare required_providers with version constraints in versions.tf?"
+    a: "To ensure everyone and CI install compatible provider versions instead of pulling breaking major releases."
+  - q: "Why should *.tfstate and .terraform/ be listed in .gitignore?"
+    a: ".terraform/ holds downloaded provider binaries and *.tfstate can contain sensitive resource attributes and local state."
+related:
+  - containers/multi-stage-nextjs
+  - kubernetes/service-routing
+sources:
+  - title: "OpenTofu Docs: Configuration Language — Providers"
+    url: https://opentofu.org/docs/language/providers/configuration/
+  - title: "OpenTofu Docs: CLI — init, plan, apply"
+    url: https://opentofu.org/docs/cli/commands/
+---
+
+### TL;DR
+You can learn OpenTofu's full `init` → `plan` → `apply` → `output` → `destroy` lifecycle locally without any cloud account by combining the `hashicorp/random` and `hashicorp/local` providers.
+
+## Why it exists
+Learning Infrastructure as Code directly against a cloud account risks surprise bills and credential setup friction. Using `local` and `random` providers lets you practice declarative resources, input variables, outputs, and state management on your laptop and in CI.
+
+## Mental model
+An OpenTofu root module splits responsibilities cleanly across four files:
+
+1. **`versions.tf`** — pins OpenTofu (`>= 1.8.0`) and provider versions (`hashicorp/local`, `hashicorp/random`).
+2. **`variables.tf`** — declares typed inputs (`project_name`, `environment`, `output_dir`) with defaults.
+3. **`main.tf`** — declares desired resources (`random_pet.slug` and `local_file.manifest`), which OpenTofu orders automatically via the dependency graph.
+4. **`outputs.tf`** — exports values (`pet_slug`, `manifest_path`) after apply.
+
+<LabLink
+  name="tofu-local-file"
+  description="Self-contained OpenTofu lab using local and random providers with variables, outputs, and .gitignore."
+  command="tofu -chdir=labs/tofu-local-file init -backend=false && tofu -chdir=labs/tofu-local-file validate"
+/>
+
+## Do it
+Run the full lifecycle inside `labs/tofu-local-file`:
+
+```bash
+cd labs/tofu-local-file
+
+# 1. Download providers
+tofu init
+
+# 2. Check formatting and configuration syntax
+tofu fmt -check
+tofu validate
+
+# 3. Preview and apply with a variable override
+tofu plan -var="environment=dev"
+tofu apply -auto-approve -var="environment=dev"
+
+# 4. Inspect outputs and the generated JSON file
+tofu output
+cat generated/mengty-learns-dev.json
+
+# 5. Clean up managed resources
+tofu destroy -auto-approve -var="environment=dev"
+```
+
+## Gotchas
+- **Committing `.terraform/` or `*.tfstate`:** Provider binaries are large and platform-specific, and state files belong in a remote backend or `.gitignore` for local labs.
+- **Skipping `tofu fmt -check`:** CI checks formatting with `tofu fmt -check -recursive`; run `tofu fmt` before committing `.tf` changes.
+- **Unpinned providers:** Without `version` constraints in `required_providers`, `tofu init` can pull a new major provider version and break CI.
+
+## Production checklist
+- [ ] Pin `required_version` and `required_providers` in `versions.tf`.
+- [ ] Document every `variable` and `output` with a `description`.
+- [ ] Keep `.terraform/`, `*.tfstate`, and generated artifacts in `.gitignore`.
+- [ ] Run `tofu fmt -check`, `tofu validate`, and `tflint` in CI.
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "Which command downloads the local and random provider plugins before you can run tofu validate?",
+    options: [
+      { label: "tofu init", description: "tofu init initializes the working directory and installs required providers.", correct: true },
+      { label: "tofu plan", description: "tofu plan requires providers to already be initialized." },
+      { label: "tofu fmt", description: "tofu fmt only formats .tf files." }
+    ]
+  },
+  {
+    question: "How does OpenTofu know to create random_pet.slug before local_file.manifest?",
+    options: [
+      { label: "Implicit dependency: local_file.manifest references random_pet.slug.id", description: "OpenTofu builds a dependency graph from resource attribute references.", correct: true },
+      { label: "Alphabetical order of resource names", description: "Resource names do not control execution order." },
+      { label: "Line order inside main.tf", description: "HCL is declarative; file/line order does not dictate apply order." }
+    ]
+  }
+]} />
+
+## Sources
+- [OpenTofu Docs: Providers Configuration](https://opentofu.org/docs/language/providers/configuration/)
+- [OpenTofu Docs: CLI Commands](https://opentofu.org/docs/cli/commands/)

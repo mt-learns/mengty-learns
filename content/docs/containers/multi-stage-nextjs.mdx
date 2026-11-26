@@ -1,0 +1,104 @@
+---
+title: Multi-Stage Builds for Next.js
+description: Build a minimal production Node/Next.js-style container with a two-stage Dockerfile, non-root user, and .dockerignore.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: lab
+type: tutorial
+level: beginner
+tags: [docker, containers, multi-stage, nextjs, security]
+tested_with:
+  docker: "29.4.3"
+  node: "22.22.3"
+cards:
+  - q: "What is the main benefit of a multi-stage Dockerfile?"
+    a: "It separates build-time dependencies and tools from the final runtime image, keeping the production image smaller and reducing its attack surface."
+  - q: "Why should a production container run with a non-root USER instruction?"
+    a: "Running as an unprivileged UID limits blast radius if the application process is compromised."
+  - q: "How do you copy artifacts from an earlier build stage into the final stage?"
+    a: "Use COPY --from=<stage-name> <src> <dest>."
+  - q: "Why include --chown=nextjs:nodejs on COPY in the runner stage?"
+    a: "So the non-root user owns the copied files without needing an extra chmod/chown layer."
+related:
+  - containers/image-layers-cache
+  - containers/docker-basics
+sources:
+  - title: "Docker Docs: Multi-stage builds"
+    url: https://docs.docker.com/build/building/multi-stage/
+  - title: "Docker Docs: Dockerfile reference — USER"
+    url: https://docs.docker.com/reference/dockerfile/#user
+---
+
+### TL;DR
+A multi-stage `Dockerfile` uses one stage (`deps`) to install dependencies and a clean final stage (`runner`) that copies only what is needed to run the app as a non-root user (`nextjs`, UID `1001`).
+
+## Why it exists
+Shipping compilers, package managers, devDependencies, and build caches inside a production container bloats image size and leaves extra binaries for an attacker to abuse. Multi-stage builds discard everything except the artifacts you explicitly `COPY --from=...` into the final stage.
+
+## Mental model
+Think of the `deps` stage as the workshop and the `runner` stage as the shipping crate:
+
+1. **`deps` (`node:22-alpine3.21`)** — installs production dependencies with `package.json` copied first for cache hits.
+2. **`runner` (`node:22-alpine3.21`)** — creates group `nodejs` and user `nextjs` (`UID 1001`), copies runtime files with `--chown=nextjs:nodejs`, switches to `USER nextjs`, and starts `node server.mjs`.
+
+<LabLink
+  name="docker-multistage-next"
+  description="Complete minimal HTTP server, multi-stage Dockerfile, .dockerignore, and step-by-step README."
+  command="docker build -t mt-multistage-next:lab labs/docker-multistage-next"
+/>
+
+## Do it
+Build the image, run it in the background, verify the `/healthz` endpoint and container UID, then clean up:
+
+```bash
+# 1. Build the multi-stage image
+docker build -t mt-multistage-next:lab labs/docker-multistage-next
+
+# 2. Run the container on port 3000
+docker run --rm -d --name mt-next-lab -p 3000:3000 mt-multistage-next:lab
+
+# 3. Verify HTTP response and non-root user
+curl -s http://localhost:3000/healthz
+# {"status":"ok"}
+docker exec mt-next-lab id
+# uid=1001(nextjs) gid=1001(nodejs) groups=1001(nodejs)
+
+# 4. Cleanup
+docker rm -f mt-next-lab
+docker rmi mt-multistage-next:lab
+```
+
+## Gotchas
+- **Forgetting `--chown` on `COPY`:** Files copied from an earlier stage default to `root:root`. If the app needs to write to a directory at runtime, `USER nextjs` will fail with `EACCES` unless ownership is set.
+- **Using `node:latest`:** Always pin a specific release/variant tag like `node:22-alpine3.21` so CI and local builds use the same runtime.
+- **Running `hadolint`:** `hadolint` flags missing version pins, `latest` tags, and uncleaned caches—keep your `Dockerfile` clean so CI passes.
+
+## Production checklist
+- [ ] Separate dependency/build stages from the minimal `runner` stage.
+- [ ] Create and switch to a non-root `USER` before `CMD`.
+- [ ] Exclude `.git`, `node_modules`, and docs via `.dockerignore`.
+- [ ] Pin base image tags (`node:22-alpine3.21`) and validate with `hadolint`.
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "What does COPY --from=deps --chown=nextjs:nodejs /app/package.json ./ accomplish?",
+    options: [
+      { label: "It copies package.json from the deps stage and sets ownership to nextjs:nodejs in one layer", description: "Avoids a separate chown layer and ensures the non-root user owns the file.", correct: true },
+      { label: "It pulls package.json from Docker Hub", description: "--from=deps references an earlier stage in the same Dockerfile." },
+      { label: "It installs devDependencies into the runner stage", description: "COPY only copies files; it does not run npm install." }
+    ]
+  },
+  {
+    question: "Why does the runner stage create a nextjs user (UID 1001) and set USER nextjs?",
+    options: [
+      { label: "So the container process runs without root privileges", description: "Least-privilege execution reduces impact if the app is compromised.", correct: true },
+      { label: "Because Node.js refuses to bind port 3000 as root", description: "Node can bind any port as root, but running as root is a security risk." },
+      { label: "To enable Docker layer caching", description: "Layer caching works regardless of the USER instruction." }
+    ]
+  }
+]} />
+
+## Sources
+- [Docker Docs: Multi-stage builds](https://docs.docker.com/build/building/multi-stage/)
+- [Docker Docs: Dockerfile reference — USER](https://docs.docker.com/reference/dockerfile/#user)
