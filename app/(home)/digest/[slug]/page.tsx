@@ -8,6 +8,10 @@ import { GroupedList } from '@/components/ios/grouped-list';
 import { getMDXComponents } from '@/components/mdx';
 import { digestSource } from '@/lib/source';
 
+// Only the slugs from generateStaticParams exist; anything else is a static 404
+// instead of an on-demand render in the Worker.
+export const dynamicParams = false;
+
 export function generateStaticParams() {
   return digestSource.getPages().map((page) => ({
     slug: page.slugs[0],

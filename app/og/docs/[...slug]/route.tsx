@@ -5,6 +5,10 @@ import { appName, getPageImageUrl } from '@/lib/shared';
 
 export const revalidate = false;
 
+// Only the slugs from generateStaticParams exist; anything else is a 404 instead of
+// an on-demand render in the Worker.
+export const dynamicParams = false;
+
 export async function GET(_req: Request, { params }: { params: Promise<{ slug: string[] }> }) {
   const resolvedParams = await params;
   const { slug } = resolvedParams;

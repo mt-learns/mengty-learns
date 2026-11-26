@@ -2,7 +2,7 @@ import js from '@eslint/js';
 
 export default [
   {
-    ignores: ['out/**', '.next/**', '.source/**', 'node_modules/**', 'public/cards.json'],
+    ignores: ['out/**', '.next/**', '.open-next/**', '.wrangler/**', '.source/**', 'node_modules/**', 'public/cards.json'],
   },
   js.configs.recommended,
   {

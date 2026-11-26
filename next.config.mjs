@@ -5,8 +5,10 @@ const withMDX = createMDX();
 
 /** @type {import('next').NextConfig} */
 const config = {
-  // No `output: 'export'`: OpenNext transforms a normal `next build`. Every
-  // route is still pre-rendered at build time (see the route table).
+  // Standalone, not `export`: OpenNext transforms the standalone `next build`
+  // output into a Worker. Every route is still pre-rendered at build time
+  // (scripts/check-static-routes.mjs enforces it).
+  output: 'standalone',
   images: { unoptimized: true },
   trailingSlash: true,
   reactStrictMode: true,
