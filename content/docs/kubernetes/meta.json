@@ -2,6 +2,7 @@
   "title": "Kubernetes",
   "pages": [
     "service-routing",
+    "kubectl-apply",
     "pods-deployments",
     "kubectl-cheatsheet"
   ],
