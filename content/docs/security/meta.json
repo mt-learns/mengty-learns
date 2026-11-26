@@ -1,7 +1,21 @@
 {
   "title": "Security",
   "pages": [
-    "owasp-top-10"
+    "owasp-top-10",
+    "asvs-5-overview",
+    "threat-modeling",
+    "authn-vs-authz",
+    "passwords",
+    "sessions-vs-jwt",
+    "oauth21-oidc-pkce",
+    "xss-csp",
+    "sql-injection",
+    "csrf-ssrf",
+    "security-headers",
+    "file-uploads",
+    "rate-limiting",
+    "secrets-management",
+    "supply-chain"
   ],
   "icon": "security"
 }
