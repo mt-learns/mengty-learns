@@ -1,0 +1,145 @@
+name: Labs CI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "labs/**"
+      - ".github/workflows/labs.yml"
+  pull_request:
+    paths:
+      - "labs/**"
+      - ".github/workflows/labs.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  docker:
+    name: Docker (hadolint + build)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - name: Find Dockerfiles
+        id: find
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=(labs/*/Dockerfile)
+          echo "has_files=$([[ ${#files[@]} -gt 0 ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Lint Dockerfiles with hadolint
+        if: steps.find.outputs.has_files == 'true'
+        uses: hadolint/hadolint-action@v3.5.0
+        with:
+          recursive: true
+          dockerfile: labs
+
+      - name: Build Docker images (no push)
+        if: steps.find.outputs.has_files == 'true'
+        shell: bash
+        run: |
+          shopt -s nullglob
+          for df in labs/*/Dockerfile; do
+            dir="$(dirname "$df")"
+            name="$(basename "$dir")"
+            echo "::group::docker build $dir"
+            docker build --no-cache -t "lab-${name}:ci" "$dir"
+            echo "::endgroup::"
+          done
+
+  tofu:
+    name: OpenTofu (fmt + validate + tflint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - name: Find Terraform/OpenTofu labs
+        id: find
+        shell: bash
+        run: |
+          shopt -s globstar nullglob
+          files=(labs/**/*.tf)
+          echo "has_files=$([[ ${#files[@]} -gt 0 ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup OpenTofu
+        if: steps.find.outputs.has_files == 'true'
+        uses: opentofu/setup-opentofu@v2.0.2
+
+      - name: Check formatting
+        if: steps.find.outputs.has_files == 'true'
+        run: tofu fmt -check -recursive labs/
+
+      - name: Init and validate
+        if: steps.find.outputs.has_files == 'true'
+        shell: bash
+        run: |
+          shopt -s nullglob
+          for dir in labs/*/; do
+            tf_files=("${dir}"*.tf)
+            if [[ ${#tf_files[@]} -gt 0 ]]; then
+              echo "::group::tofu validate $dir"
+              tofu -chdir="$dir" init -backend=false
+              tofu -chdir="$dir" validate
+              echo "::endgroup::"
+            fi
+          done
+
+      - name: Setup TFLint
+        if: steps.find.outputs.has_files == 'true'
+        uses: terraform-linters/setup-tflint@v6.3.2
+
+      - name: Run TFLint
+        if: steps.find.outputs.has_files == 'true'
+        shell: bash
+        run: |
+          shopt -s nullglob
+          for dir in labs/*/; do
+            tf_files=("${dir}"*.tf)
+            if [[ ${#tf_files[@]} -gt 0 ]]; then
+              echo "::group::tflint $dir"
+              tflint --chdir="$dir"
+              echo "::endgroup::"
+            fi
+          done
+
+  kubernetes:
+    name: Kubernetes (kubeconform)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - name: Find Kubernetes manifests
+        id: find
+        shell: bash
+        run: |
+          shopt -s globstar nullglob
+          files=(labs/**/k8s/*.yaml)
+          echo "has_files=$([[ ${#files[@]} -gt 0 ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+      - name: Install kubeconform
+        if: steps.find.outputs.has_files == 'true'
+        shell: bash
+        run: |
+          curl -sSfL "https://github.com/yannh/kubeconform/releases/download/v0.8.0/kubeconform-linux-amd64.tar.gz" \
+            | tar -xz -C /usr/local/bin kubeconform
+
+      - name: Validate manifests with kubeconform
+        if: steps.find.outputs.has_files == 'true'
+        shell: bash
+        run: |
+          shopt -s globstar nullglob
+          kubeconform -strict -summary labs/**/k8s/*.yaml
+
+  workflows:
+    name: Workflows (actionlint)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - name: Download and run actionlint
+        shell: bash
+        run: |
+          bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
+          ./actionlint -color .github/workflows/*.yml
