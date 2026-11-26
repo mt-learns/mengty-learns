@@ -1,0 +1,156 @@
+---
+title: CI/CD for This Site
+description: How Mengty Learns validates the Next.js static build, tests hands-on labs, and collects weekly RSS inbox items using three GitHub Actions workflows.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: note
+type: how-to
+level: intermediate
+tags: [ci-cd, github-actions, nextjs, labs, automation]
+tested_with:
+  node: "22.22.3"
+  pnpm: "11.6.0"
+cards:
+  - q: "What three checks does .github/workflows/ci.yml run on every push and pull request?"
+    a: "pnpm lint, pnpm typecheck, and pnpm build (after pnpm install --frozen-lockfile)."
+  - q: "How does .github/workflows/labs.yml avoid running Docker or OpenTofu jobs when no matching lab files exist?"
+    a: "Each job runs a discovery step using bash globbing and sets has_files=true/false in GITHUB_OUTPUT, gating subsequent steps with if: steps.find.outputs.has_files == 'true'."
+  - q: "Why does .github/workflows/inbox.yml request only issues: write permission?"
+    a: "Least privilege: the workflow only needs to create or update the weekly GitHub issue ('Inbox week NN') and never pushes commits to the repo."
+related:
+  - ci-cd/github-actions
+  - containers/dockerfile-best-practices
+  - security/owasp-top-10
+sources:
+  - title: "GitHub Actions Documentation"
+    url: https://docs.github.com/en/actions
+  - title: "pnpm: Continuous Integration"
+    url: https://pnpm.io/continuous-integration
+---
+
+### TL;DR
+This repository runs three focused GitHub Actions workflows: `ci.yml` gates every PR on `lint`, `typecheck`, and static `build`; `labs.yml` lints and builds `labs/**` only when lab files or workflows change; and `inbox.yml` creates a weekly GitHub issue from RSS feeds.
+
+## Why it exists
+A learning site with real code labs and an RSS reading inbox needs fast feedback without mixing concerns: PRs that edit a Markdown note should not rebuild Docker images, and an automated RSS job should never have write access to repository contents.
+
+## Mental model
+Each workflow has a single trigger scope and minimal permissions:
+
+| Workflow | Trigger | What it runs |
+|---|---|---|
+| `.github/workflows/ci.yml` | `push` (`main`, `mengtylearns-mvp`) & `pull_request` | `pnpm install --frozen-lockfile`, `lint`, `typecheck`, `build` |
+| `.github/workflows/labs.yml` | `push` (`main`) & `pull_request` on `labs/**` or `labs.yml` | `hadolint` + `docker build`, `tofu fmt/validate` + `tflint`, `kubeconform`, `actionlint` |
+| `.github/workflows/inbox.yml` | Weekly `cron: '0 9 * * 1'` & `workflow_dispatch` | `node scripts/inbox.mjs` → creates/updates `"Inbox week $WEEK"` issue |
+
+## Do it
+
+### 1. Site build gate (`ci.yml`)
+Every push to `main` or PR runs the exact same three commands we run locally, using pinned `pnpm` `11.6.0` and Node `22`:
+
+```yaml
+# .github/workflows/ci.yml
+- uses: pnpm/action-setup@v4
+  with:
+    version: 11.6.0
+- uses: actions/setup-node@v4
+  with:
+    node-version: 22
+    cache: pnpm
+- run: pnpm install --frozen-lockfile
+- run: pnpm lint
+- run: pnpm typecheck
+- run: pnpm build
+```
+
+You can run the same gate locally before committing:
+
+```bash
+pnpm lint && pnpm typecheck && pnpm build
+```
+
+### 2. Path-filtered lab validation (`labs.yml`)
+`labs.yml` only triggers when `labs/**` or `.github/workflows/labs.yml` changes, and drops token permissions to `contents: read`. Each job (`docker`, `tofu`, `kubernetes`, `workflows`) checks whether matching files exist before installing tools:
+
+```yaml
+# .github/workflows/labs.yml
+- name: Find Dockerfiles
+  id: find
+  shell: bash
+  run: |
+    shopt -s nullglob
+    files=(labs/*/Dockerfile)
+    echo "has_files=$([[ ${#files[@]} -gt 0 ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+- name: Build Docker images (no push)
+  if: steps.find.outputs.has_files == 'true'
+  shell: bash
+  run: |
+    shopt -s nullglob
+    for df in labs/*/Dockerfile; do
+      dir="$(dirname "$df")"
+      name="$(basename "$dir")"
+      echo "::group::docker build $dir"
+      docker build --no-cache -t "lab-${name}:ci" "$dir"
+      echo "::endgroup::"
+    done
+```
+
+The `tofu` job runs `tofu fmt -check -recursive labs/`, `tofu init -backend=false && tofu validate`, and `tflint`; `kubernetes` runs `kubeconform -strict -summary labs/**/k8s/*.yaml`; and `workflows` runs `actionlint` on `.github/workflows/*.yml`.
+
+### 3. Weekly RSS inbox (`inbox.yml`)
+`inbox.yml` runs every Monday at 09:00 UTC (`'0 9 * * 1'`) with `permissions: issues: write`. It executes `scripts/inbox.mjs` and uses `gh` CLI to open or update one issue per ISO week so nothing is committed or published automatically:
+
+```yaml
+# .github/workflows/inbox.yml
+- name: Fetch feeds
+  run: node scripts/inbox.mjs --out inbox-report.md
+
+- name: Create or update weekly inbox issue
+  env:
+    GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  run: |
+    WEEK=$(date +%V)
+    TITLE="Inbox week $WEEK"
+    EXISTING=$(gh issue list --state open --search "\"$TITLE\" in:title" --json number,title --jq ".[0].number // empty")
+    if [ -n "$EXISTING" ]; then
+      gh issue edit "$EXISTING" --body-file inbox-report.md
+    else
+      gh issue create --title "$TITLE" --body-file inbox-report.md
+    fi
+```
+
+## Gotchas
+- **Lockfile drift:** `ci.yml` and `inbox.yml` both pass `--frozen-lockfile`; updating `package.json` without committing `pnpm-lock.yaml` fails immediately.
+- **Unpinned actions vs pinned versions:** `labs.yml` pins `actions/checkout@v4.2.2` and `hadolint/hadolint-action@v3.5.0`, whereas `ci.yml` uses `@v4` tags — prefer full version tags or commit SHAs for supply-chain hardening.
+- **`labs.yml` path filter:** If you add a new lab tool that touches files outside `labs/**`, `labs.yml` will not trigger unless you update its `paths:` list.
+
+## Production checklist
+- [ ] Run `pnpm lint && pnpm typecheck && pnpm build` locally before pushing.
+- [ ] Keep `permissions` scoped per workflow (`contents: read` for checks, `issues: write` for the inbox bot).
+- [ ] Pin `pnpm` and Node versions across all workflows so local and CI builds match.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "Why does .github/workflows/labs.yml check has_files before running Docker, OpenTofu, or kubeconform steps?",
+    options: [
+      { label: "To skip installing heavy tools and avoid empty-glob errors when a job has no matching lab files", description: "Each job gates tool setup and execution on steps.find.outputs.has_files == 'true'.", correct: true },
+      { label: "Because GitHub Actions refuses to run bash scripts without GITHUB_OUTPUT", description: "GITHUB_OUTPUT is optional; it is used here to pass the boolean flag between steps." },
+      { label: "To push built Docker images to Docker Hub only when files exist", description: "labs.yml explicitly builds with --no-cache and does not push images." }
+    ]
+  },
+  {
+    question: "What does .github/workflows/inbox.yml do with the fetched RSS items?",
+    options: [
+      { label: "Creates or updates a single weekly GitHub issue named 'Inbox week NN'", description: "Nothing is committed to the repo or published to the site automatically.", correct: true },
+      { label: "Commits new MDX files directly to main", description: "The workflow only has issues: write permission and never pushes commits." },
+      { label: "Deploys a new version of the Next.js site", description: "Deployment is separate from the weekly RSS inbox workflow." }
+    ]
+  }
+]} />
+
+## Sources
+- [GitHub Actions Documentation](https://docs.github.com/en/actions)
+- [pnpm: Continuous Integration](https://pnpm.io/continuous-integration)
