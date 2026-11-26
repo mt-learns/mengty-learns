@@ -114,7 +114,7 @@ export class PlaceOrderService {
 
 Notice how identical this structure is to the [Bridge Pattern](/docs/design/bridge):
 
-- **Bridge** separates an Abstraction hierarchy (`RemoteControl`) from an Implementation hierarchy (`Device` interface → `TV`, `Radio`) using composition.
+- **Bridge** separates an Abstraction hierarchy (`OrderExporter`) from an Implementation hierarchy (`StorageDriver` interface → `PostgresDriver`, `CsvDriver`) using composition.
 - **Dependency Inversion** applies that same composition-over-interface idea at **architectural module boundaries** (`PlaceOrderService` → `OrderRepository` ← `PostgresOrderRepo`).
 
 <Checklist

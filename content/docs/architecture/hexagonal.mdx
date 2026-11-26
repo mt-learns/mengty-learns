@@ -102,7 +102,8 @@ Toggle between **Production (Postgres)** and **Unit Test (InMemory)** to see how
         { edge: 'outport->pg', title: 'Insert into Postgres', text: 'PostgresAdapter runs INSERT INTO orders in production DB' },
         { edge: 'pg->outport', title: 'Return saved Order', text: 'PostgresAdapter returns the saved Order domain object', kind: 'response' },
         { edge: 'outport->domain', title: 'Confirm persistence', text: 'Core receives confirmation and returns OrderResult', kind: 'response' },
-        { edge: 'domain->rest', title: 'Respond 201 Created', text: 'REST adapter maps OrderResult to 201 Created JSON', kind: 'response' },
+        { edge: 'domain->inport', title: 'Return via inbound port', text: 'Domain returns OrderResult through PlaceOrderPort', kind: 'response' },
+        { edge: 'inport->rest', title: 'Respond 201 Created', text: 'REST adapter maps OrderResult to 201 Created JSON', kind: 'response' },
       ],
     },
     {
@@ -125,7 +126,8 @@ Toggle between **Production (Postgres)** and **Unit Test (InMemory)** to see how
         { edge: 'outport->mem', title: 'Store in Map', text: 'InMemoryAdapter stores the order in a local Map<string, Order>' },
         { edge: 'mem->outport', title: 'Resolve in memory', text: 'InMemoryAdapter resolves immediately in < 1 ms', kind: 'response' },
         { edge: 'outport->domain', title: 'Return OrderResult', text: 'Core returns OrderResult', kind: 'response' },
-        { edge: 'domain->test', title: 'Assert test state', text: 'Vitest asserts the total and saved state in memory', kind: 'response' },
+        { edge: 'domain->inport', title: 'Return via inbound port', text: 'Domain returns OrderResult through PlaceOrderPort', kind: 'response' },
+        { edge: 'inport->test', title: 'Assert test state', text: 'Vitest asserts the total and saved state in memory', kind: 'response' },
       ],
     },
   ]}
