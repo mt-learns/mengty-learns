@@ -27,32 +27,21 @@ Over time, two classic layered pitfalls appear even after splitting files:
 1. **Leaky layers:** A controller bypasses the business layer and queries the database directly, or the business layer accepts raw HTTP `Request` objects.
 2. **Database-centric design:** Because Business depends on Data, and Data mirrors SQL tables, domain models turn into thin wrappers around database rows instead of expressing business rules.
 
-<figure className="my-6">
-  <svg
-    viewBox="0 0 560 190"
-    className="w-full h-auto rounded-card border border-border bg-card p-3"
-    role="img"
-    aria-label="Leaky layered architecture: Presentation bypasses Business to hit Data, and Business couples to ORM rows"
-  >
-    <rect x="40" y="18" width="140" height="44" rx="12" fill="var(--muted)" stroke="var(--border)" />
-    <text x="110" y="44" textAnchor="middle" fill="var(--foreground)" fontSize="13" fontWeight="600">Presentation</text>
-
-    <rect x="210" y="18" width="140" height="44" rx="12" fill="var(--muted)" stroke="var(--border)" />
-    <text x="280" y="44" textAnchor="middle" fill="var(--foreground)" fontSize="13" fontWeight="600">Business</text>
-
-    <rect x="380" y="18" width="140" height="44" rx="12" fill="var(--muted)" stroke="var(--border)" />
-    <text x="450" y="44" textAnchor="middle" fill="var(--foreground)" fontSize="13" fontWeight="600">Data / ORM</text>
-
-    <path d="M 110 62 L 110 120 L 450 120 L 450 62" fill="none" stroke="var(--destructive)" strokeWidth="2" strokeDasharray="5 4" />
-    <text x="280" y="112" textAnchor="middle" fill="var(--destructive)" fontSize="11" fontWeight="600">Leaky shortcut: controller queries DB directly</text>
-
-    <line x1="350" y1="40" x2="380" y2="40" stroke="var(--destructive)" strokeWidth="2" />
-    <text x="280" y="160" textAnchor="middle" fill="var(--muted-foreground)" fontSize="11">Business logic becomes coupled to ORM row shapes and SQL schema</text>
-  </svg>
-  <figcaption className="mt-2 text-center text-caption-1 text-muted-foreground">
-    Without strict layer boundaries, Presentation leaks into Data and Business becomes DB-centric.
-  </figcaption>
-</figure>
+<Diagram
+  id="layered-problem"
+  ariaLabel="Leaky layered architecture: Presentation bypasses Business to hit Data, and Business couples to ORM rows"
+  caption="Without strict layer boundaries, Presentation leaks into Data and Business becomes DB-centric."
+  nodes={[
+    { id: 'pres', label: 'Presentation', subtitle: 'Controller', icon: 'gateway', category: 'edge', rank: 0, order: 0 },
+    { id: 'biz', label: 'Business', subtitle: 'Coupled to ORM', icon: 'service', category: 'service', rank: 1, order: 0, variant: 'problem' },
+    { id: 'data', label: 'Data / ORM', subtitle: 'SQL schema', icon: 'db', category: 'data', rank: 2, order: 0 },
+  ]}
+  edges={[
+    { from: 'pres', to: 'biz', kind: 'request' },
+    { from: 'biz', to: 'data', kind: 'error' },
+    { from: 'pres', to: 'data', kind: 'error', dashed: true, label: 'Leaky' },
+  ]}
+/>
 
 ## 3. Solution
 
@@ -124,36 +113,21 @@ Think of a restaurant with a **waiter** (Presentation), a **chef** (Business), a
 
 In classic Layered architecture, **dependencies point top-down**. Presentation depends on Business, and Business depends on Data.
 
-<figure className="my-6">
-  <svg
-    viewBox="0 0 560 220"
-    className="w-full h-auto rounded-card border border-border bg-card p-3"
-    role="img"
-    aria-label="Layered dependency rule: arrows point downward from Presentation to Business to Data to Database"
-  >
-    <rect x="155" y="14" width="250" height="36" rx="10" fill="var(--card)" stroke="var(--primary)" strokeWidth="1.5" />
-    <text x="280" y="37" textAnchor="middle" fill="var(--foreground)" fontSize="13" fontWeight="600">Presentation (HTTP / UI)</text>
-
-    <line x1="280" y1="50" x2="280" y2="72" stroke="var(--primary)" strokeWidth="2" />
-    <polygon points="275,68 285,68 280,75" fill="var(--primary)" />
-
-    <rect x="155" y="75" width="250" height="36" rx="10" fill="var(--card)" stroke="var(--primary)" strokeWidth="1.5" />
-    <text x="280" y="98" textAnchor="middle" fill="var(--foreground)" fontSize="13" fontWeight="600">Business (OrderService)</text>
-
-    <line x1="280" y1="111" x2="280" y2="133" stroke="var(--primary)" strokeWidth="2" />
-    <polygon points="275,129 285,129 280,136" fill="var(--primary)" />
-
-    <rect x="155" y="136" width="250" height="36" rx="10" fill="var(--muted)" stroke="var(--border)" strokeWidth="1.5" />
-    <text x="280" y="159" textAnchor="middle" fill="var(--foreground)" fontSize="13" fontWeight="600">Data (OrderRepo → Postgres)</text>
-
-    <text x="280" y="200" textAnchor="middle" fill="var(--muted-foreground)" fontSize="11">
-      Dependency Rule: every layer imports only the layer directly below it (DB-centric bottom).
-    </text>
-  </svg>
-  <figcaption className="mt-2 text-center text-caption-1 text-muted-foreground">
-    Arrows represent compile-time imports: Business directly imports Data.
-  </figcaption>
-</figure>
+<Diagram
+  id="layered-dependency"
+  layout="tree"
+  ariaLabel="Layered dependency rule: arrows point downward from Presentation to Business to Data to Database"
+  caption="Arrows represent compile-time imports: Business directly imports Data."
+  nodes={[
+    { id: 'pres', label: 'Presentation', subtitle: 'HTTP / UI', icon: 'gateway', category: 'edge', rank: 0, order: 0 },
+    { id: 'biz', label: 'Business', subtitle: 'OrderService', icon: 'service', category: 'service', rank: 1, order: 0 },
+    { id: 'data', label: 'Data Layer', subtitle: 'OrderRepo → Postgres', icon: 'db', category: 'data', rank: 2, order: 0 },
+  ]}
+  edges={[
+    { from: 'pres', to: 'biz', kind: 'request' },
+    { from: 'biz', to: 'data', kind: 'request' },
+  ]}
+/>
 
 ## 7. Code
 

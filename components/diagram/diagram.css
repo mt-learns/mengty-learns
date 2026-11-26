@@ -1,0 +1,50 @@
+/* Static <Diagram> container queries & shared iOS category tints (tokens only, no hex) */
+:root {
+  --border-strong: color-mix(in oklab, var(--foreground) 42%, var(--grouped));
+  --flow-cat-client-bg: var(--secondary);
+  --flow-cat-client-fg: var(--foreground);
+  --flow-cat-edge-bg: color-mix(in oklab, var(--primary) 14%, var(--card));
+  --flow-cat-edge-fg: var(--primary);
+  --flow-cat-service-bg: color-mix(in oklab, var(--primary) 10%, var(--secondary));
+  --flow-cat-service-fg: var(--primary);
+  --flow-cat-data-bg: color-mix(in oklab, var(--foreground) 8%, var(--secondary));
+  --flow-cat-data-fg: var(--foreground);
+  --flow-cat-external-bg: color-mix(in oklab, var(--destructive) 12%, var(--card));
+  --flow-cat-external-fg: var(--destructive);
+}
+
+.dark {
+  --border-strong: color-mix(in oklab, var(--foreground) 42%, var(--grouped));
+  --flow-cat-client-bg: var(--secondary);
+  --flow-cat-client-fg: var(--foreground);
+  --flow-cat-edge-bg: color-mix(in oklab, var(--primary) 20%, transparent);
+  --flow-cat-edge-fg: var(--primary);
+  --flow-cat-service-bg: color-mix(in oklab, var(--primary) 15%, var(--secondary));
+  --flow-cat-service-fg: var(--primary);
+  --flow-cat-data-bg: color-mix(in oklab, var(--foreground) 12%, var(--secondary));
+  --flow-cat-data-fg: var(--foreground);
+  --flow-cat-external-bg: color-mix(in oklab, var(--destructive) 20%, transparent);
+  --flow-cat-external-fg: var(--destructive);
+}
+
+.diagram-container {
+  container-type: inline-size;
+}
+
+.diagram-view-lr {
+  display: none;
+}
+
+.diagram-view-tb {
+  display: block;
+}
+
+@container (min-width: 720px) {
+  .diagram-view-lr {
+    display: block;
+  }
+
+  .diagram-view-tb {
+    display: none;
+  }
+}

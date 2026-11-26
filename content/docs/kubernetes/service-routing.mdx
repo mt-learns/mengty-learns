@@ -22,31 +22,20 @@ Understand how Kubernetes decouples external traffic from ephemeral Pod IPs: **I
 
 Pods in Kubernetes are ephemeral—they get rescheduled, scaled up, or replaced during deployments, and each new Pod receives a new IP address. If clients or an external load balancer hardcoded Pod IPs, every rollout or crash would break traffic.
 
-<figure className="my-6">
-  <svg
-    viewBox="0 0 560 150"
-    className="w-full h-auto rounded-card border border-border bg-card p-3"
-    role="img"
-    aria-label="Without a Service, clients pointing directly at Pod IPs break when a Pod is replaced"
-  >
-    <rect x="24" y="48" width="120" height="52" rx="12" fill="var(--card)" stroke="var(--border)" />
-    <text x="84" y="78" textAnchor="middle" fill="var(--foreground)" fontSize="13" fontWeight="600">Client</text>
-
-    <line x1="144" y1="74" x2="260" y2="42" stroke="var(--destructive)" strokeWidth="2" strokeDasharray="5 4" />
-    <line x1="144" y1="74" x2="260" y2="108" stroke="var(--primary)" strokeWidth="2" />
-
-    <rect x="260" y="16" width="160" height="48" rx="12" fill="var(--muted)" stroke="var(--destructive)" />
-    <text x="340" y="38" textAnchor="middle" fill="var(--destructive)" fontSize="12" fontWeight="600">Old Pod (10.244.1.5)</text>
-    <text x="340" y="54" textAnchor="middle" fill="var(--muted-foreground)" fontSize="11">Terminated / 502</text>
-
-    <rect x="260" y="84" width="160" height="48" rx="12" fill="var(--card)" stroke="var(--primary)" />
-    <text x="340" y="106" textAnchor="middle" fill="var(--foreground)" fontSize="12" fontWeight="600">New Pod (10.244.2.9)</text>
-    <text x="340" y="122" textAnchor="middle" fill="var(--muted-foreground)" fontSize="11">Unknown to client</text>
-  </svg>
-  <figcaption className="mt-2 text-center text-caption-1 text-muted-foreground">
-    Direct Pod IP addressing breaks whenever Kubernetes reschedules or replaces a Pod.
-  </figcaption>
-</figure>
+<Diagram
+  id="k8s-problem"
+  ariaLabel="Without a Service, clients pointing directly at Pod IPs break when a Pod is replaced"
+  caption="Direct Pod IP addressing breaks whenever Kubernetes reschedules or replaces a Pod."
+  nodes={[
+    { id: 'client', label: 'Client', subtitle: 'Hardcoded IP', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'oldpod', label: 'Old Pod', subtitle: 'Terminated / 502', icon: 'pod', category: 'data', rank: 1, order: 0, variant: 'problem' },
+    { id: 'newpod', label: 'New Pod', subtitle: 'New IP unknown', icon: 'pod', category: 'data', rank: 1, order: 1 },
+  ]}
+  edges={[
+    { from: 'client', to: 'oldpod', kind: 'error', dashed: true },
+    { from: 'client', to: 'newpod', kind: 'request' },
+  ]}
+/>
 
 ## 3. Solution
 
@@ -85,38 +74,22 @@ Think of **Ingress** as the building's front-desk directory ("Accounting is on F
 
 ## 6. Structure
 
-<figure className="my-6">
-  <svg
-    viewBox="0 0 560 160"
-    className="w-full h-auto rounded-card border border-border bg-card p-3"
-    role="img"
-    aria-label="Kubernetes routing components: Ingress targets Service, Service selects Ready Pods via labels"
-  >
-    <rect x="20" y="52" width="130" height="56" rx="12" fill="var(--card)" stroke="var(--primary)" strokeWidth="1.5" />
-    <text x="85" y="76" textAnchor="middle" fill="var(--foreground)" fontSize="13" fontWeight="600">Ingress</text>
-    <text x="85" y="94" textAnchor="middle" fill="var(--muted-foreground)" fontSize="11">/cart → web:80</text>
-
-    <line x1="150" y1="80" x2="210" y2="80" stroke="var(--primary)" strokeWidth="2" />
-
-    <rect x="210" y="52" width="145" height="56" rx="12" fill="var(--card)" stroke="var(--primary)" strokeWidth="1.5" />
-    <text x="282" y="76" textAnchor="middle" fill="var(--foreground)" fontSize="13" fontWeight="600">Service (web)</text>
-    <text x="282" y="94" textAnchor="middle" fill="var(--muted-foreground)" fontSize="11">selector: app=web</text>
-
-    <line x1="355" y1="70" x2="415" y2="42" stroke="var(--border)" strokeWidth="1.5" />
-    <line x1="355" y1="90" x2="415" y2="118" stroke="var(--border)" strokeWidth="1.5" />
-
-    <rect x="415" y="18" width="125" height="48" rx="10" fill="var(--muted)" stroke="var(--border)" />
-    <text x="477" y="40" textAnchor="middle" fill="var(--foreground)" fontSize="12" fontWeight="600">Pod A</text>
-    <text x="477" y="56" textAnchor="middle" fill="var(--muted-foreground)" fontSize="11">app=web · :8080</text>
-
-    <rect x="415" y="94" width="125" height="48" rx="10" fill="var(--muted)" stroke="var(--border)" />
-    <text x="477" y="116" textAnchor="middle" fill="var(--foreground)" fontSize="12" fontWeight="600">Pod B</text>
-    <text x="477" y="132" textAnchor="middle" fill="var(--muted-foreground)" fontSize="11">app=web · :8080</text>
-  </svg>
-  <figcaption className="mt-2 text-center text-caption-1 text-muted-foreground">
-    Ingress routes by HTTP host/path; Service selects Pods by label and maps port 80 to targetPort 8080.
-  </figcaption>
-</figure>
+<Diagram
+  id="k8s-structure"
+  ariaLabel="Kubernetes routing components: Ingress targets Service, Service selects Ready Pods via labels"
+  caption="Ingress routes by HTTP host/path; Service selects Pods by label and maps port 80 to targetPort 8080."
+  nodes={[
+    { id: 'ing', label: 'Ingress', subtitle: '/cart → web:80', icon: 'gateway', category: 'edge', rank: 0, order: 0 },
+    { id: 'svc', label: 'Service (web)', subtitle: 'selector: app=web', icon: 'service', category: 'service', rank: 1, order: 0 },
+    { id: 'podA', label: 'Pod A', subtitle: 'app=web · :8080', icon: 'pod', category: 'data', rank: 2, order: 0 },
+    { id: 'podB', label: 'Pod B', subtitle: 'app=web · :8080', icon: 'pod', category: 'data', rank: 2, order: 1 },
+  ]}
+  edges={[
+    { from: 'ing', to: 'svc', kind: 'request' },
+    { from: 'svc', to: 'podA', kind: 'request' },
+    { from: 'svc', to: 'podB', kind: 'request' },
+  ]}
+/>
 
 ## 7. Code
 
