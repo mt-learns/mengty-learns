@@ -2,6 +2,7 @@
 @import 'fumadocs-ui/css/neutral.css';
 @import 'fumadocs-ui/css/preset.css';
 @import './tokens.css';
+@import './code-theme.css';
 
 @layer base {
   * {
@@ -21,8 +22,43 @@
   --font-mono: ui-monospace, "SF Mono", "JetBrains Mono", monospace;
 }
 
+/*
+ * Fumadocs colours. Fumadocs ships its own unlayered values (and a grey
+ * override on `.dark #nd-sidebar`), so map them to our tokens here, after
+ * its stylesheets, with at least the same specificity.
+ */
+:root,
+.dark,
+.dark #nd-sidebar {
+  --color-fd-background: var(--background);
+  --color-fd-foreground: var(--foreground);
+  --color-fd-card: var(--card);
+  --color-fd-card-foreground: var(--card-foreground);
+  --color-fd-popover: var(--popover);
+  --color-fd-popover-foreground: var(--popover-foreground);
+  --color-fd-primary: var(--primary);
+  --color-fd-primary-foreground: var(--primary-foreground);
+  --color-fd-secondary: var(--secondary);
+  --color-fd-secondary-foreground: var(--secondary-foreground);
+  --color-fd-muted: var(--muted);
+  --color-fd-muted-foreground: var(--muted-foreground);
+  --color-fd-accent: var(--accent);
+  --color-fd-accent-foreground: var(--accent-foreground);
+  --color-fd-border: var(--border);
+  --color-fd-ring: var(--ring);
+  --color-fd-overlay: color-mix(in oklab, var(--foreground) 30%, transparent);
+}
+
 html {
   scrollbar-gutter: stable;
+  scrollbar-color: var(--border-strong) transparent;
+  accent-color: var(--primary);
+  caret-color: var(--primary);
+}
+
+::selection {
+  background-color: color-mix(in oklab, var(--primary) 22%, transparent);
+  color: var(--foreground);
 }
 
 html > body[data-scroll-locked] {
@@ -39,20 +75,90 @@ html > body[data-scroll-locked] {
   @apply rounded-panel;
 }
 
-@layer components {
-  .prose p,
-  .prose li {
-    max-width: 68ch;
-    line-height: 1.65;
+/*
+ * Reading comfort (REDESIGN-PLAN section 6). Docs prose: 17px / 1.65, a 70ch
+ * measure, jade underlined links, one frame per code block, table and callout.
+ * `.prose-sm` (the table of contents) keeps its compact size.
+ */
+.prose {
+  --tw-prose-body: var(--foreground);
+  --tw-prose-links: var(--link);
+  --tw-prose-captions: var(--muted-foreground);
+  --tw-prose-counters: var(--muted-foreground);
+  --tw-prose-bullets: var(--border-strong);
+}
+.prose:not(.prose-sm) {
+  font-size: 1.0625rem;
+  line-height: 1.65;
+}
+.prose:not(.prose-sm) :where(p, li, blockquote, figcaption):not(:where(.not-prose, .not-prose *)) {
+  max-width: 70ch;
+}
+.prose :where(h1, h2, h3, h4):not(:where(.not-prose, .not-prose *)) {
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+.prose :where(h2):not(:where(.not-prose, .not-prose *)) {
+  font-weight: 700;
+}
+.prose a:not([data-card]) {
+  color: var(--link);
+  text-decoration-color: currentColor;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 3px;
+  transition: color 150ms var(--ease-ios);
+}
+.prose a:not([data-card]):hover {
+  color: var(--link-hover);
+  opacity: 1;
+}
+.prose :where(code):not(:where(pre code, .not-prose, .not-prose *)) {
+  background-color: var(--muted);
+  color: var(--foreground);
+}
+.prose :where(table):not(:where(.not-prose, .not-prose *)) {
+  background: var(--card);
+  border-color: var(--border);
+}
+
+/* Code: one frame (the figure); the code background sits one step off the page. */
+figure.shiki {
+  border-radius: var(--radius-control);
+  border-color: var(--border);
+  background-color: var(--code-bg);
+}
+figure.shiki pre {
+  background: transparent;
+  border: 0;
+}
+
+/* Sidebar: active item is jade text on a jade tint (5.9:1 light, 10.3:1 dark; see DESIGN.md). */
+#nd-sidebar a[data-active='true'] {
+  background-color: var(--sidebar-active);
+  color: var(--sidebar-active-foreground);
+}
+#nd-sidebar a[data-active='true']::before {
+  background-color: var(--sidebar-active-foreground);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prose a:not([data-card]) {
+    transition: none;
   }
-  figure.shiki {
-    border-radius: var(--radius-control);
-    background-color: var(--card);
-  }
-  figure.shiki span[style*="--shiki-light:#e36209" i] {
-    --shiki-light: #b34700;
-  }
-  figure.shiki span[style*="--shiki-dark:#6a737d" i] {
-    --shiki-dark: #8b949e;
+}
+
+/*
+ * One container (REDESIGN-PLAN section 5): the Fumadocs home nav uses the same
+ * 1200px max width and 24px / 32px gutters as components/layout/container.tsx.
+ */
+#nd-home-layout {
+  --fd-layout-width: 1200px;
+}
+#nd-nav [class~='max-w-(--fd-layout-width)'] {
+  padding-inline: 1.5rem;
+}
+@media (width >= 48rem) {
+  #nd-nav [class~='max-w-(--fd-layout-width)'] {
+    padding-inline: 2rem;
   }
 }

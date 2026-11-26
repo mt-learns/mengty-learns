@@ -2,7 +2,7 @@ import { type ReactNode } from 'react';
 
 export function Sidenote({ children }: { children: ReactNode }) {
   return (
-    <aside className="my-4 p-4 rounded-panel bg-muted text-muted-foreground border-l-4 border-primary text-sm">
+    <aside className="my-4 p-4 rounded-panel bg-muted text-muted-foreground border border-border text-sm">
       {children}
     </aside>
   );
@@ -10,7 +10,7 @@ export function Sidenote({ children }: { children: ReactNode }) {
 
 export function Gotcha({ children }: { children: ReactNode }) {
   return (
-    <div className="my-4 p-4 rounded-panel bg-destructive/10 text-destructive border border-destructive/20 text-sm">
+    <div className="my-4 p-4 rounded-panel bg-destructive-soft text-destructive-text border border-destructive/20 text-sm">
       <span className="font-bold block mb-1">Gotcha:</span>
       {children}
     </div>
@@ -19,7 +19,7 @@ export function Gotcha({ children }: { children: ReactNode }) {
 
 export function Tip({ children }: { children: ReactNode }) {
   return (
-    <div className="my-4 p-4 rounded-panel bg-success/10 text-success border border-success/20 text-sm">
+    <div className="my-4 p-4 rounded-panel bg-success-soft text-success-text border border-success/25 text-sm">
       <span className="font-bold block mb-1">Tip:</span>
       {children}
     </div>

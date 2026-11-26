@@ -7,7 +7,7 @@
     </linearGradient>
     <linearGradient id="mt-desk-blue" x1="15%" y1="10%" x2="85%" y2="90%">
       <stop offset="0%" stop-color="#60a5fa"/>
-      <stop offset="100%" stop-color="var(--primary, #0066CC)"/>
+      <stop offset="100%" stop-color="var(--primary, #0F766E)"/>
     </linearGradient>
     <linearGradient id="mt-desk-amber" x1="15%" y1="10%" x2="85%" y2="90%">
       <stop offset="0%" stop-color="#fde68a"/>
@@ -61,7 +61,7 @@
           <circle cx="9.95" cy="-24.02" r="3"/>
           <circle cx="24.02" cy="-9.95" r="3"/>
         </g>
-        <circle cx="0" cy="0" r="5" fill="#dbeafe" stroke="var(--primary, #0066CC)" stroke-width="1.8"/>
+        <circle cx="0" cy="0" r="5" fill="#CCFBF1" stroke="var(--primary, #0F766E)" stroke-width="1.8"/>
       </g>
 
       <rect x="112" y="74" width="44" height="42" rx="9" fill="url(#mt-desk-amber)"/>

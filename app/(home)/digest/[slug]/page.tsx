@@ -1,3 +1,4 @@
+import { Container } from '@/components/layout/container';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
@@ -41,7 +42,7 @@ export default async function DigestEntryPage({
   const items = page.data.items ?? [];
 
   return (
-    <div className="container max-w-screen-md px-4 py-12">
+    <Container className="py-12 md:py-16"><div className="max-w-screen-md">
       <div className="mb-6">
         <Link
           href="/digest"
@@ -90,6 +91,6 @@ export default async function DigestEntryPage({
       <article className="prose prose-neutral dark:prose-invert max-w-none">
         <MDX components={getMDXComponents()} />
       </article>
-    </div>
+    </div></Container>
   );
 }

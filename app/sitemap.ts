@@ -13,8 +13,9 @@ export default function sitemap(): MetadataRoute.Sitemap {
   return [
     { url: siteUrl, lastModified: new Date() },
     { url: `${siteUrl}/docs`, lastModified: new Date() },
-    { url: `${siteUrl}/projects`, lastModified: new Date() },
-    { url: `${siteUrl}/about`, lastModified: new Date() },
+    { url: `${siteUrl}/review`, lastModified: new Date() },
+    { url: `${siteUrl}/radar`, lastModified: new Date() },
+    { url: `${siteUrl}/digest`, lastModified: new Date() },
     ...pages,
   ];
 }

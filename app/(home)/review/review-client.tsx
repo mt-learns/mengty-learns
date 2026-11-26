@@ -5,7 +5,7 @@ import { AlertTriangle, CheckCircle2, Flame, PartyPopper } from 'lucide-react';
 import { Illustration } from '@/components/illustrations';
 import { Button } from '@/components/ui/button';
 
-interface CardItem {
+export interface CardItem {
   id: string;
   slug: string;
   title: string;
@@ -46,7 +46,12 @@ function loadFsrs() {
   return fsrsModule;
 }
 
-export function ReviewClient() {
+/**
+ * `initialCards` is read from public/cards.json at build time, so the first
+ * card renders on hydration without a network round trip (it is the page's
+ * LCP element). Without it, the client falls back to fetching the file.
+ */
+export function ReviewClient({ initialCards }: { initialCards?: CardItem[] }) {
   const [reviewState, setReviewState] = useState<Record<string, any>>({});
   const [cards, setCards] = useState<CardItem[]>([]);
   const [dueCards, setDueCards] = useState<CardItem[]>([]);
@@ -71,6 +76,13 @@ export function ReviewClient() {
 
     let cancelled = false;
 
+    if (initialCards) {
+      setCards(initialCards);
+      setDueCards(dueFrom(initialCards, state));
+      setLoading(false);
+      return;
+    }
+
     fetch('/cards.json')
       .then((response) => {
         if (!response.ok) throw new Error(`HTTP ${response.status}`);
@@ -91,7 +103,7 @@ export function ReviewClient() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [initialCards]);
 
   const handleGrade = async (rating: number) => {
     const cardItem = dueCards[currentIndex];
@@ -154,6 +166,7 @@ export function ReviewClient() {
   };
 
   const currentCard = dueCards[currentIndex];
+  const shownCard = loading ? initialCards?.[0] : currentCard;
 
   return (
     <div className="space-y-8">
@@ -173,7 +186,7 @@ export function ReviewClient() {
         </div>
       </div>
 
-      {loading ? (
+      {loading && !initialCards?.[0] ? (
         <div
           className="rounded-card border bg-card p-8 shadow-sm space-y-4"
           aria-busy="true"
@@ -187,27 +200,33 @@ export function ReviewClient() {
       ) : loadError ? (
         <div
           role="alert"
-          className="rounded-card border border-destructive/25 bg-destructive/10 p-6 text-subheadline text-destructive"
+          className="rounded-card border border-destructive/25 bg-destructive-soft p-6 text-subheadline text-destructive-text"
         >
           <p className="font-headline">Could not load your flashcards.</p>
           <p className="mt-1 text-muted-foreground">
             The card data failed to load. Check your connection and reload the page.
           </p>
         </div>
-      ) : currentCard && currentIndex < dueCards.length ? (
-        <div className="rounded-card border bg-card p-8 shadow-sm space-y-6">
+      ) : shownCard && (loading || currentIndex < dueCards.length) ? (
+        // One card frame for both states: before hydration it shows a
+        // first-time visitor's first card (server-rendered, the page's LCP);
+        // after hydration React updates the same nodes with the visitor's
+        // own first due card, so no new, larger element replaces it.
+        <div className="rounded-card border bg-card p-8 shadow-sm space-y-6" aria-busy={loading || undefined}>
           <div className="flex justify-between items-center text-xs text-muted-foreground">
-            <span>
-              Card {currentIndex + 1} of {dueCards.length}
+            <span className={loading ? 'invisible' : undefined}>
+              Card {loading ? 1 : currentIndex + 1} of {loading ? initialCards?.length ?? 0 : dueCards.length}
             </span>
-            <span>{sectionLabel(currentCard.slug)}</span>
+            <span>{sectionLabel(shownCard.slug)}</span>
           </div>
 
           <div className="space-y-4">
-            <h2 className="text-xl font-bold font-headline">{currentCard.q}</h2>
-            {showAnswer ? (
+            <h2 className="text-xl font-bold font-headline">{shownCard.q}</h2>
+            {loading ? (
+              <div className="h-11 w-full rounded-control bg-muted" aria-hidden="true" />
+            ) : showAnswer ? (
               <div className="p-4 rounded-panel bg-muted text-body whitespace-pre-wrap border">
-                {currentCard.a}
+                {shownCard.a}
               </div>
             ) : (
               <Button onClick={() => setShowAnswer(true)} className="min-h-tap rounded-control w-full">
@@ -285,8 +304,8 @@ export function ReviewClient() {
             aria-live={importStatus.kind === 'error' ? 'assertive' : 'polite'}
             className={`flex items-start gap-2 rounded-panel border p-3 text-subheadline ${
               importStatus.kind === 'success'
-                ? 'border-success/25 bg-success/10 text-success'
-                : 'border-destructive/25 bg-destructive/10 text-destructive'
+                ? 'border-success/25 bg-success-soft text-success-text'
+                : 'border-destructive/25 bg-destructive-soft text-destructive-text'
             }`}
           >
             {importStatus.kind === 'success' ? (

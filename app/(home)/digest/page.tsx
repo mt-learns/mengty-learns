@@ -1,3 +1,4 @@
+import { Container } from '@/components/layout/container';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Rss } from 'lucide-react';
@@ -19,7 +20,7 @@ export default function DigestPage() {
   const digests = getPublishedDigests();
 
   return (
-    <div className="container max-w-screen-xl px-4 py-12">
+    <Container className="py-12 md:py-16">
       <div className="flex flex-wrap items-start justify-between gap-4">
         <LargeTitle subtitle="Biweekly notes on 3–5 things that matter, in my own words.">
           Digest
@@ -61,6 +62,6 @@ export default function DigestPage() {
           ))}
         </GroupedList>
       )}
-    </div>
+    </Container>
   );
 }

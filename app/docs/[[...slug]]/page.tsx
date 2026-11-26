@@ -37,7 +37,7 @@ export default async function Page({ params }: { params: Promise<{ slug?: string
       }}
     >
       <OutdatedBanner verified={page.data.verified} status={page.data.status} />
-      <div className="flex justify-between items-start gap-4 mb-2">
+      <div className="flex flex-col items-start gap-4 mb-2 sm:flex-row sm:justify-between">
         <div>
           <DocsTitle>{page.data.title}</DocsTitle>
           <DocsDescription className="mb-0">{page.data.description}</DocsDescription>

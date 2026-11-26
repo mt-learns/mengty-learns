@@ -22,9 +22,9 @@ const DEFAULT_TITLES: Record<SectionIconName, string> = {
 };
 
 const SECTION_TINTS: Record<SectionIconName, { glow: string; rim: string }> = {
-  foundations: { glow: 'var(--primary, #0066CC)', rim: '#60a5fa' },
+  foundations: { glow: 'var(--primary, #0F766E)', rim: '#5EEAD4' },
   containers: { glow: '#f59e0b', rim: '#fbbf24' },
-  kubernetes: { glow: 'var(--primary, #0066CC)', rim: '#38bdf8' },
+  kubernetes: { glow: 'var(--primary, #0F766E)', rim: '#2DD4BF' },
   iac: { glow: '#8b5cf6', rim: '#a78bfa' },
   'ci-cd': { glow: '#f97316', rim: '#fb923c' },
   gitops: { glow: '#10b981', rim: '#34d399' },
@@ -73,7 +73,7 @@ export function SectionIcon({
         </radialGradient>
         <linearGradient id={`${uid}-clay-blue`} x1="15%" y1="10%" x2="85%" y2="90%">
           <stop offset="0%" stopColor="#60a5fa" />
-          <stop offset="100%" stopColor="var(--primary, #0066CC)" />
+          <stop offset="100%" stopColor="var(--primary, #0F766E)" />
         </linearGradient>
         <linearGradient id={`${uid}-clay-amber`} x1="15%" y1="10%" x2="85%" y2="90%">
           <stop offset="0%" stopColor="#fde68a" />
@@ -179,7 +179,7 @@ export function SectionIcon({
               <circle cx="60.82" cy="17.05" r="3.6" />
               <circle cx="78.95" cy="35.18" r="3.6" />
             </g>
-            <circle cx="48" cy="48" r="6" fill="#dbeafe" stroke="var(--primary, #0066CC)" strokeWidth="2" />
+            <circle cx="48" cy="48" r="6" fill="#CCFBF1" stroke="var(--primary, #0F766E)" strokeWidth="2" />
             <circle cx="46.5" cy="46.5" r="1.6" fill="#ffffff" fillOpacity="0.9" />
           </g>
         )}

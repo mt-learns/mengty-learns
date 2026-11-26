@@ -1,8 +1,38 @@
-/* Ported from Chongdai design system. Modified for Mengty Learns. */
+/* Mengty Learns design tokens. Type scale ported from the Chongdai design system. */
 
 @custom-variant dark (&:where(.dark, .dark *):not(:where(.light, .light *)));
 
 @theme {
+  /* Landing scale (REDESIGN-PLAN section 5): display 36/42 -> 56/64, tracking -0.02em */
+  --text-display: 2.25rem;
+  --text-display--line-height: 2.625rem;
+  --text-display--letter-spacing: -0.02em;
+  --text-display--font-weight: 700;
+  --text-display-lg: 3.5rem;
+  --text-display-lg--line-height: 4rem;
+  --text-display-lg--letter-spacing: -0.02em;
+  --text-display-lg--font-weight: 700;
+  --text-section: 1.75rem;
+  --text-section--line-height: 2.125rem;
+  --text-section--letter-spacing: -0.02em;
+  --text-section--font-weight: 700;
+  --text-section-lg: 2.25rem;
+  --text-section-lg--line-height: 2.625rem;
+  --text-section-lg--letter-spacing: -0.02em;
+  --text-section-lg--font-weight: 700;
+  --text-lede: 1.125rem;
+  --text-lede--line-height: 1.8rem;
+  --text-lede-lg: 1.25rem;
+  --text-lede-lg--line-height: 2rem;
+  --text-stat: 2.25rem;
+  --text-stat--line-height: 1;
+  --text-stat--letter-spacing: -0.02em;
+  --text-stat--font-weight: 700;
+  --text-stat-lg: 2.75rem;
+  --text-stat-lg--line-height: 1;
+  --text-stat-lg--letter-spacing: -0.02em;
+  --text-stat-lg--font-weight: 700;
+
   --text-large-title: 2.125rem;
   --text-large-title--line-height: 2.5625rem;
   --text-large-title--letter-spacing: 0.023rem;
@@ -81,6 +111,28 @@
   --color-grouped: var(--grouped);
   --color-grouped-secondary: var(--grouped-secondary);
   --color-field: var(--field);
+  --color-input: var(--input);
+  --color-border-strong: var(--border-strong);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-soft: var(--primary-soft);
+  --color-link: var(--link);
+  --color-link-hover: var(--link-hover);
+  --color-highlight: var(--highlight);
+  --color-highlight-soft: var(--highlight-soft);
+  --color-highlight-text: var(--highlight-text);
+  --color-code: var(--code-bg);
+  --color-destructive-soft: var(--destructive-soft);
+  --color-destructive-text: var(--destructive-text);
+  --color-success-soft: var(--success-soft);
+  --color-success-text: var(--success-text);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-warning-soft: var(--warning-soft);
+  --color-warning-text: var(--warning-text);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-active: var(--sidebar-active);
+  --color-sidebar-active-foreground: var(--sidebar-active-foreground);
   
   --radius-card: var(--radius-card);
   --radius-panel: var(--radius-panel);
@@ -96,14 +148,23 @@
   --color-fd-popover-foreground: var(--popover-foreground);
   --color-fd-primary: var(--primary);
   --color-fd-primary-foreground: var(--primary-foreground);
+  --color-fd-secondary: var(--secondary);
+  --color-fd-secondary-foreground: var(--secondary-foreground);
   --color-fd-muted: var(--muted);
   --color-fd-muted-foreground: var(--muted-foreground);
   --color-fd-accent: var(--accent);
   --color-fd-accent-foreground: var(--accent-foreground);
   --color-fd-border: var(--border);
   --color-fd-ring: var(--ring);
+  --color-fd-overlay: color-mix(in oklab, var(--foreground) 30%, transparent);
 }
 
+/*
+ * "Ink & Jade" palette (design/REDESIGN-PLAN.md section 3).
+ * Stone neutrals, jade accent, amber highlight. Every pair is measured by
+ * scripts/contrast.mjs; the table lives in DESIGN.md. Change a value here,
+ * then run `node scripts/contrast.mjs`.
+ */
 :root,
 .light {
   color-scheme: light;
@@ -114,69 +175,161 @@
   --radius-pill: 999px;
   --tap-target: 44px;
 
-  --background: #f7f7f7;
-  --foreground: #222222;
-  --card: #ffffff;
-  --card-foreground: #222222;
-  --popover: #ffffff;
-  --popover-foreground: #222222;
-  --grouped: #f7f7f7;
-  --grouped-secondary: #ffffff;
+  /* Surfaces */
+  --background: #FAFAF8;
+  --foreground: #1C1917;
+  --card: #FFFFFF;
+  --card-foreground: #1C1917;
+  --popover: #FFFFFF;
+  --popover-foreground: #1C1917;
+  --grouped: #F5F5F2;
+  --grouped-secondary: #FFFFFF;
+  --code-bg: #F5F5F2;
+  --field: #FFFFFF;
 
-  --primary: #0066CC;
-  --primary-foreground: #ffffff;
-  --secondary: #f2f2f2;
-  --secondary-foreground: #222222;
-  --muted: #f2f2f2;
-  --muted-foreground: #6a6a6a;
-  --accent: #f2f2f2;
-  --accent-foreground: #222222;
-  --destructive: #cd0014;
-  --destructive-foreground: #ffffff;
-  --success: #116630;
-  --success-foreground: #ffffff;
-  --border: #ebebeb;
-  --ring: #0066CC;
-  --separator: #f2f2f2;
-  --label-secondary: #6a6a6a;
-  --label-tertiary: #6e6e6e;
-  --field: #ffffff;
+  /* Accent: jade */
+  --primary: #0F766E;
+  --primary-foreground: #FFFFFF;
+  --primary-hover: #115E59;
+  --primary-soft: #E6F2F0;
+  --link: #0F766E;
+  --link-hover: #115E59;
+  --ring: #0F766E;
 
-  --material-thin: color-mix(in oklab, var(--card) 60%, transparent);
-  --material-regular: color-mix(in oklab, var(--card) 72%, transparent);
-  --material-thick: color-mix(in oklab, var(--card) 85%, transparent);
-  --material-filter: blur(20px) saturate(180%);
+  /* Highlight: amber (radar, new, streaks) */
+  --highlight: #B45309;
+  --highlight-soft: #FDF3E3;
+  --highlight-text: #92400E;
+
+  /* Neutrals: stone */
+  --secondary: #F0EFEC;
+  --secondary-foreground: #1C1917;
+  --muted: #F0EFEC;
+  --muted-foreground: #57534E;
+  --accent: #EDECE8;
+  --accent-foreground: #1C1917;
+  --label-secondary: #57534E;
+  --label-tertiary: #6B6560;
+  --border: #E7E5E4;
+  --border-strong: #8A847E;
+  --input: #8A847E;
+  --separator: #E7E5E4;
+
+  /* Status (red is reserved for errors) */
+  --destructive: #B91C1C;
+  --destructive-foreground: #FFFFFF;
+  --destructive-soft: #FDF0EF;
+  --destructive-text: #A51A1A;
+  --success: #15803D;
+  --success-foreground: #FFFFFF;
+  --success-soft: #EDF7F0;
+  --success-text: #136C34;
+  --warning: #B45309;
+  --warning-foreground: #FFFFFF;
+  --warning-soft: #FDF3E3;
+  --warning-text: #92400E;
+
+  /* Sidebar */
+  --sidebar: #FAFAF8;
+  --sidebar-foreground: #44403C;
+  --sidebar-active: #E6F2F0;
+  --sidebar-active-foreground: #0F665F;
+
+  /* Diagram category tints (DIAGRAM-RULES 4.3): icon tiles only */
+  --diagram-client: #57534E;
+  --diagram-client-soft: #F0EFEC;
+  --diagram-network: #1D4ED8;
+  --diagram-network-soft: #EAF0FC;
+  --diagram-service: #4338CA;
+  --diagram-service-soft: #EEEEFC;
+  --diagram-data: #136C34;
+  --diagram-data-soft: #EAF6EE;
+  --diagram-external: #A14A07;
+  --diagram-external-soft: #FDF1E4;
+  --diagram-abstraction: #7E22CE;
+  --diagram-abstraction-soft: #F4ECFC;
+  --diagram-concrete: #0F665F;
+  --diagram-concrete-soft: #E6F2F0;
+
+  --shadow-color: 28 25 23;
+  --material-thin: color-mix(in oklab, var(--background) 60%, transparent);
+  --material-regular: color-mix(in oklab, var(--background) 78%, transparent);
+  --material-thick: color-mix(in oklab, var(--background) 88%, transparent);
+  --material-filter: blur(20px) saturate(160%);
 }
 
 .dark {
   color-scheme: dark;
-  --background: #121212;
-  --foreground: #f7f7f7;
-  --card: #1e1e1e;
-  --card-foreground: #f7f7f7;
-  --popover: #1e1e1e;
-  --popover-foreground: #f7f7f7;
-  --grouped: #121212;
-  --grouped-secondary: #1e1e1e;
+  --background: #0E1013;
+  --foreground: #ECEAE7;
+  --card: #16191E;
+  --card-foreground: #ECEAE7;
+  --popover: #16191E;
+  --popover-foreground: #ECEAE7;
+  --grouped: #13161B;
+  --grouped-secondary: #16191E;
+  --code-bg: #13161B;
+  --field: #16191E;
 
-  --primary: #409CFF;
-  --primary-foreground: #000000;
-  --secondary: #262626;
-  --secondary-foreground: #f7f7f7;
-  --muted: #262626;
-  --muted-foreground: #a3a3a3;
-  --accent: #262626;
-  --accent-foreground: #f7f7f7;
-  --destructive: #ff594f;
-  --destructive-foreground: #000000;
-  --success: #34d399;
-  --success-foreground: #000000;
-  --border: #2e2e2e;
-  --ring: #409CFF;
-  --separator: #262626;
-  --label-secondary: #a3a3a3;
-  --label-tertiary: #8e8e93;
-  --field: #1e1e1e;
+  --primary: #2DD4BF;
+  --primary-foreground: #0E1013;
+  --primary-hover: #5EEAD4;
+  --primary-soft: #12292A;
+  --link: #5EEAD4;
+  --link-hover: #99F6E4;
+  --ring: #2DD4BF;
+
+  --highlight: #F59E0B;
+  --highlight-soft: #2A2012;
+  --highlight-text: #FBBF24;
+
+  --secondary: #1F2329;
+  --secondary-foreground: #ECEAE7;
+  --muted: #1F2329;
+  --muted-foreground: #A8A29E;
+  --accent: #23282F;
+  --accent-foreground: #ECEAE7;
+  --label-secondary: #A8A29E;
+  --label-tertiary: #938D88;
+  --border: #2A2E35;
+  --border-strong: #646B75;
+  --input: #646B75;
+  --separator: #23272D;
+
+  --destructive: #F87171;
+  --destructive-foreground: #0E1013;
+  --destructive-soft: #2A1719;
+  --destructive-text: #FCA5A5;
+  --success: #4ADE80;
+  --success-foreground: #0E1013;
+  --success-soft: #13261B;
+  --success-text: #86EFAC;
+  --warning: #F59E0B;
+  --warning-foreground: #0E1013;
+  --warning-soft: #2A2012;
+  --warning-text: #FBBF24;
+
+  --sidebar: #0E1013;
+  --sidebar-foreground: #D6D3D1;
+  --sidebar-active: #12292A;
+  --sidebar-active-foreground: #5EEAD4;
+
+  --diagram-client: #D6D3D1;
+  --diagram-client-soft: #23272D;
+  --diagram-network: #93C5FD;
+  --diagram-network-soft: #172336;
+  --diagram-service: #A5B4FC;
+  --diagram-service-soft: #1E2038;
+  --diagram-data: #86EFAC;
+  --diagram-data-soft: #14281D;
+  --diagram-external: #FDBA74;
+  --diagram-external-soft: #2D2116;
+  --diagram-abstraction: #D8B4FE;
+  --diagram-abstraction-soft: #271D35;
+  --diagram-concrete: #5EEAD4;
+  --diagram-concrete-soft: #12292A;
+
+  --shadow-color: 0 0 0;
 }
 
 @utility material-thin {
