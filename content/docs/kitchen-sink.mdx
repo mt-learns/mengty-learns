@@ -1,0 +1,69 @@
+---
+title: Kitchen Sink
+description: Testing all components and styles.
+type: reference
+level: advanced
+status: stable
+updated: 2026-11-26
+---
+
+import { Button } from '@/components/ui/button';
+
+# Kitchen Sink
+
+This is a test page to verify the iOS design system port.
+
+## Headings
+
+### H3 Heading
+#### H4 Heading
+
+## Callouts
+
+<Callout>
+  This is a default callout (rounded-panel).
+</Callout>
+
+<Callout type="warn">
+  This is a warning callout.
+</Callout>
+
+## Components
+
+### Shadcn Button
+<Button>Click Me</Button>
+<Button variant="outline">Outline Button</Button>
+
+### Tabs
+
+<Tabs items={['Docker', 'Kubernetes']}>
+  <Tab value="Docker">Docker is for containers.</Tab>
+  <Tab value="Kubernetes">Kubernetes is for orchestration.</Tab>
+</Tabs>
+
+### Code Blocks
+
+```bash
+pnpm install
+pnpm build
+```
+
+```ts
+const hello = "world";
+console.log(hello);
+```
+
+## Table
+
+| Feature | Support |
+|---|---|
+| Static Export | Yes |
+| Search | Yes |
+| Dark Mode | Yes |
+
+## Cards
+
+<Cards>
+  <Card title="Introduction" href="/docs" description="Learn the basics" />
+  <Card title="Projects" href="/projects" description="View my work" />
+</Cards>

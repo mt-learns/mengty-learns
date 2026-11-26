@@ -1,0 +1,204 @@
+/* Ported from Chongdai design system. Modified for Mengty Learns. */
+
+@custom-variant dark (&:where(.dark, .dark *):not(:where(.light, .light *)));
+
+@theme {
+  --text-large-title: 2.125rem;
+  --text-large-title--line-height: 2.5625rem;
+  --text-large-title--letter-spacing: 0.023rem;
+  --text-large-title--font-weight: 700;
+  --text-title-1: 1.75rem;
+  --text-title-1--line-height: 2.125rem;
+  --text-title-1--letter-spacing: 0.0225rem;
+  --text-title-1--font-weight: 400;
+  --text-title-2: 1.375rem;
+  --text-title-2--line-height: 1.75rem;
+  --text-title-2--letter-spacing: -0.016rem;
+  --text-title-2--font-weight: 400;
+  --text-title-3: 1.25rem;
+  --text-title-3--line-height: 1.5625rem;
+  --text-title-3--letter-spacing: -0.028rem;
+  --text-title-3--font-weight: 400;
+  --text-headline: 1.0625rem;
+  --text-headline--line-height: 1.375rem;
+  --text-headline--letter-spacing: -0.027rem;
+  --text-headline--font-weight: 600;
+  --text-body: 1.0625rem;
+  --text-body--line-height: 1.375rem;
+  --text-body--letter-spacing: -0.027rem;
+  --text-body--font-weight: 400;
+  --text-callout: 1rem;
+  --text-callout--line-height: 1.3125rem;
+  --text-callout--letter-spacing: -0.019rem;
+  --text-callout--font-weight: 400;
+  --text-subheadline: 0.9375rem;
+  --text-subheadline--line-height: 1.25rem;
+  --text-subheadline--letter-spacing: -0.014rem;
+  --text-subheadline--font-weight: 400;
+  --text-footnote: 0.8125rem;
+  --text-footnote--line-height: 1.125rem;
+  --text-footnote--letter-spacing: -0.005rem;
+  --text-footnote--font-weight: 400;
+  --text-caption-1: 0.75rem;
+  --text-caption-1--line-height: 1rem;
+  --text-caption-1--letter-spacing: 0rem;
+  --text-caption-1--font-weight: 400;
+  --text-caption-2: 0.6875rem;
+  --text-caption-2--line-height: 0.8125rem;
+  --text-caption-2--letter-spacing: 0.004rem;
+  --text-caption-2--font-weight: 400;
+
+  --control-h: 2.5rem;
+  --control-h-touch: 2.75rem;
+
+  --ease-ios: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+  --color-separator: var(--separator);
+  --color-label-secondary: var(--label-secondary);
+  --color-label-tertiary: var(--label-tertiary);
+  --color-grouped: var(--grouped);
+  --color-grouped-secondary: var(--grouped-secondary);
+  --color-field: var(--field);
+  
+  --radius-card: var(--radius-card);
+  --radius-panel: var(--radius-panel);
+  --radius-control: var(--radius-control);
+  --radius-pill: var(--radius-pill);
+
+  /* Fumadocs mapping */
+  --color-fd-background: var(--background);
+  --color-fd-foreground: var(--foreground);
+  --color-fd-card: var(--card);
+  --color-fd-card-foreground: var(--card-foreground);
+  --color-fd-popover: var(--popover);
+  --color-fd-popover-foreground: var(--popover-foreground);
+  --color-fd-primary: var(--primary);
+  --color-fd-primary-foreground: var(--primary-foreground);
+  --color-fd-muted: var(--muted);
+  --color-fd-muted-foreground: var(--muted-foreground);
+  --color-fd-accent: var(--accent);
+  --color-fd-accent-foreground: var(--accent-foreground);
+  --color-fd-border: var(--border);
+  --color-fd-ring: var(--ring);
+}
+
+:root {
+  color-scheme: light;
+  --radius: 12px;
+  --radius-card: 20px;
+  --radius-panel: 16px;
+  --radius-control: 12px;
+  --radius-pill: 999px;
+  --tap-target: 44px;
+
+  --background: #f7f7f7;
+  --foreground: #222222;
+  --card: #ffffff;
+  --card-foreground: #222222;
+  --popover: #ffffff;
+  --popover-foreground: #222222;
+  --grouped: #f7f7f7;
+  --grouped-secondary: #ffffff;
+
+  --primary: #0066CC;
+  --primary-foreground: #ffffff;
+  --secondary: #f2f2f2;
+  --secondary-foreground: #222222;
+  --muted: #f2f2f2;
+  --muted-foreground: #6a6a6a;
+  --accent: #f2f2f2;
+  --accent-foreground: #222222;
+  --destructive: #cd0014;
+  --destructive-foreground: #ffffff;
+  --border: #ebebeb;
+  --ring: #0066CC;
+  --separator: #f2f2f2;
+  --label-secondary: #6a6a6a;
+  --label-tertiary: #9a9a9a;
+  --field: #ffffff;
+
+  --material-thin: color-mix(in oklab, var(--card) 60%, transparent);
+  --material-regular: color-mix(in oklab, var(--card) 72%, transparent);
+  --material-thick: color-mix(in oklab, var(--card) 85%, transparent);
+  --material-filter: blur(20px) saturate(180%);
+}
+
+.dark {
+  color-scheme: dark;
+  --background: #121212;
+  --foreground: #f7f7f7;
+  --card: #1e1e1e;
+  --card-foreground: #f7f7f7;
+  --popover: #1e1e1e;
+  --popover-foreground: #f7f7f7;
+  --grouped: #121212;
+  --grouped-secondary: #1e1e1e;
+
+  --primary: #409CFF;
+  --primary-foreground: #000000;
+  --secondary: #262626;
+  --secondary-foreground: #f7f7f7;
+  --muted: #262626;
+  --muted-foreground: #a3a3a3;
+  --accent: #262626;
+  --accent-foreground: #f7f7f7;
+  --destructive: #ff453a;
+  --destructive-foreground: #000000;
+  --border: #2e2e2e;
+  --ring: #409CFF;
+  --separator: #262626;
+  --label-secondary: #a3a3a3;
+  --label-tertiary: #6e6e6e;
+  --field: #1e1e1e;
+}
+
+@utility material-thin {
+  background-color: var(--material-thin);
+  backdrop-filter: var(--material-filter);
+}
+
+@utility material-regular {
+  background-color: var(--material-regular);
+  backdrop-filter: var(--material-filter);
+}
+
+@utility material-thick {
+  background-color: var(--material-thick);
+  backdrop-filter: var(--material-filter);
+}
+
+@utility rounded-card {
+  border-radius: var(--radius-card);
+}
+
+@utility rounded-panel {
+  border-radius: var(--radius-panel);
+}
+
+@utility min-h-tap {
+  min-height: var(--tap-target);
+}
+
+@utility h-control {
+  height: var(--control-h);
+}

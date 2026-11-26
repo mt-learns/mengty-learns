@@ -1,0 +1,27 @@
+---
+title: GitHub Actions Workflow
+description: How to write a simple GitHub Actions workflow.
+type: how-to
+level: intermediate
+tags: [ci-cd, github-actions]
+status: stable
+updated: 2026-11-26
+---
+
+# GitHub Actions Workflow
+
+Automate your build, test, and deployment pipeline.
+
+## Example Workflow
+
+```yaml
+name: CI
+on: [push]
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm install
+      - run: npm test
+```

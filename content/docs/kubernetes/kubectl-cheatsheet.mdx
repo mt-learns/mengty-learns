@@ -1,0 +1,28 @@
+---
+title: Kubectl Cheatsheet
+description: Essential kubectl commands for daily use.
+type: reference
+level: intermediate
+tags: [kubernetes, kubectl]
+status: stable
+updated: 2026-11-26
+---
+
+# Kubectl Cheatsheet
+
+Quick reference for Kubernetes operations.
+
+## Get Resources
+
+```bash
+kubectl get pods
+kubectl get nodes
+kubectl get services
+```
+
+## Logs and Debugging
+
+```bash
+kubectl logs <pod-name>
+kubectl exec -it <pod-name> -- /bin/bash
+```
