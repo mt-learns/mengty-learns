@@ -100,6 +100,33 @@ Legend: **kind**: N note · C concept (+ `<Flow>`) · S cheatsheet · L lab · D
 | Pattern relations: Bridge vs Adapter vs Strategy | N / explanation | — | P2 |
 
 ### 2.8 Architecture
+
+**Application architecture styles.** These four are often confused, so they share one example app (an "Order" service in TypeScript) and one compare page. Every page includes the **dependency rule** diagram: which way the arrows point.
+
+| Page | kind / type | Flow or lab | Priority |
+|---|---|---|---|
+| **Layered (n-tier) architecture** | C / explanation | Flow: HTTP → Presentation → Business → Data → DB, then back. Shows the "leaky layer" and "DB-centric" problems | P1 |
+| **Hexagonal (Ports & Adapters)** | C / explanation | Flow: driving adapter (REST/CLI/test) → inbound port → domain → outbound port → driven adapter (Postgres/in-memory). Toggle: swap the Postgres adapter for in-memory in tests | P1 |
+| **Onion architecture** | C / explanation | Flow: rings Domain model → Domain services → Application services → Infrastructure/UI. Dependencies only point inward | P2 |
+| **Clean Architecture** | C / explanation | Flow: Controller → Use case (interactor) → Entity, with Presenter / Gateway interfaces. Dependency rule plus the crossing-boundaries step | P2 |
+| **Layered vs Hexagonal vs Onion vs Clean: compare** | N / explanation | Flow compare toggle: the same request in each style. Table: where business logic lives, how dependencies point, testability, folder structure, when to use each | P1 |
+| Dependency inversion in practice (the principle behind the last three) | N / explanation | Links to SOLID (§2.7) | P1 |
+| Folder structure for each style (TS/Next.js examples) | N / reference | Lab `arch-order-service` with branches `layered`, `hexagonal`, `clean` | P2 |
+| Vertical slice architecture | C / explanation | Flow: feature slice = handler → logic → data, with no shared layers | P3 |
+| Modular monolith (module boundaries, public APIs between modules) | C / explanation | Flow: module A → public API → module B (no direct DB access) | P2 |
+
+**Domain-driven design and patterns**
+
+| Page | kind / type | Flow or lab | Priority |
+|---|---|---|---|
+| DDD essentials: ubiquitous language, bounded context, context map | N / explanation | — | P2 |
+| DDD tactical: entity, value object, aggregate, repository, domain event | C / explanation | Flow: command → aggregate enforces invariant → domain event | P2 |
+| CQRS (and when not to use it) | C / explanation | Flow: command side → write model; query side → read model | P3 |
+| Event-driven architecture: events vs commands, outbox pattern | C / explanation | Flow: transaction + outbox → relay → broker → consumers | P3 |
+| Event sourcing (overview) | N / explanation | — | P3 |
+
+**System-level architecture**
+
 | Page | kind / type | Flow or lab | Priority |
 |---|---|---|---|
 | Monolith vs modular monolith vs microservices | D / explanation | — | P2 |
