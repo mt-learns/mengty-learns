@@ -1,0 +1,14 @@
+---
+title: "`latest` image tags in production"
+ring: hold
+quadrant: techniques
+what: Deploying containers referenced by mutable `:latest` tags instead of pinned versions or digests.
+why: Breaks reproducibility, complicates rollbacks, and causes silent drift across cluster nodes.
+action: Hold in all Compose and Kubernetes manifests; pin explicit semver tags or SHA256 digests.
+updated: "2026-11-26"
+sources:
+  - title: Docker Docs — docker image tag
+    url: https://docs.docker.com/reference/cli/docker/image/tag/
+related:
+  - containers/docker-basics
+---

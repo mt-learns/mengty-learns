@@ -1,0 +1,14 @@
+---
+title: OIDC for CI → cloud
+ring: trial
+quadrant: techniques
+what: Short-lived federated tokens issued to CI jobs instead of static cloud access keys.
+why: Eliminates secret rotation overhead and limits blast radius to specific repositories and branches.
+action: Trial in GitHub Actions workflows for AWS/Cloudflare deployments with strict subject claims.
+updated: "2026-11-26"
+sources:
+  - title: GitHub Docs — OpenID Connect
+    url: https://docs.github.com/en/actions/concepts/security/openid-connect
+related:
+  - ci-cd/github-actions
+---

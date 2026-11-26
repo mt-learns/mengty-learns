@@ -1,0 +1,14 @@
+---
+title: Long-lived cloud keys in CI
+ring: hold
+quadrant: techniques
+what: Storing static IAM access keys or service-account JSON credentials in CI repository secrets.
+why: Leaked or unrotated keys grant persistent access and are a common root cause of cloud compromises.
+action: Hold for all new pipelines; migrate existing workflows to OIDC federation.
+updated: "2026-11-26"
+sources:
+  - title: GitHub Docs — OpenID Connect
+    url: https://docs.github.com/en/actions/concepts/security/openid-connect
+related:
+  - ci-cd/github-actions
+---
