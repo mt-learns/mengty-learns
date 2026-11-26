@@ -1,0 +1,212 @@
+---
+title: "Rate Limiting & Brute-Force Protection"
+description: Token bucket vs fixed/sliding window algorithms, edge vs application enforcement, choosing rate-limit keys, and returning 429 Too Many Requests with Retry-After.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: concept
+type: explanation
+level: intermediate
+tags: [security, rate-limiting, availability, api, asvs]
+tested_with:
+  asvs: "5.0.0 (V2, V6, V15)"
+  rfc: "RFC 9110 (429 / Retry-After)"
+cards:
+  - q: "Why does a Fixed Window rate limiter suffer from boundary bursts?"
+    a: "A client can send the full limit at 00:59 and another full limit at 01:01, effectively doubling the rate across the window boundary."
+  - q: "How does Token Bucket differ from Sliding Window?"
+    a: "Token Bucket refills tokens at a steady rate up to a burst capacity (allowing controlled short bursts), while Sliding Window smooths counts across a rolling time window."
+  - q: "Why should rate limiting run at both the edge and the application layer?"
+    a: "The edge absorbs volumetric IP floods cheaply before hitting app servers, while the app layer enforces user/account/action-specific limits (such as login or password reset)."
+  - q: "What HTTP status code and header should a rate-limited response return?"
+    a: "HTTP 429 Too Many Requests with a Retry-After header (seconds or HTTP-date) telling clients when to retry."
+related:
+  - security/passwords
+  - security/owasp-top-10
+sources:
+  - title: "RFC 9110: HTTP Semantics (Retry-After)"
+    url: https://www.rfc-editor.org/rfc/rfc9110#section-10.2.3
+  - title: "RFC 6585: Additional HTTP Status Codes (429 Too Many Requests)"
+    url: https://www.rfc-editor.org/rfc/rfc6585
+  - title: "OWASP ASVS 5.0: V6 Authentication & V15 Secure Coding and Architecture"
+    url: https://github.com/OWASP/ASVS
+  - title: "OWASP Denial of Service Cheat Sheet"
+    url: https://cheatsheetseries.owasp.org/cheatsheets/Denial_of_Service_Cheat_Sheet.html
+---
+
+## TL;DR
+**Rate limiting** caps request rates per key (**IP**, **user ID**, **API token**, or **email**) to stop brute force, credential stuffing, and resource exhaustion. Use **Token Bucket** for controlled bursts or **Sliding Window** for smooth limits, enforce coarse limits at the **edge** and business limits in the **app**, and return **`429 Too Many Requests`** with **`Retry-After`**.
+
+## Intent
+<Intent>
+Pick the right rate-limiting algorithm and key, place enforcement at both the edge and application layers, and signal backoff cleanly with `429` + `Retry-After`.
+</Intent>
+
+## Problem
+Without rate limits, an attacker can run millions of password guesses against `/login`, exhaust DB connections with expensive search queries, or rack up third-party SMS/AI bills. Conversely, a naive IP-only fixed-window limit can block an entire office behind one NAT IP or allow 2× bursts at minute boundaries.
+
+<Diagram
+  id="rate-limit-layers"
+  ariaLabel="Edge rate limiter keys by IP before traffic reaches the Application limiter keyed by user or route"
+  caption="Edge limits absorb raw IP floods; application limits protect expensive actions per user or account."
+  nodes={[
+    { id: 'client', label: 'Client', subtitle: 'Sends requests', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'edge', label: 'Edge Limiter', subtitle: 'By IP / ASN', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+    { id: 'app', label: 'App Limiter', subtitle: 'By user / action', icon: 'service', category: 'service', rank: 2, order: 0 },
+    { id: 'redis', label: 'Redis Counter', subtitle: 'Token bucket', icon: 'db', category: 'data', rank: 3, order: 0 },
+  ]}
+  edges={[
+    { from: 'client', to: 'edge', kind: 'request' },
+    { from: 'edge', to: 'app', kind: 'request' },
+    { from: 'app', to: 'redis', kind: 'request' },
+  ]}
+/>
+
+## Solution
+Combine the right algorithm, key, and enforcement point:
+
+| Algorithm | How it works | Best for |
+|---|---|---|
+| **Fixed Window** | Counter resets every $N$ seconds. | Simple coarse quotas (beware 2× boundary bursts). |
+| **Sliding Window** | Weighted or rolling log over the last $N$ seconds. | Smooth API quotas with no boundary spikes. |
+| **Token Bucket** | Bucket holds up to $B$ tokens, refilling at $R$/sec; each request consumes 1 (or $cost$) tokens. | Legitimate UI bursts (loading a dashboard) with a steady average rate. |
+
+- **Keys:** Key unauthenticated routes by **client IP** (from a trusted proxy header, never a spoofable `X-Forwarded-For` from untrusted clients), login/reset routes by **IP + normalized account identifier**, and authenticated APIs by **user ID / API key**.
+- **Response:** Return `429 Too Many Requests` with `Retry-After: <seconds>` so well-behaved clients back off instead of retrying in a tight loop.
+
+## Real-world analogy
+<Analogy>
+A **Token Bucket** is a coffee punch card that automatically gains 1 stamp every 10 seconds up to a maximum of 5 stamps. You can order 5 coffees back-to-back in a burst, then you must wait 10 seconds per coffee—preventing anyone from monopolizing the espresso machine.
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="rate-limiting"
+  title="Token Bucket Rate Limiter (Allow vs 429 Retry-After)"
+  nodes={[
+    { id: 'client', label: 'Client', subtitle: 'POST /login', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'limiter', label: 'Rate Limiter', subtitle: 'Token bucket', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+    { id: 'store', label: 'Redis Store', subtitle: 'Atomic Lua/INCR', icon: 'db', category: 'data', rank: 2, order: 0 },
+    { id: 'api', label: 'App Handler', subtitle: 'Runs /login', icon: 'service', category: 'service', rank: 2, order: 1 },
+  ]}
+  steps={[
+    { edge: 'client->limiter', title: '1. Request arrives', text: 'Client sends POST /login; limiter extracts key ip:203.0.113.5+user.' },
+    { edge: 'limiter->store', title: '2. Consume 1 token', text: 'Limiter runs an atomic script in Redis to refill and decrement the bucket.' },
+    { edge: 'store->limiter', title: '3. Tokens remaining: 4', text: 'Bucket has tokens left, so Redis returns allowed=true.', kind: 'response' },
+    { edge: 'limiter->api', title: '4. Forward to App Handler', text: 'Limiter forwards the request to the application login handler.' },
+    { edge: 'api->limiter', title: '5. Handler returns 200', text: 'App processes the login and returns the response.', kind: 'response' },
+    { edge: 'limiter->client', title: '6. Client receives 200 OK', text: 'Client gets 200 OK plus RateLimit headers.', kind: 'response' },
+    { edge: 'store->limiter', title: '7. Empty bucket (0 tokens)', text: 'On a burst past capacity, Redis returns allowed=false and retryAfter=12s.', kind: 'error', label: 'Empty' },
+    { edge: 'limiter->client', title: '8. Return 429 + Retry-After', text: 'Limiter short-circuits with HTTP 429 and Retry-After: 12.', kind: 'error', label: '429' },
+  ]}
+/>
+
+## Code
+An in-memory token bucket (suitable for single-instance demos; use atomic Redis Lua scripts in multi-instance production):
+
+```ts
+// SAFE: token bucket with explicit capacity, refill rate, and Retry-After calculation
+type Bucket = { tokens: number; updatedAt: number };
+const buckets = new Map<string, Bucket>();
+
+export function checkTokenBucket(
+  key: string,
+  capacity = 5,
+  refillPerSec = 0.5,
+  now = Date.now(),
+): { allowed: boolean; retryAfterSec: number } {
+  const b = buckets.get(key) ?? { tokens: capacity, updatedAt: now };
+  const elapsedSec = Math.max(0, (now - b.updatedAt) / 1000);
+  const tokens = Math.min(capacity, b.tokens + elapsedSec * refillPerSec);
+
+  if (tokens < 1) {
+    buckets.set(key, { tokens, updatedAt: now });
+    return { allowed: false, retryAfterSec: Math.ceil((1 - tokens) / refillPerSec) };
+  }
+
+  buckets.set(key, { tokens: tokens - 1, updatedAt: now });
+  return { allowed: true, retryAfterSec: 0 };
+}
+```
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'Enforce tight limits on authentication, password reset, OTP verification, and expensive search/export routes.',
+    'Use atomic store operations (Redis Lua/MULTI) so concurrent requests cannot race past the cap.',
+    'Return 429 with Retry-After and fail safely (or alert) if the rate-limit store is unreachable.',
+  ]}
+  avoid={[
+    'Never trust client-supplied X-Forwarded-For headers unless your trusted reverse proxy strips and rewrites them.',
+    'Do not use IP-only limits for sensitive endpoints without also keying on account/token.',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Configure edge limits first
+    Enable Cloudflare/WAF/Nginx rate-limiting rules to drop volumetric floods at the perimeter.
+  </Step>
+  <Step>
+    ### Add route-specific app limits
+    Apply tighter token-bucket or sliding-window limits on `/login`, `/forgot-password`, and `/api/export`.
+  </Step>
+  <Step>
+    ### Emit 429 and monitor spikes
+    Return `429 Too Many Requests` with `Retry-After` and alert on sustained 429 surges.
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'Token bucket accommodates natural UI request bursts while enforcing a strict long-term average.',
+    'Layered edge + app limits protect both infrastructure bandwidth and business logic.',
+  ]}
+  cons={[
+    'Distributed rate limiting adds a Redis/edge hop and requires careful fail-open vs fail-closed decisions.',
+    'Shared NATs (universities, mobile carriers) can trigger false positives on IP-only keys.',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'Passwords, Hashing & MFA',
+      href: '/docs/security/passwords',
+      summary: 'Why rate limiting + progressive backoff beats permanent account lockouts.',
+    },
+    {
+      name: 'OWASP Top 10:2025 Summary',
+      href: '/docs/security/owasp-top-10',
+      summary: 'How missing rate limits tie to A06 Insecure Design and A07 Authentication Failures.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "Why should an application never trust X-Forwarded-For directly without configuring trusted proxy hops?",
+    options: [
+      { label: "An attacker can send a fake X-Forwarded-For IP on every request to bypass IP-based rate limits", description: "Only the IP appended by your trusted edge/reverse proxy is authentic.", correct: true },
+      { label: "X-Forwarded-For is only supported in HTTP/1.0", description: "It is widely used across HTTP versions, just spoofable if untrusted." },
+      { label: "X-Forwarded-For encrypts the client IP", description: "It is a plain-text HTTP header." }
+    ]
+  },
+  {
+    question: "Which HTTP status code and header tell a rate-limited client to back off and when to try again?",
+    options: [
+      { label: "429 Too Many Requests with Retry-After", description: "Defined in RFC 6585 and RFC 9110 for rate-limiting backoff.", correct: true },
+      { label: "401 Unauthorized with WWW-Authenticate", description: "401 indicates missing or invalid authentication." },
+      { label: "500 Internal Server Error with Cache-Control", description: "500 signals an unexpected server failure." }
+    ]
+  }
+]} />
+
+## Sources
+- [RFC 9110: HTTP Semantics (Retry-After)](https://www.rfc-editor.org/rfc/rfc9110#section-10.2.3)
+- [RFC 6585: Additional HTTP Status Codes](https://www.rfc-editor.org/rfc/rfc6585)
+- [OWASP ASVS 5.0 (GitHub)](https://github.com/OWASP/ASVS)
+- [OWASP Denial of Service Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Denial_of_Service_Cheat_Sheet.html)
