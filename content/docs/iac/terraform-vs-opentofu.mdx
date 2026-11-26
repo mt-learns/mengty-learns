@@ -1,0 +1,98 @@
+---
+title: "Terraform vs OpenTofu: License, Features, and Choice"
+description: Compare HashiCorp Terraform and OpenTofu across license history (BSL vs MPL), feature divergence, compatibility, and which one to pick.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: decision
+type: explanation
+level: intermediate
+tags: [iac, opentofu, terraform, license, decision]
+tested_with:
+  opentofu: "1.13 (docs)"
+  terraform: "1.17 (docs)"
+cards:
+  - q: "What event triggered the creation of OpenTofu in 2023?"
+    a: "On August 10, 2023, HashiCorp changed Terraform's license from MPL 2.0 to the Business Source License (BSL 1.1); OpenTofu forked from v1.5.6 under MPL 2.0."
+  - q: "Which major security feature does OpenTofu have that Terraform OSS lacks?"
+    a: "Built-in client-side state and plan encryption (the encryption {} block) using KMS or PBKDF2."
+  - q: "What is OpenTofu's 'early variable evaluation' feature?"
+    a: "OpenTofu allows var.* and local.* expressions inside module source, backend, and encryption blocks, which Terraform forbids."
+  - q: "Can existing Terraform providers and HCL modules run on OpenTofu?"
+    a: "Yes for almost all HCL and providers via registry.opentofu.org, though newer OpenTofu-only or Terraform-only syntax features diverge."
+related:
+  - iac/first-project
+  - iac/remote-state-locking
+  - iac/tofu-cheatsheet
+sources:
+  - title: "HashiCorp: BSL License FAQ (2023-08-10)"
+    url: https://www.hashicorp.com/en/bsl
+  - title: "OpenTofu: Manifesto & CNCF Project"
+    url: https://opentofu.org/
+  - title: "OpenTofu Docs: State Encryption"
+    url: https://opentofu.org/docs/language/state/encryption/
+  - title: "OpenTofu Docs: Early Variable/Local Evaluation"
+    url: https://opentofu.org/docs/language/expressions/early-evaluation/
+---
+
+## TL;DR
+**OpenTofu** (MPL 2.0, CNCF) and **Terraform** (BSL 1.1, HashiCorp/IBM) share the same HCL roots and provider ecosystem, but have diverged since August 2023. Pick **OpenTofu** for open-source governance, client-side state encryption, and dynamic `backend`/`module` variables; pick **Terraform** if you are already standardized on HCP Terraform or HashiCorp enterprise support.
+
+## Context
+On **August 10, 2023**, HashiCorp relicensed Terraform from the open-source **MPL 2.0** to the source-available **BSL 1.1** (restricting competing hosted offerings). The community forked Terraform `1.5.6` into **OpenTofu** under the Linux Foundation / CNCF, keeping MPL 2.0 permanently.
+
+## Comparison
+
+| Dimension | OpenTofu (v1.13) | Terraform (v1.17) |
+|---|---|---|
+| **License & Governance** | MPL 2.0 (CNCF / Linux Foundation) | BSL 1.1 (HashiCorp / IBM) |
+| **Client-side state encryption** | Built-in `encryption {}` block (KMS, PBKDF2, OpenBao) | Not built-in (relies on backend SSE or HCP Terraform) |
+| **Variables in `backend` & `module.source`** | Supported via early variable evaluation (1.8+) | Not supported (must use `-backend-config` or static strings) |
+| **Provider-defined functions** | Supported (`provider::name::fn`) | Supported (`provider::name::fn`) |
+| **Managed platform** | Self-hosted, Spacelift, env0, Scalr, GitHub Actions | HCP Terraform (Terraform Cloud) & Enterprise |
+| **Provider registry** | `registry.opentofu.org` (mirrors public providers) | `registry.terraform.io` |
+
+## Decision criteria
+1. **License & vendor lock-in:** If your company policy or product embeds IaC tooling, MPL 2.0 (OpenTofu) avoids BSL 1.1 legal ambiguity.
+2. **State security & DRY backends:** OpenTofu's client-side `encryption {}` and variables inside `backend {}` remove whole classes of wrapper scripts (like Terragrunt boilerplate for backends).
+3. **Existing platform investment:** If you pay for HCP Terraform private registry, policy sets (Sentinel), and support SLAs, migrating off Terraform brings little upside.
+
+<MyTake>
+For greenfield projects and personal stacks on Mengty Learns, I default to **OpenTofu**—client-side state encryption and open CNCF governance are clear wins, and `tofu` is a drop-in CLI replacement for `terraform`.
+</MyTake>
+
+## Gotchas
+- **State format divergence:** once you enable OpenTofu-only features (like `encryption {}` or new state schema versions), Terraform cannot read that state file without decrypting/migrating first.
+- **Registry URLs:** `registry.opentofu.org` mirrors open-source providers, but a few commercial providers may have license terms tied to Terraform.
+- **Mixing binaries:** never run `terraform apply` and `tofu apply` interchangeably on the same state directory in CI.
+
+## Production checklist
+- [ ] Standardize on **one** binary (`tofu` or `terraform`) per repository and pin it in CI
+- [ ] Pin `required_version` and `required_providers` versions in `versions.tf`
+- [ ] Commit `.terraform.lock.hcl` (works for both) to lock provider checksums
+- [ ] If choosing OpenTofu, enable `encryption {}` on remote state
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "What was the primary reason OpenTofu was forked from Terraform 1.5.6 in 2023?",
+    options: [
+      { label: "HashiCorp changed Terraform's license from MPL 2.0 to BSL 1.1 on August 10, 2023", description: "The community forked Terraform 1.5.6 to preserve an open-source MPL 2.0 implementation under CNCF governance.", correct: true },
+      { label: "HashiCorp deprecated HCL in favor of YAML", description: "Both Terraform and OpenTofu use HCL." },
+      { label: "Terraform removed support for AWS and GCP providers", description: "Providers remained supported; the fork was driven by licensing and governance." }
+    ]
+  },
+  {
+    question: "Which feature is available in OpenTofu 1.8+ but forbidden in Terraform?",
+    options: [
+      { label: "Using var.* and local.* inside module.source and backend blocks", description: "OpenTofu's early variable evaluation resolves static inputs before initializing backends and modules.", correct: true },
+      { label: "Using count and for_each on resources", description: "Both tools support count and for_each." },
+      { label: "Creating remote state in Amazon S3", description: "Both tools support the S3 backend." }
+    ]
+  }
+]} />
+
+## Sources
+- [HashiCorp: BSL License FAQ](https://www.hashicorp.com/en/bsl)
+- [OpenTofu Official Site](https://opentofu.org/)
+- [OpenTofu Docs: State Encryption](https://opentofu.org/docs/language/state/encryption/)
+- [OpenTofu Docs: Early Variable/Local Evaluation](https://opentofu.org/docs/language/expressions/early-evaluation/)
