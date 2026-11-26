@@ -12,6 +12,10 @@ updated: 2026-11-26
 
 Automate your build, test, and deployment pipeline.
 
+<Gotcha>
+  Pin action versions to a full SHA or trusted major tag to avoid unexpected breaking changes.
+</Gotcha>
+
 ## Example Workflow
 
 ```yaml
@@ -25,3 +29,5 @@ jobs:
       - run: npm install
       - run: npm test
 ```
+
+<Figure src="/images/github-actions-flow.svg" alt="GitHub Actions workflow diagram" caption="A simple CI workflow from push to test." />

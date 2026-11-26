@@ -4,10 +4,19 @@ import { defineDocs } from 'fumadocs-mdx/macro';
 import { metaSchema, pageSchema } from 'fumadocs-core/source/schema';
 import { z } from 'zod';
 
+const frontmatterSchema = pageSchema.extend({
+  type: z.enum(['tutorial', 'how-to', 'reference', 'explanation']).optional(),
+  level: z.enum(['beginner', 'intermediate', 'advanced']).optional(),
+  tags: z.array(z.string()).default([]),
+  tested_with: z.record(z.string(), z.string()).optional(),
+  status: z.enum(['draft', 'stable', 'outdated']).default('stable'),
+  updated: z.string().optional(),
+});
+
 const docs = defineDocs({
   dir: 'content/docs',
   docs: {
-    schema: pageSchema,
+    schema: frontmatterSchema,
     postprocess: {
       includeProcessedMarkdown: true,
     },

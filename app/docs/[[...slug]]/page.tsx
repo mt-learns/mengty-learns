@@ -25,6 +25,28 @@ export default async function Page(props: PageProps<'/docs/[[...slug]]'>) {
     <DocsPage toc={page.data.toc} full={page.data.full}>
       <DocsTitle>{page.data.title}</DocsTitle>
       <DocsDescription className="mb-0">{page.data.description}</DocsDescription>
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground my-2">
+        {page.data.type && (
+          <span className="inline-flex items-center rounded-full bg-primary/10 text-primary px-2.5 py-0.5 font-medium capitalize">
+            {page.data.type}
+          </span>
+        )}
+        {page.data.level && (
+          <span className="inline-flex items-center rounded-full bg-secondary text-secondary-foreground px-2.5 py-0.5 font-medium capitalize">
+            {page.data.level}
+          </span>
+        )}
+        {page.data.tested_with && Object.keys(page.data.tested_with).length > 0 && (
+          <span className="inline-flex items-center rounded-full bg-muted text-muted-foreground px-2.5 py-0.5 font-medium">
+            Tested with {Object.entries(page.data.tested_with).map(([k, v]) => `${k} ${v}`).join(', ')}
+          </span>
+        )}
+        {page.data.updated && (
+          <span className="inline-flex items-center text-muted-foreground px-1 py-0.5">
+            Updated {new Date(page.data.updated).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+          </span>
+        )}
+      </div>
       <div className="flex flex-row gap-2 items-center border-b pb-6">
         <MarkdownCopyButton markdownUrl={markdownUrl} />
         <ViewOptionsPopover
