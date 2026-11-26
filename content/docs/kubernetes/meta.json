@@ -5,6 +5,7 @@
     "kubectl-apply",
     "pods-deployments",
     "probes",
+    "requests-limits-oom",
     "kubectl-cheatsheet"
   ],
   "icon": "kubernetes"
