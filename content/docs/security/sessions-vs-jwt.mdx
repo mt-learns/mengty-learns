@@ -1,0 +1,202 @@
+---
+title: "Server Sessions vs JWTs (Rotation, Storage & Pitfalls)"
+description: Trade-offs between stateful server sessions and stateless JWTs, refresh-token rotation with reuse detection, cookie storage, and JWT alg/kid pitfalls.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: concept
+type: explanation
+level: intermediate
+tags: [security, sessions, jwt, cookies, tokens, asvs]
+tested_with:
+  asvs: "5.0.0 (V7, V9)"
+  rfc: "RFC 8725 (JWT Best Current Practices)"
+cards:
+  - q: "What is the main operational advantage of opaque server sessions over stateless JWTs?"
+    a: "Server sessions can be revoked immediately on logout, password reset, or compromise because the server checks the session store on every request."
+  - q: "Why should browser apps store session IDs or refresh tokens in HttpOnly, Secure, SameSite cookies rather than localStorage?"
+    a: "JavaScript cannot read HttpOnly cookies, which prevents XSS scripts from exfiltrating the token, whereas localStorage is readable by any script on the origin."
+  - q: "What is refresh-token reuse detection?"
+    a: "When refresh tokens are single-use (rotated on each refresh), presenting an already-used refresh token signals theft and triggers revocation of the entire token family."
+  - q: "Why must a JWT verifier enforce an explicit algorithm allowlist instead of trusting the token's alg header?"
+    a: "Trusting the header allows attackers to send alg: none or substitute HS256 with an RSA public key as the HMAC secret (key confusion)."
+related:
+  - security/authn-vs-authz
+  - security/oauth21-oidc-pkce
+  - security/xss-csp
+sources:
+  - title: "RFC 8725: JSON Web Token Best Current Practices"
+    url: https://www.rfc-editor.org/rfc/rfc8725
+  - title: "OWASP ASVS 5.0: V7 Session Management & V9 Self-contained Tokens"
+    url: https://github.com/OWASP/ASVS
+  - title: "OWASP Session Management Cheat Sheet"
+    url: https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html
+  - title: "OWASP JSON Web Token Cheat Sheet"
+    url: https://cheatsheetseries.owasp.org/cheatsheets/JSON_Web_Token_for_Java_Cheat_Sheet.html
+---
+
+## TL;DR
+**Opaque server sessions** give instant revocation and simple security, while **stateless JWTs** avoid a central lookup per request at the cost of harder revocation. In browsers, store credentials in **`HttpOnly; Secure; SameSite` cookies** (never `localStorage`), keep access tokens short-lived, and rotate refresh tokens with **reuse detection**.
+
+## Intent
+<Intent>
+Choose between opaque server sessions and JWT access tokens, design a safe refresh-token rotation lifecycle, and avoid the classic `alg: none`, key-confusion, and `localStorage` mistakes.
+</Intent>
+
+## Problem
+Many apps issue 7-day JWTs stored in `localStorage` because "JWTs are modern and stateless". When a user logs out, changes their password, or gets hit by XSS, those tokens remain valid until expiry—and storing them in `localStorage` lets any injected script steal them silently.
+
+<Diagram
+  id="sessions-vs-jwt-comparison"
+  ariaLabel="Opaque server sessions store state in Redis or DB for instant revocation, while JWTs carry signed claims verified locally"
+  caption="Opaque sessions look up state on every call (instant revoke); JWTs verify signatures locally and rely on short TTLs + refresh rotation."
+  nodes={[
+    { id: 'browser', label: 'Browser', subtitle: 'HttpOnly cookie', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'sess', label: 'Session API', subtitle: 'Opaque ID lookup', icon: 'service', category: 'service', rank: 1, order: 0 },
+    { id: 'redis', label: 'Session Store', subtitle: 'Instant revoke', icon: 'db', category: 'data', rank: 2, order: 0 },
+    { id: 'jwtapi', label: 'JWT API', subtitle: 'Verify sig + exp', icon: 'gateway', category: 'edge', rank: 1, order: 1 },
+    { id: 'jwks', label: 'JWKS Public Key', subtitle: 'Pinned alg allowlist', icon: 'interface', category: 'abstraction', rank: 2, order: 1 },
+  ]}
+  edges={[
+    { from: 'browser', to: 'sess', kind: 'request' },
+    { from: 'sess', to: 'redis', kind: 'request' },
+    { from: 'browser', to: 'jwtapi', kind: 'request' },
+    { from: 'jwtapi', to: 'jwks', kind: 'request' },
+  ]}
+/>
+
+## Solution
+Match the token model to your architecture, and follow ASVS V7/V9 and RFC 8725:
+
+- **Default to opaque server sessions** for classic web apps with one backend + Redis/Postgres: generate ≥ 128 bits of CSPRNG entropy, store the session server-side, and send it in an `HttpOnly; Secure; SameSite=Lax` cookie.
+- **Use short-lived JWTs (5–15 min) + rotating refresh tokens** when downstream services must verify identity without calling an auth DB on every request:
+  - Every `/refresh` call issues a **new** refresh token and marks the previous one used.
+  - If an already-used refresh token is presented again (**reuse detection**), revoke the entire token family immediately—either the attacker or the legitimate user raced, so force re-login.
+- **Storage rule:** Never put access or refresh tokens in `localStorage` or `sessionStorage` in a browser app; use `HttpOnly` cookies (with CSRF protection) or keep short-lived access tokens only in memory via a BFF (Backend-for-Frontend).
+- **JWT verification rules (RFC 8725):** Pin allowed algorithms (`['EdDSA']` or `['RS256']`, never `none`), validate `iss`, `aud`, `exp`, and `nbf`, and sanitize `kid` so it can never trigger path traversal or arbitrary SQL/HTTP lookups.
+
+## Real-world analogy
+<Analogy>
+A **server session** is a coat-check ticket: the number means nothing by itself, and the attendant can cross your number off the clipboard at any moment. A **JWT** is a signed, dated VIP wristband good for 15 minutes—bouncers at every door can verify the signature without calling the front desk, so you keep its expiry short and re-issue wristbands at a central booth.
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="sessions-vs-jwt"
+  title="Login → Access + Refresh → Expiry → Rotate"
+  nodes={[
+    { id: 'client', label: 'Browser', subtitle: 'HttpOnly cookie', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'auth', label: 'Auth Server', subtitle: 'Issues & rotates', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+    { id: 'api', label: 'Resource API', subtitle: 'Verifies JWT', icon: 'service', category: 'service', rank: 1, order: 1 },
+    { id: 'store', label: 'Token Store', subtitle: 'Refresh family', icon: 'db', category: 'data', rank: 2, order: 0 },
+  ]}
+  steps={[
+    { edge: 'client->auth', title: '1. Authenticate user', text: 'Browser submits login credentials over HTTPS to the Auth Server.' },
+    { edge: 'auth->store', title: '2. Save refresh family', text: 'Auth Server hashes and stores refresh token R1 in a new family.' },
+    { edge: 'auth->client', title: '3. Issue access + refresh', text: 'Returns short-lived access JWT (10m) and HttpOnly refresh cookie R1.', kind: 'response' },
+    { edge: 'client->api', title: '4. Call API with JWT', text: 'Browser calls API; API verifies pinned alg, signature, iss, aud, and exp.' },
+    { edge: 'api->client', title: '5. Access JWT expires (401)', text: 'After 10 minutes, API rejects the expired access token with 401.', kind: 'error', label: '401' },
+    { edge: 'client->auth', title: '6. Send R1 to /refresh', text: 'Browser sends the HttpOnly refresh cookie R1 to rotate tokens.' },
+    { edge: 'auth->store', title: '7. Rotate R1 → R2', text: 'Store marks R1 used and saves R2; any replay of R1 revokes the whole family.' },
+    { edge: 'auth->client', title: '8. Return fresh tokens', text: 'Auth Server returns a new access JWT and rotated cookie R2.', kind: 'response' },
+  ]}
+/>
+
+## Code
+Pin the verification algorithm and claims explicitly—never accept `alg: none` or unvalidated `kid` headers:
+
+```ts
+// UNSAFE: trusts token header algorithm, skips issuer/audience checks
+import jwt from 'jsonwebtoken';
+const payload = jwt.decode(token); // decodes without verifying signature!
+
+// SAFE: pins algorithm allowlist, issuer, and audience (RFC 8725 / ASVS V9)
+import { jwtVerify } from 'jose';
+const { payload: verified } = await jwtVerify(token, publicKey, {
+  algorithms: ['EdDSA'],
+  issuer: 'https://auth.example.com',
+  audience: 'https://api.example.com',
+});
+```
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'Use opaque server sessions when you have a shared session store (Redis/DB) and need instant logout or permission revocation.',
+    'Use short-lived JWTs + rotating refresh tokens when multiple independent services verify tokens offline via JWKS.',
+    'Always set HttpOnly, Secure, and SameSite=Lax (or Strict) on session and refresh cookies.',
+  ]}
+  avoid={[
+    'Do not store long-lived tokens or refresh tokens in localStorage or sessionStorage.',
+    'Do not put sensitive PII or secrets inside JWT payloads—JWTs are base64url-encoded, not encrypted (unless JWE).',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Regenerate session IDs on login
+    Always issue a fresh session ID after authentication to prevent session fixation (ASVS V7).
+  </Step>
+  <Step>
+    ### Keep access tokens short-lived
+    Set access JWT `exp` to 5–15 minutes and validate `iss`, `aud`, `exp`, and `algorithms` on every API.
+  </Step>
+  <Step>
+    ### Implement refresh rotation + reuse detection
+    Store hashed refresh tokens with a `familyId` and `used` flag; revoke the family if a used token is replayed.
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'Opaque sessions offer immediate revocation on logout, password change, or anomaly detection.',
+    'JWTs with JWKS scale horizontally across microservices without per-request auth DB calls.',
+  ]}
+  cons={[
+    'Opaque sessions require a low-latency central store (such as Redis) on every authenticated request.',
+    'JWTs cannot be revoked before expiry without adding a denylist (which reintroduces state).',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'OAuth 2.1, OIDC & PKCE',
+      href: '/docs/security/oauth21-oidc-pkce',
+      summary: 'How standard login flows issue ID tokens, access tokens, and refresh tokens.',
+    },
+    {
+      name: 'XSS & Content Security Policy',
+      href: '/docs/security/xss-csp',
+      summary: 'Why HttpOnly cookies protect tokens even if an XSS bug slips into the frontend.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "An attacker steals a single-use refresh token R1 and uses it after the legitimate user already rotated R1 to R2. What should the authorization server do when R1 is presented again?",
+    options: [
+      { label: "Revoke the entire token family (including R2) and require re-authentication", description: "Reuse of an already-rotated refresh token indicates token theft.", correct: true },
+      { label: "Return R2 again so the client stays logged in", description: "Re-issuing the active token hands access to the attacker." },
+      { label: "Ignore the request and leave R2 active", description: "Leaving R2 active leaves the legitimate session potentially compromised." }
+    ]
+  },
+  {
+    question: "Which JWT verification mistake allows an attacker to forge a token by changing the header to alg: HS256 and signing with the server's public RSA key?",
+    options: [
+      { label: "Not pinning an explicit algorithm allowlist on the verifier", description: "Without pinning algorithms (e.g. ['RS256']), the verifier uses the attacker-controlled alg header.", correct: true },
+      { label: "Setting HttpOnly on the cookie", description: "HttpOnly protects cookies from JavaScript access and does not cause algorithm confusion." },
+      { label: "Using a 10-minute exp claim", description: "Short expiration reduces exposure and is recommended by RFC 8725." }
+    ]
+  }
+]} />
+
+## Sources
+- [RFC 8725: JSON Web Token Best Current Practices](https://www.rfc-editor.org/rfc/rfc8725)
+- [OWASP ASVS 5.0 (GitHub)](https://github.com/OWASP/ASVS)
+- [OWASP Session Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)
+- [OWASP JSON Web Token Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/JSON_Web_Token_for_Java_Cheat_Sheet.html)

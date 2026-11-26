@@ -1,0 +1,208 @@
+---
+title: "OAuth 2.1, OIDC & PKCE"
+description: What OAuth 2.1 changes (mandatory PKCE, no implicit grant, exact redirect matching), how OIDC adds identity via ID tokens, and the full Authorization Code + PKCE flow.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: concept
+type: explanation
+level: intermediate
+tags: [security, oauth2, oidc, pkce, authn, asvs]
+tested_with:
+  asvs: "5.0.0 (V10)"
+  specs: "OAuth 2.1 draft, RFC 7636, OIDC Core 1.0"
+cards:
+  - q: "What are the three biggest security changes in OAuth 2.1 compared to OAuth 2.0?"
+    a: "PKCE is required for all authorization code clients, the Implicit grant and Resource Owner Password Credentials grant are removed, and redirect URIs must use exact string matching."
+  - q: "How does PKCE (RFC 7636) protect the Authorization Code flow?"
+    a: "The client sends a hashed code_challenge in the authorize request and proves possession of the original random code_verifier during token exchange, blocking intercepted-code replay."
+  - q: "What is the difference between an OIDC ID Token and an OAuth Access Token?"
+    a: "The ID Token is a JWT meant for the client app to verify who signed in (authentication); the Access Token is meant for resource APIs to authorize API calls."
+  - q: "Why must a client validate the state parameter (and nonce for OIDC)?"
+    a: "state binds the callback to the browser session to prevent login CSRF, while nonce binds the ID Token to the authentication request to prevent replay."
+related:
+  - security/sessions-vs-jwt
+  - security/authn-vs-authz
+sources:
+  - title: "IETF Draft: The OAuth 2.1 Authorization Framework"
+    url: https://datatracker.ietf.org/doc/draft-ietf-oauth-v2-1/
+  - title: "RFC 7636: Proof Key for Code Exchange (PKCE)"
+    url: https://www.rfc-editor.org/rfc/rfc7636
+  - title: "OpenID Connect Core 1.0"
+    url: https://openid.net/specs/openid-connect-core-1_0.html
+  - title: "OWASP ASVS 5.0: V10 OAuth and OIDC"
+    url: https://github.com/OWASP/ASVS
+---
+
+## TL;DR
+**OAuth 2.1** consolidates modern OAuth 2.0 security best practices: **PKCE is mandatory**, the **Implicit** and **Password** grants are removed, and **exact `redirect_uri` matching** is required. **OpenID Connect (OIDC)** layers authentication on top of OAuth by issuing a signed **ID Token** for the client app alongside the **Access Token** for APIs.
+
+## Intent
+<Intent>
+Understand why OAuth 2.1 drops legacy grants in favor of Authorization Code + PKCE, and keep OIDC ID Tokens (for your app's login) strictly separate from Access Tokens (for downstream APIs).
+</Intent>
+
+## Problem
+OAuth 2.0 originally offered the Implicit grant (`response_type=token`) for SPAs, which leaked access tokens in browser URL fragments and history. Worse, wildcard `redirect_uri` matching let attackers bounce authorization codes to open redirectors, and public clients without PKCE could have intercepted codes exchanged by a malicious app.
+
+<Diagram
+  id="oauth21-oidc-tokens"
+  ariaLabel="OIDC Auth Server issues an ID Token for the Client App and an Access Token for the Resource API"
+  caption="OIDC adds an ID Token (audience = Client App) alongside the OAuth Access Token (audience = Resource API)."
+  nodes={[
+    { id: 'as', label: 'Auth Server', subtitle: 'OAuth 2.1 + OIDC', icon: 'gateway', category: 'edge', rank: 0, order: 0 },
+    { id: 'app', label: 'Client App', subtitle: 'Reads ID Token', icon: 'user', category: 'client', rank: 1, order: 0 },
+    { id: 'api', label: 'Resource API', subtitle: 'Reads Access Token', icon: 'service', category: 'service', rank: 1, order: 1 },
+  ]}
+  edges={[
+    { from: 'as', to: 'app', kind: 'response', label: 'ID Token' },
+    { from: 'as', to: 'api', kind: 'request', label: 'Access Token' },
+  ]}
+/>
+
+## Solution
+Use **Authorization Code + PKCE (`S256`)** for every OAuth 2.1 client, and add **`scope=openid`** when you need user identity via OIDC:
+
+- **OAuth 2.1 key changes:**
+  1. **PKCE required** (`code_challenge_method=S256`) for all authorization code flows, not just mobile/SPAs.
+  2. **Implicit (`token`) and Resource Owner Password (`password`) grants removed**—never collect a third-party user's password or return tokens in URL fragments.
+  3. **Exact `redirect_uri` matching**—no wildcards or open-redirect path prefixes.
+  4. **Refresh tokens** for public clients must be sender-constrained or rotated on use.
+- **OIDC identity layer:**
+  - **ID Token:** Always a JWT, always `aud === client_id`, verified by the client app (including `nonce` and `iss`). Never send the ID Token as a `Bearer` token to an API.
+  - **Access Token:** Opaque or JWT with `aud === api_identifier`, sent to Resource APIs.
+
+## Real-world analogy
+<Analogy>
+**PKCE** is like ordering a package online with a secret pickup PIN (`code_verifier`) whose hash (`code_challenge`) is printed on the receipt. Even if someone steals the claim slip (`authorization code`) from your mailbox, they cannot pick up the box without knowing the original PIN.
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="oauth21-oidc-pkce"
+  title="OAuth 2.1 Authorization Code + PKCE + OIDC"
+  nodes={[
+    { id: 'app', label: 'Client App', subtitle: 'Holds code_verifier', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'ua', label: 'Browser', subtitle: 'Handles redirects', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+    { id: 'as', label: 'Auth Server', subtitle: 'OIDC + PKCE check', icon: 'service', category: 'service', rank: 2, order: 0 },
+    { id: 'api', label: 'Resource API', subtitle: 'Checks Access JWT', icon: 'db', category: 'data', rank: 3, order: 0 },
+  ]}
+  steps={[
+    { edge: 'app->ua', title: '1. Generate verifier & challenge', text: 'App creates random code_verifier, hashes it with SHA-256 (code_challenge), and starts redirect.' },
+    { edge: 'ua->as', title: '2. Authorize with PKCE + openid', text: 'Browser hits /authorize with code_challenge, S256, state, nonce, and exact redirect_uri.' },
+    { edge: 'as->ua', title: '3. Redirect with one-time code', text: 'After login and consent, Auth Server redirects back with ?code=...&state=...', kind: 'response' },
+    { edge: 'ua->app', title: '4. Deliver code to callback', text: 'Browser delivers code and state to the Client App; app verifies state matches.', kind: 'response' },
+    { edge: 'app->as', title: '5. Exchange code + verifier', text: 'App POSTs code and raw code_verifier to /token (back-channel).' },
+    { edge: 'as->app', title: '6. Verify PKCE & issue tokens', text: 'Auth Server checks SHA256(verifier) == challenge and returns ID + Access tokens.', kind: 'response' },
+    { edge: 'app->api', title: '7. Call API with Access Token', text: 'App sends Access Token (never ID Token) in Authorization: Bearer header.' },
+    { edge: 'api->app', title: '8. API returns protected data', text: 'Resource API validates Access Token aud/scopes and returns the response.', kind: 'response' },
+  ]}
+/>
+
+## Code
+Generating a PKCE `code_verifier` and `S256` `code_challenge` with Web Crypto:
+
+```ts
+// UNSAFE: Implicit flow (response_type=token) leaks access tokens in URL fragments
+const unsafeAuthUrl =
+  'https://auth.example.com/authorize?response_type=token&client_id=web&redirect_uri=https://app.example.com/cb';
+
+// SAFE: OAuth 2.1 Authorization Code + PKCE (S256) + state + OIDC nonce (RFC 7636)
+const verifierBytes = crypto.getRandomValues(new Uint8Array(32));
+const codeVerifier = Buffer.from(verifierBytes).toString('base64url');
+const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(codeVerifier));
+const codeChallenge = Buffer.from(digest).toString('base64url');
+
+const params = new URLSearchParams({
+  response_type: 'code',
+  client_id: 'web',
+  redirect_uri: 'https://app.example.com/callback',
+  scope: 'openid profile email',
+  code_challenge: codeChallenge,
+  code_challenge_method: 'S256',
+  state: crypto.randomUUID(),
+  nonce: crypto.randomUUID(),
+});
+```
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'Use OAuth 2.1 Authorization Code + PKCE for every web, mobile, and CLI login flow.',
+    'Use OIDC (scope=openid) when your app needs to authenticate the user, not just call an API.',
+    'Use a Backend-for-Frontend (BFF) when you want tokens kept out of browser memory entirely.',
+  ]}
+  avoid={[
+    'Never use response_type=token (Implicit) or grant_type=password (ROPC)—both are removed in OAuth 2.1.',
+    'Never accept an ID Token as an API Bearer credential, or skip validating aud and iss.',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Register exact redirect URIs
+    Configure the Authorization Server with exact `https://` callback URLs (no wildcards).
+  </Step>
+  <Step>
+    ### Send `S256` PKCE + `state` + `nonce`
+    Bind the request to the browser session (`state`) and the upcoming ID Token (`nonce`).
+  </Step>
+  <Step>
+    ### Exchange on the server when possible
+    In confidential/BFF apps, exchange the code + `code_verifier` + client credentials from the backend and set an `HttpOnly` session cookie.
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'PKCE prevents authorization code interception attacks even for public clients without a client secret.',
+    'OIDC standardizes identity claims (sub, iss, aud, nonce) across providers.',
+  ]}
+  cons={[
+    'More moving parts than simple username/password forms (redirects, state storage, JWKS caching).',
+    'Misconfigured redirect URIs or missing audience checks can turn into cross-app token confusion.',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'Server Sessions vs JWTs',
+      href: '/docs/security/sessions-vs-jwt',
+      summary: 'How to store and rotate the tokens issued at the end of an OAuth/OIDC login.',
+    },
+    {
+      name: 'Authentication vs Authorization',
+      href: '/docs/security/authn-vs-authz',
+      summary: 'How OIDC identity feeds into server-side RBAC/ABAC/BOLA checks.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "Which grant types are removed in OAuth 2.1?",
+    options: [
+      { label: "Implicit grant and Resource Owner Password Credentials (ROPC) grant", description: "OAuth 2.1 removes both because Implicit exposes tokens in URLs and ROPC exposes user passwords to clients.", correct: true },
+      { label: "Authorization Code grant with PKCE", description: "Authorization Code with PKCE is the standard required flow in OAuth 2.1." },
+      { label: "Client Credentials grant", description: "Client Credentials remains for machine-to-machine service authentication." }
+    ]
+  },
+  {
+    question: "In OpenID Connect, what is the primary purpose of the ID Token?",
+    options: [
+      { label: "To prove the user's authentication event and identity to the client application", description: "The ID Token has aud = client_id and should be validated by the client, not forwarded as an API bearer token.", correct: true },
+      { label: "To authorize calls to third-party Resource APIs", description: "Resource APIs accept Access Tokens, not ID Tokens." },
+      { label: "To replace TLS on the redirect URI", description: "OIDC always requires HTTPS/TLS." }
+    ]
+  }
+]} />
+
+## Sources
+- [IETF Draft: The OAuth 2.1 Authorization Framework](https://datatracker.ietf.org/doc/draft-ietf-oauth-v2-1/)
+- [RFC 7636: Proof Key for Code Exchange (PKCE)](https://www.rfc-editor.org/rfc/rfc7636)
+- [OpenID Connect Core 1.0](https://openid.net/specs/openid-connect-core-1_0.html)
+- [OWASP ASVS 5.0 (GitHub)](https://github.com/OWASP/ASVS)

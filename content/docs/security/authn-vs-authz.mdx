@@ -1,0 +1,210 @@
+---
+title: "Authentication vs Authorization (RBAC, ABAC, ReBAC & BOLA)"
+description: How authentication and authorization differ, how RBAC, ABAC, and ReBAC model permissions, and how to prevent Broken Object-Level Authorization (BOLA).
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: concept
+type: explanation
+level: beginner
+tags: [security, authn, authz, rbac, abac, rebac, bola, asvs]
+tested_with:
+  asvs: "5.0.0 (V6, V8)"
+  owasp_top_10: "2025 (A01)"
+cards:
+  - q: "What is the difference between authentication (AuthN) and authorization (AuthZ)?"
+    a: "Authentication verifies who the caller is (identity); authorization decides what that verified caller is allowed to do on a specific resource."
+  - q: "How do RBAC, ABAC, and ReBAC differ?"
+    a: "RBAC grants permissions by role (admin, editor), ABAC evaluates attributes of user/resource/environment (department, time), and ReBAC checks graph relationships (user owns or is a member of document)."
+  - q: "What is Broken Object-Level Authorization (BOLA)?"
+    a: "When an endpoint verifies authentication (and maybe role) but fails to check whether the caller owns or has access to the specific object ID in the request (e.g. /orders/999)."
+  - q: "What HTTP status codes distinguish failed authentication from failed authorization?"
+    a: "401 Unauthorized means missing or invalid authentication; 403 Forbidden means the caller is authenticated but lacks permission (or 404 to avoid leaking resource existence)."
+related:
+  - security/owasp-top-10
+  - security/asvs-5-overview
+  - security/sessions-vs-jwt
+sources:
+  - title: "OWASP ASVS 5.0: V8 Authorization"
+    url: https://github.com/OWASP/ASVS
+  - title: "OWASP Top 10:2025 A01 Broken Access Control"
+    url: https://top10.owasp.org/2025/
+  - title: "OWASP API Security Top 10: API1:2023 Broken Object Level Authorization"
+    url: https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/
+  - title: "OWASP Authorization Cheat Sheet"
+    url: https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html
+---
+
+## TL;DR
+**Authentication (AuthN)** proves *who you are*; **Authorization (AuthZ)** decides *what you can touch*. Most real-world breaches in `A01:2025 Broken Access Control` happen when an API checks AuthN and route-level roles, but forgets **object-level ownership** (**BOLA**).
+
+## Intent
+<Intent>
+Separate identity verification from policy enforcement, choose between RBAC, ABAC, and ReBAC for your domain, and enforce deny-by-default object checks on every server handler.
+</Intent>
+
+## Problem
+Teams often treat "logged in" as "allowed", or hide admin buttons in the frontend while leaving `/api/invoices/:id` open to any authenticated user who guesses another tenant's numeric ID. Without a clear boundary between AuthN and AuthZ, permission checks get scattered across controllers and silently missed on new endpoints.
+
+<Diagram
+  id="authn-authz-boundary"
+  ariaLabel="Request passes through authentication first, then authorization policy enforcement, before reaching the resource"
+  caption="AuthN establishes identity; AuthZ enforces permission boundaries before any data is read or mutated."
+  nodes={[
+    { id: 'req', label: 'API Request', subtitle: 'Token + object ID', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'authn', label: 'AuthN Gate', subtitle: '401 if invalid', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+    { id: 'authz', label: 'AuthZ Policy', subtitle: '403 if denied', icon: 'service', category: 'service', rank: 2, order: 0 },
+    { id: 'res', label: 'Protected Data', subtitle: 'Scoped query', icon: 'db', category: 'data', rank: 3, order: 0 },
+  ]}
+  edges={[
+    { from: 'req', to: 'authn', kind: 'request' },
+    { from: 'authn', to: 'authz', kind: 'request' },
+    { from: 'authz', to: 'res', kind: 'request' },
+  ]}
+/>
+
+## Solution
+Enforce **deny-by-default** authorization in a central policy layer after authentication succeeds:
+
+1. **RBAC (Role-Based Access Control):** Assign permissions to roles (`viewer`, `editor`, `admin`). *Example:* `role === 'editor'` can publish blog posts.
+2. **ABAC (Attribute-Based Access Control):** Evaluate attributes of the subject, resource, and environment. *Example:* `user.department === resource.department && request.ip in corpCIDR`.
+3. **ReBAC (Relationship-Based Access Control):** Evaluate graph relationships between users and objects. *Example:* `user` is an `owner` of `folder_A`, which contains `doc_42`.
+4. **Permission boundaries & BOLA prevention:** Always scope database queries by the authenticated `principal.id` or `tenant.id` from the server session—never trust `userId` or `role` sent in the request body or query string.
+
+## Real-world analogy
+<Analogy>
+At an airport, **AuthN** is passport control checking that your face matches your passport. **AuthZ** is the boarding gate scanning your ticket: even with a valid passport, you cannot board flight B12 without a matching seat assignment on that specific plane.
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="authn-vs-authz"
+  title="Request → AuthN → AuthZ Policy Check → Resource (with Deny Path)"
+  nodes={[
+    { id: 'client', label: 'Client', subtitle: 'Calls /orders/42', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'authn', label: 'AuthN', subtitle: 'Verify session/JWT', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+    { id: 'authz', label: 'AuthZ Policy', subtitle: 'Role + object owner', icon: 'service', category: 'service', rank: 2, order: 0 },
+    { id: 'res', label: 'Resource DB', subtitle: 'Order #42', icon: 'db', category: 'data', rank: 3, order: 0 },
+  ]}
+  steps={[
+    { edge: 'client->authn', title: '1. Send authenticated request', text: 'Client sends GET /orders/42 with a session cookie or bearer token.', label: 'GET /42' },
+    { edge: 'authn->authz', title: '2. AuthN verifies principal', text: 'AuthN validates the credential and attaches principal { id: 7, role: "member" }.' },
+    { edge: 'authz->res', title: '3. Policy allows owner access', text: 'AuthZ verifies order #42 belongs to user 7 and forwards the scoped query.' },
+    { edge: 'res->authz', title: '4. Resource returns record', text: 'Database returns order #42 to the policy/service layer.', kind: 'response', label: 'Row' },
+    { edge: 'authz->authn', title: '5. Return 200 OK upstream', text: 'Policy layer passes the authorized response back through the gateway.', kind: 'response' },
+    { edge: 'authn->client', title: '6. Client receives 200 OK', text: 'Client receives the order payload.', kind: 'response', label: '200 OK' },
+    { edge: 'authz->authn', title: '7. Deny path: BOLA blocked', text: 'If user 7 requests /orders/99 (owned by user 12), AuthZ denies access.', kind: 'error', label: '403' },
+    { edge: 'authn->client', title: '8. Client receives 403', text: 'Gateway returns 403 Forbidden without touching order #99.', kind: 'error', label: '403' },
+  ]}
+/>
+
+## Code
+Always pair authentication with an explicit object-level authorization check on the server:
+
+```ts
+// UNSAFE: checks AuthN (user is logged in), but trusts :id without ownership check (BOLA)
+app.get('/api/orders/:id', requireAuth, async (req, res) => {
+  const order = await db.orders.findUnique({ where: { id: req.params.id } });
+  return res.json(order);
+});
+
+// SAFE: scopes the lookup/policy check to the authenticated principal (ASVS V8)
+app.get('/api/orders/:id', requireAuth, async (req, res) => {
+  const order = await db.orders.findUnique({ where: { id: req.params.id } });
+  if (!order) return res.status(404).json({ error: 'Not found' });
+
+  const isOwner = order.ownerId === req.user.id;
+  const isSupportAdmin = req.user.role === 'admin' && req.user.tenantId === order.tenantId;
+  if (!isOwner && !isSupportAdmin) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+
+  return res.json(order);
+});
+```
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'Use RBAC when permissions map cleanly to a small, stable set of job roles (viewer, editor, admin).',
+    'Use ABAC when access depends on dynamic context (department, tenant plan, IP range, time window).',
+    'Use ReBAC when sharing and nested ownership graphs drive access (Google Drive-style folders and teams).',
+  ]}
+  avoid={[
+    'Never rely on frontend route guards or hidden UI buttons as an authorization boundary.',
+    'Do not encode mutable permissions into long-lived JWTs if role revocations must take effect immediately.',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Authenticate once at the boundary
+    Validate the session or token in middleware and attach an immutable `principal` object to the request context.
+  </Step>
+  <Step>
+    ### Deny by default
+    Reject any route that does not declare an explicit authorization policy.
+  </Step>
+  <Step>
+    ### Enforce object- and function-level checks
+    Check both *can this role call this endpoint* (no BFLA) and *can this user access this specific record* (no BOLA).
+  </Step>
+  <Step>
+    ### Test negative paths
+    Write integration tests where User A requests User B's resource ID and assert `403` (or `404`).
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'Centralized policy checks make security audits and unit tests straightforward.',
+    'Scoping queries by principal/tenant prevents BOLA even when a developer forgets an if-statement.',
+  ]}
+  cons={[
+    'RBAC alone suffers from role explosion as exceptions accumulate.',
+    'ReBAC requires maintaining an authorization graph or relationship store alongside application data.',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'Sessions vs JWTs',
+      href: '/docs/security/sessions-vs-jwt',
+      summary: 'How the authenticated principal is carried across requests and revoked.',
+    },
+    {
+      name: 'OWASP Top 10:2025 Summary',
+      href: '/docs/security/owasp-top-10',
+      summary: 'Why Broken Access Control remains #1 in OWASP Top 10:2025.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "User A logs in with a valid token and requests GET /api/invoices/500, which belongs to User B, and the server returns it. What vulnerability is this?",
+    options: [
+      { label: "Broken Object-Level Authorization (BOLA)", description: "The server authenticated User A but failed to verify ownership of object 500.", correct: true },
+      { label: "Broken Authentication", description: "Authentication succeeded—User A's token was valid." },
+      { label: "Cross-Site Scripting (XSS)", description: "No untrusted script is being injected into a browser DOM." }
+    ]
+  },
+  {
+    question: "Which access control model checks whether a user is a member of a parent team that owns a specific document?",
+    options: [
+      { label: "ReBAC (Relationship-Based Access Control)", description: "ReBAC evaluates object-to-subject relationships across a hierarchy or graph.", correct: true },
+      { label: "RBAC (Role-Based Access Control)", description: "Plain RBAC checks global roles rather than per-object relationships." },
+      { label: "CORS (Cross-Origin Resource Sharing)", description: "CORS is a browser origin-sharing policy, not a server authorization model." }
+    ]
+  }
+]} />
+
+## Sources
+- [OWASP ASVS 5.0 (GitHub)](https://github.com/OWASP/ASVS)
+- [OWASP Top 10:2025](https://top10.owasp.org/2025/)
+- [OWASP API1:2023 Broken Object Level Authorization](https://owasp.org/API-Security/editions/2023/en/0xa1-broken-object-level-authorization/)
+- [OWASP Authorization Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Authorization_Cheat_Sheet.html)

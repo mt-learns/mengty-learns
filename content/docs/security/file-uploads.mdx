@@ -1,0 +1,106 @@
+---
+title: "Secure File Uploads & Downloads"
+description: How to validate uploaded files by content, enforce size limits, store outside the web root with randomized names, scan for malware, and serve safely with Content-Disposition.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: note
+type: how-to
+level: intermediate
+tags: [security, uploads, files, storage, asvs]
+tested_with:
+  asvs: "5.0.0 (V5)"
+cards:
+  - q: "Why is checking only file.mimetype or the filename extension unsafe for uploads?"
+    a: "Both the HTTP Content-Type header and the filename are attacker-controlled; inspect magic bytes or re-encode the file with a safe parser (e.g. sharp for images)."
+  - q: "Why should uploaded files be stored with randomized names (UUID) outside the web root?"
+    a: "Randomized names prevent path traversal (../../) and filename collisions, and storing outside the web root prevents the web server from executing uploaded scripts."
+  - q: "Which two headers make downloading user-uploaded files safe?"
+    a: "Content-Disposition: attachment (forces download instead of inline rendering) and X-Content-Type-Options: nosniff (blocks MIME sniffing)."
+  - q: "Why is SVG a high-risk upload format compared to PNG or WebP?"
+    a: "SVG is an XML document that can contain <script> tags and event handlers, causing stored XSS if served inline from your main origin."
+related:
+  - security/xss-csp
+  - security/security-headers
+sources:
+  - title: "OWASP File Upload Cheat Sheet"
+    url: https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html
+  - title: "OWASP ASVS 5.0: V5 File Handling"
+    url: https://github.com/OWASP/ASVS
+---
+
+## TL;DR
+Never trust a client's filename or `Content-Type` header. Enforce **byte-size limits**, verify file type by **content/magic bytes** (or re-encode images), save under a **randomized key outside the web root**, **scan asynchronously** before publishing, and serve downloads from a **separate origin** with `Content-Disposition: attachment` and `X-Content-Type-Options: nosniff`.
+
+## Why it exists
+File upload endpoints combine multiple high-severity risks in one place: remote code execution if a file lands inside a web root, stored XSS if HTML/SVG is served inline on your app origin, path traversal via `../` filenames, and denial of service via zip bombs or multi-gigabyte uploads.
+
+## Defense-in-depth upload pipeline (ASVS V5)
+
+1. **Size limits first:** Enforce max `Content-Length` and streaming byte caps at the reverse proxy and app before buffering into memory.
+2. **Validate by content, not extension:** Check magic bytes (e.g. PNG/JPEG/PDF signatures) and, for images, decode and re-encode with a library like `sharp` to strip embedded payloads and EXIF metadata.
+3. **Randomize storage keys:** Ignore the user's filename when writing to disk or object storage (`crypto.randomUUID() + '.png'`). Keep original display names only as metadata in your DB.
+4. **Store outside the web root:** Write uploads to private object storage (S3/R2) or a non-executable directory outside `public/`.
+5. **Quarantine & malware scan:** Place new uploads in a quarantine bucket/prefix, run AV scanning (e.g. ClamAV) asynchronously, and promote only clean files.
+6. **Serve safely:** Serve user files from a **dedicated sandboxed domain** (e.g. `usercontent.example`) with:
+   - `Content-Disposition: attachment; filename="safe-name.pdf"`
+   - `X-Content-Type-Options: nosniff`
+
+```ts
+// UNSAFE: trusts client filename and Content-Type, writes into public/ web root
+await fs.writeFile(path.join('public/uploads', file.originalname), file.buffer);
+
+// SAFE: validates size + magic bytes, writes UUID key outside web root (ASVS V5)
+import { randomUUID } from 'node:crypto';
+import fs from 'node:fs/promises';
+import path from 'node:path';
+
+const MAX_BYTES = 5 * 1024 * 1024;
+const PNG_MAGIC = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+
+export async function saveSafePng(bytes: Buffer, uploadDir: string) {
+  if (bytes.length === 0 || bytes.length > MAX_BYTES) throw new Error('Invalid file size');
+  if (!bytes.subarray(0, 8).equals(PNG_MAGIC)) throw new Error('Not a valid PNG');
+
+  const key = `${randomUUID()}.png`;
+  const target = path.join(uploadDir, key); // uploadDir is outside public/ web root
+  await fs.writeFile(target, bytes, { flag: 'wx' });
+  return key;
+}
+```
+
+## Gotchas
+- **SVG uploads:** Allowing `.svg` uploads and serving them inline gives attackers instant Stored XSS on your origin; convert to PNG/WebP or serve only from an isolated `usercontent` domain with `Content-Disposition: attachment`.
+- **Archive/zip bombs:** A 50 KB `.zip` or `.xlsx` can decompress to gigabytes in memory; enforce uncompressed output limits and entry-count caps.
+- **Double extensions & null bytes:** Filenames like `shell.php.jpg` or `../../etc/cron.d/job` break naive regex checks—using a generated `UUID` key avoids filename parsing entirely.
+
+## Production checklist
+- [ ] Maximum file size is enforced at both the edge/proxy and application stream reader.
+- [ ] File type is verified by magic bytes (and re-encoded for images), using an explicit allowlist.
+- [ ] Stored paths use server-generated UUIDs outside the web root (never user filenames).
+- [ ] Malware scanning runs in quarantine before files become downloadable.
+- [ ] Downloads send `Content-Disposition: attachment` and `X-Content-Type-Options: nosniff` from a separate origin.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "An upload handler checks file.mimetype === 'image/png' and saves file.originalname into /var/www/html/uploads/. What are the two main flaws?",
+    options: [
+      { label: "Both mimetype and originalname are attacker-controlled, and saving in the web root risks path traversal or code execution", description: "Validate magic bytes, generate a UUID filename, and store outside the web root.", correct: true },
+      { label: "PNG files cannot be stored in /var/www/html/", description: "The flaw is trusting client headers/filenames and storing in an executable web root." },
+      { label: "mimetype should be checked with a regex instead", description: "The Content-Type header itself is sent by the client and can be spoofed." }
+    ]
+  },
+  {
+    question: "Why should user-uploaded SVGs never be served inline from your primary application domain?",
+    options: [
+      { label: "SVGs are XML documents that can embed executable <script> tags, causing Stored XSS", description: "Serve SVGs as attachments from an isolated origin or rasterize them to PNG/WebP.", correct: true },
+      { label: "Browsers do not support Content-Disposition on SVGs", description: "Browsers do support Content-Disposition: attachment on SVGs." },
+      { label: "SVGs bypass TLS encryption", description: "SVGs are transported over TLS like any other response." }
+    ]
+  }
+]} />
+
+## Sources
+- [OWASP File Upload Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/File_Upload_Cheat_Sheet.html)
+- [OWASP ASVS 5.0 (GitHub)](https://github.com/OWASP/ASVS)

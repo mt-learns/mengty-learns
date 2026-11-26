@@ -1,0 +1,104 @@
+---
+title: "Software Supply Chain Security"
+description: Securing dependencies and CI/CD pipelines with lockfiles, SHA-pinned GitHub Actions (with this repo as an honest example), pnpm audit, Renovate/Dependabot, SBOMs, and SLSA provenance.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: note
+type: how-to
+level: intermediate
+tags: [security, supply-chain, ci-cd, pnpm, sbom, slsa, asvs]
+tested_with:
+  pnpm: "11.6.0"
+  asvs: "5.0.0 (V15)"
+  owasp_top_10: "2025 (A03)"
+cards:
+  - q: "Why does pnpm install --frozen-lockfile matter for supply chain security?"
+    a: "It guarantees CI installs the exact dependency versions and integrity hashes recorded in pnpm-lock.yaml, failing loudly if package.json and the lockfile disagree."
+  - q: "Why is pinning GitHub Actions to a 40-character commit SHA safer than @v4 or @v4.2.2?"
+    a: "Git tags (even patch tags) are mutable and can be retargeted if an upstream action repo is compromised, whereas a full commit SHA is immutable."
+  - q: "What is an SBOM (Software Bill of Materials)?"
+    a: "A machine-readable inventory (such as CycloneDX or SPDX) of every direct and transitive package in a build, used to check exposure rapidly when a new CVE drops."
+  - q: "What does SLSA build provenance verify?"
+    a: "A signed attestation proving an artifact was built by a specific CI workflow from a specific source commit, rather than tampered with on a laptop or in transit."
+related:
+  - ci-cd/this-site-pipeline
+  - security/owasp-top-10
+  - security/secrets-management
+sources:
+  - title: "OWASP Top 10:2025 A03 Software Supply Chain Failures"
+    url: https://top10.owasp.org/2025/
+  - title: "OWASP ASVS 5.0: V15 Secure Coding and Architecture"
+    url: https://github.com/OWASP/ASVS
+  - title: "GitHub Docs: Security hardening for GitHub Actions"
+    url: https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions
+  - title: "SLSA Specification"
+    url: https://slsa.dev/spec/v1.0/
+---
+
+## TL;DR
+**A03:2025 Software Supply Chain Failures** covers compromised packages, tampered lockfiles, and unpinned CI pipelines. Defend with **`--frozen-lockfile`**, **full 40-char SHA pinning** for GitHub Actions, **`pnpm audit` + Renovate/Dependabot**, **SBOMs**, and **SLSA provenance**—and audit your own workflows honestly.
+
+## Why it exists
+Attackers increasingly target the build pipeline instead of the running app: hijacking a maintainer's npm token, sneaking malicious `postinstall` scripts into transitive dependencies, or force-pushing a malicious commit onto a popular GitHub Action tag (`@v4`).
+
+## Honest audit of this repo's workflows
+Look at `.github/workflows/` in **this repository** as a real-world example of what is already in place and what still needs hardening:
+
+| Control | Current state in this repo | Gap / next step |
+|---|---|---|
+| **Lockfile enforcement** | `ci.yml`, `quality.yml`, and `inbox.yml` all run `pnpm install --frozen-lockfile`. | Keep `--frozen-lockfile` everywhere; consider `--ignore-scripts` where native builds aren't needed. |
+| **Action pinning** | `labs.yml` pins to patch tags (`actions/checkout@v4.2.2`, `hadolint/hadolint-action@v3.5.0`, `opentofu/setup-opentofu@v2.0.2`), while `ci.yml`, `quality.yml`, and `inbox.yml` still use floating major tags (`actions/checkout@v4`, `pnpm/action-setup@v4`, `actions/setup-node@v4`). | **Not SHA-pinned yet:** pin every `uses:` across all 4 workflows to a **40-character commit SHA** with a version comment. |
+| **Least-privilege `GITHUB_TOKEN`** | `labs.yml` and `quality.yml` set `permissions: contents: read`; `inbox.yml` sets `permissions: issues: write`. | `ci.yml` still omits an explicit `permissions: contents: read` block. |
+
+```yaml
+# UNSAFE: floating tag can be retargeted upstream
+- uses: actions/checkout@v4
+
+# SAFE: immutable 40-char commit SHA with human-readable version comment (not run)
+- uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+```
+
+## Core supply-chain controls
+1. **Lockfiles (`pnpm-lock.yaml`):** Commit the lockfile, review unexpected lockfile diffs in PRs, and always install with `pnpm install --frozen-lockfile` in CI.
+2. **Vulnerability scanning (`pnpm audit`) & automated updates:** Run `pnpm audit --prod` in CI (note: triage CVEs in dev/build tools separately from runtime exposure) and enable **Renovate** or **Dependabot** to open small, frequent update PRs (including SHA bumps for Actions).
+3. **SBOM (CycloneDX / SPDX):** Generate an SBOM during release builds so you can answer "which deployed apps include package X?" in seconds during a zero-day incident.
+4. **Provenance / SLSA:** Use signed build provenance (such as GitHub Artifact Attestations) to cryptographically bind the published artifact to the exact source commit and CI workflow.
+
+## Gotchas
+- **Pinning to `@v4.2.2` feels "pinned" but is still mutable:** Only a 40-character commit SHA is immutable in Git.
+- **Ignoring `postinstall` scripts:** Malicious npm packages often execute code during `pnpm install` before your tests even start; audit new dependencies and use `--ignore-scripts` where feasible.
+- **`pnpm audit` noise:** A medium-severity ReDoS in a test-only devDependency should not train the team to ignore real runtime criticals—separate prod vs dev audit policies.
+
+## Production checklist
+- [ ] Every CI install uses `pnpm install --frozen-lockfile`.
+- [ ] Every third-party GitHub Action is pinned to a 40-character commit SHA (maintained by Renovate/Dependabot).
+- [ ] Every workflow declares explicit minimal `permissions:` (default `contents: read`).
+- [ ] Automated dependency updates and `pnpm audit` run on a schedule and on PRs.
+- [ ] Release artifacts emit an SBOM and signed SLSA provenance attestation.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "Why is actions/checkout@v4.2.2 weaker than pinning to a 40-character commit SHA?",
+    options: [
+      { label: "Git tags can be moved to point to a different commit if the upstream repo is compromised", description: "Only a full commit SHA is cryptographically immutable.", correct: true },
+      { label: "GitHub Actions does not support semver patch tags", description: "GitHub Actions supports tags, they are just mutable." },
+      { label: "Patch tags skip pnpm-lock.yaml checks", description: "Action pinning is independent of pnpm-lock.yaml." }
+    ]
+  },
+  {
+    question: "What problem does an SBOM solve during a newly disclosed zero-day vulnerability (like Log4Shell)?",
+    options: [
+      { label: "It lets you query an exact inventory of direct and transitive dependencies across all built artifacts", description: "SBOMs (CycloneDX/SPDX) tell you immediately which services ship the affected package version.", correct: true },
+      { label: "It automatically patches vulnerable code at runtime", description: "An SBOM is an inventory, not a runtime patcher." },
+      { label: "It replaces TLS certificates in CI", description: "SBOMs document software components, not TLS." }
+    ]
+  }
+]} />
+
+## Sources
+- [OWASP Top 10:2025 A03 Software Supply Chain Failures](https://top10.owasp.org/2025/)
+- [OWASP ASVS 5.0 (GitHub)](https://github.com/OWASP/ASVS)
+- [GitHub Docs: Security hardening for GitHub Actions](https://docs.github.com/en/actions/security-for-github-actions/security-guides/security-hardening-for-github-actions)
+- [SLSA Specification v1.0](https://slsa.dev/spec/v1.0/)

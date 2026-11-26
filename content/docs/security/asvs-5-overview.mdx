@@ -1,0 +1,120 @@
+---
+title: "OWASP ASVS 5.0 Overview"
+description: What OWASP ASVS 5.0 is, how L1–L3 levels work, all 17 chapters in one line each, and how to scope it on a real static site.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: note
+type: reference
+level: beginner
+tags: [security, owasp, asvs, checklist, appsec]
+tested_with:
+  asvs: "5.0.0 (docs)"
+cards:
+  - q: "How many chapters are in OWASP ASVS 5.0, and how does it differ from ASVS 4.x?"
+    a: "ASVS 5.0 has 17 chapters (V1–V17), reorganizing V1–V14 from 4.x into dedicated chapters such as V6 Authentication, V7 Session Management, V8 Authorization, V9 Self-contained Tokens, V10 OAuth/OIDC, and V17 WebRTC."
+  - q: "What do ASVS Levels L1, L2, and L3 represent?"
+    a: "L1 is the baseline for all web apps (defending against automated/opportunistic attacks), L2 is for apps handling sensitive data or standard business risk, and L3 is for high-value/critical systems (finance, healthcare, infrastructure)."
+  - q: "Why should you scope ASVS chapters before auditing a project?"
+    a: "ASVS requirements are conditional on architecture—a static site with no database or login skips V6–V10 and SQL injection checks, focusing instead on V3 Web Frontend, V12 TLS, V13 Configuration, V14 Client Data, and V15 Supply Chain."
+  - q: "What is the relationship between OWASP Top 10 and OWASP ASVS?"
+    a: "The Top 10 is an awareness list of the most critical risk categories, while ASVS is a testable, requirement-by-requirement verification standard for developers and auditors."
+related:
+  - security/owasp-top-10
+  - ci-cd/this-site-pipeline
+sources:
+  - title: "OWASP Application Security Verification Standard (ASVS) 5.0 (GitHub)"
+    url: https://github.com/OWASP/ASVS
+  - title: "OWASP ASVS Project Page"
+    url: https://owasp.org/www-project-application-security-verification-standard/
+  - title: "OWASP Top 10:2025"
+    url: https://top10.owasp.org/2025/
+---
+
+## TL;DR
+**OWASP ASVS 5.0** is a testable security verification standard organized into **17 chapters (V1–V17)** across three assurance levels (**L1–L3**). Unlike the Top 10 awareness list, ASVS gives concrete pass/fail requirements you scope to the features your system actually has.
+
+## Why it exists
+The [OWASP Top 10](/docs/security/owasp-top-10) explains *what* goes wrong most often, but it is too coarse to use as an engineering specification or PR checklist. ASVS turns application security into verifiable requirements so teams can design controls upfront, write targeted tests, and agree on what "secure enough" means for a given risk tier.
+
+## Verification levels (L1–L3)
+ASVS 5.0 defines three cumulative levels (every L2 requirement includes L1, and L3 includes L1 + L2):
+
+| Level | Target audience | Threat model |
+|---|---|---|
+| **L1** | Every web app and API | Opportunistic attackers and automated scanners; minimum baseline before shipping. |
+| **L2** | Most production B2B/B2C apps | Motivated attackers targeting sensitive user data, payments, or multi-tenant isolation. |
+| **L3** | High-assurance / regulated systems | Advanced persistent threats, critical infrastructure, healthcare, or high-value finance. |
+
+## All 17 ASVS 5.0 chapters in one line
+ASVS 5.0 restructured the 4.x chapters into 17 focused domains:
+
+| Chapter | Title (ASVS 5.0) | What it verifies |
+|---|---|---|
+| **V1** | Encoding and Sanitization | Context-aware output encoding, HTML/URL sanitization, and safe deserialization. |
+| **V2** | Validation and Business Logic | Schema/type validation and preventing workflow or state-machine abuse. |
+| **V3** | Web Frontend Security | Browser security headers, CSP, CORS, framing protection, and DOM/XSS defenses. |
+| **V4** | API and Web Service | REST/GraphQL/gRPC request parsing, content-type enforcement, and mass-assignment guards. |
+| **V5** | File Handling | Upload size/type validation, safe storage outside web roots, and safe download headers. |
+| **V6** | Authentication | Password storage, MFA, brute-force resistance, and credential recovery. |
+| **V7** | Session Management | Session token entropy, lifecycle, rotation, idle/absolute timeouts, and logout invalidation. |
+| **V8** | Authorization | Deny-by-default access control, object/function-level checks, and multi-tenant isolation. |
+| **V9** | Self-contained Tokens | JWT/PASETO signature verification, `alg`/`kid` handling, claims validation, and key rotation. |
+| **V10** | OAuth and OIDC | PKCE, exact redirect URI matching, state/nonce checks, and token audience validation. |
+| **V11** | Cryptography | Approved algorithms (AEAD, SHA-2/3), key management, and CSPRNG randomness. |
+| **V12** | Secure Communication | TLS 1.2/1.3 configuration, certificate validation, and service-to-service mTLS/HTTPS. |
+| **V13** | Configuration | Secret handling, server hardening, disabling debug endpoints, and least-privilege defaults. |
+| **V14** | Data Protection | Data classification, PII minimization, retention, and client-side storage boundaries. |
+| **V15** | Secure Coding and Architecture | Threat modeling, dependency/supply-chain hygiene, and safe concurrency. |
+| **V16** | Security Logging and Error Handling | Audit logs for security events without leaking secrets/PII, and fail-closed error handling. |
+| **V17** | WebRTC | Signaling authentication, DTLS-SRTP media encryption, and ICE/TURN relay security. |
+
+## Worked example: scoping ASVS 5.0 to this static site
+Using ASVS effectively means **scoping out chapters that do not exist in your architecture** instead of marking hundreds of rows "N/A" manually. Take **Mengty Learns** itself: a Next.js static export (`output: 'export'`) hosted on CDN/Pages with no backend, no database, no user accounts, and `localStorage` for flashcard/quiz progress.
+
+| Scope | ASVS 5.0 Chapters | Why |
+|---|---|---|
+| **Applies (focus here)** | **V1**, **V3**, **V12**, **V13**, **V14**, **V15** | MDX/HTML rendering and CSP (**V1**, **V3**); HTTPS/TLS at the edge (**V12**); security headers, CI secrets, and no debug leaks (**V13**); `localStorage` contains only non-sensitive study state (**V14**); dependency lockfiles, CI pinning, and threat modeling (**V15**). |
+| **Partially applies** | **V2**, **V16** | Build-time frontmatter/diagram Zod validation (**V2**) and safe error boundaries / RSS inbox script handling (**V16**). |
+| **Does not apply** | **V4**, **V5**, **V6**, **V7**, **V8**, **V9**, **V10**, **V11**, **V17** | No runtime APIs, no file uploads, no passwords/sessions/JWTs/OAuth, no server-side encryption keys, and no WebRTC. |
+
+## Do it: turn ASVS into a lightweight checklist
+1. **Pick a target level:** Start with **L1** for a new service or **L2** if you store user PII or multi-tenant data.
+2. **Scope by architecture:** Keep only the chapters that match components you actually run (for example, add **V6–V10** the day you add login).
+3. **Map controls to CI and code review:** Automate what you can (headers check, `pnpm audit`, lockfile enforcement, TypeScript/Zod schemas) and keep the rest as a PR review checklist for auth and data-access changes.
+
+## Gotchas
+- **Using ASVS 4.x chapter numbers on a 5.0 audit:** ASVS 5.0 split Authentication, Session Management, Authorization, Tokens, and OAuth into separate chapters (**V6–V10**); citing 4.x numbers creates confusion in PRs and audit reports.
+- **Treating L1 as "insecure":** L1 is already a solid baseline against automated attacks; jumping straight to L3 on a small internal tool wastes engineering time on controls you cannot maintain.
+- **Checking boxes without testing:** ASVS is a *verification* standard—every applicable requirement needs an automated test, config check, or reproducible manual verification step.
+
+## Production checklist
+- [ ] Target ASVS level (L1, L2, or L3) is documented per service based on data sensitivity.
+- [ ] Applicable ASVS 5.0 chapters are explicitly scoped in (and non-applicable chapters documented with reasons).
+- [ ] Automatable checks (dependency audits, static analysis, header checks) run in CI on every PR.
+- [ ] High-risk chapters (V6–V10 Auth/Access Control, V1 Encoding, V13 Secrets) are verified on every auth or API change.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "Which ASVS 5.0 chapter covers OAuth 2.x and OpenID Connect requirements?",
+    options: [
+      { label: "V10: OAuth and OIDC", description: "ASVS 5.0 dedicates V10 specifically to OAuth clients, authorization servers, resource servers, and OIDC.", correct: true },
+      { label: "V6: Authentication", description: "V6 covers passwords, MFA, and credential recovery rather than OAuth/OIDC protocol flows." },
+      { label: "V3: Web Frontend Security", description: "V3 covers browser security headers, CSP, CORS, and DOM defenses." }
+    ]
+  },
+  {
+    question: "For a purely static site with no backend, no login, and no database, which ASVS 5.0 chapters still apply?",
+    options: [
+      { label: "V1, V3, V12, V13, V14, and V15", description: "Static sites still need safe rendering, frontend headers/CSP, HTTPS, hardened config/CI, safe client storage, and supply-chain hygiene.", correct: true },
+      { label: "V6, V7, V8, and V9", description: "Authentication, sessions, server authorization, and self-contained tokens do not apply when there are no accounts or backend." },
+      { label: "None—static sites have zero attack surface", description: "Static sites can still suffer from XSS, missing security headers, or compromised build dependencies." }
+    ]
+  }
+]} />
+
+## Sources
+- [OWASP ASVS 5.0 Repository (GitHub)](https://github.com/OWASP/ASVS)
+- [OWASP ASVS Project](https://owasp.org/www-project-application-security-verification-standard/)
+- [OWASP Top 10:2025](https://top10.owasp.org/2025/)

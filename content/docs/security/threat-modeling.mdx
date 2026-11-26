@@ -1,0 +1,118 @@
+---
+title: "Threat Modeling with STRIDE"
+description: How to run a lightweight STRIDE threat model before writing code, with a data-flow diagram and worked example for this static site, localStorage, and its RSS inbox workflow.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: note
+type: how-to
+level: beginner
+tags: [security, threat-modeling, stride, architecture, asvs]
+tested_with:
+  asvs: "5.0.0 (V15)"
+  owasp_top_10: "2025 (A06)"
+cards:
+  - q: "What are the six categories in STRIDE?"
+    a: "Spoofing, Tampering, Repudiation, Information Disclosure, Denial of Service, and Elevation of Privilege."
+  - q: "What are the four core questions of a lightweight threat model?"
+    a: "1. What are we building? 2. What can go wrong? (STRIDE) 3. What are we going to do about it? 4. Did we do a good job?"
+  - q: "Why do trust boundaries matter in a data-flow diagram (DFD)?"
+    a: "Threats cluster wherever data crosses from an untrusted zone (browser, public internet, external RSS feeds) into a trusted zone (server, CI runner, DOM)."
+  - q: "What is the biggest threat in this site's RSS inbox workflow?"
+    a: "Untrusted external RSS XML could tamper with issue markdown or exploit parser bugs (Tampering / Injection), mitigated by fast-xml-parser, escaping, and running in an isolated CI job."
+related:
+  - security/asvs-5-overview
+  - security/owasp-top-10
+  - ci-cd/this-site-pipeline
+sources:
+  - title: "OWASP Threat Modeling Cheat Sheet"
+    url: https://cheatsheetseries.owasp.org/cheatsheets/Threat_Modeling_Cheat_Sheet.html
+  - title: "OWASP ASVS 5.0: V15 Secure Coding and Architecture"
+    url: https://github.com/OWASP/ASVS
+  - title: "OWASP Top 10:2025 A06 Insecure Design"
+    url: https://top10.owasp.org/2025/
+---
+
+## TL;DR
+**STRIDE** (**S**poofing, **T**ampering, **R**epudiation, **I**nformation Disclosure, **D**enial of Service, **E**levation of Privilege) is a 30-minute design check before writing code. Draw a **data-flow diagram (DFD)**, mark **trust boundaries**, and ask what can go wrong at each crossing.
+
+## Why it exists
+Most severe flaws (`A06:2025 Insecure Design`) cannot be fixed by a linter—they are missing controls at design time. A lightweight threat model before building a feature catches trust-boundary bugs while they are still cheap to change on a whiteboard.
+
+## 1. What are we building? (Worked DFD: Mengty Learns)
+**Mengty Learns** has two distinct data flows:
+1. **Reader flow:** Visitor browser loads static HTML/JS from CDN/Pages and stores flashcard/quiz progress in `localStorage` (`mt-*-v1`).
+2. **Inbox flow (`.github/workflows/inbox.yml`):** A scheduled GitHub Action fetches external RSS feeds via `scripts/inbox.mjs` and writes a private GitHub Issue (`permissions: issues: write`).
+
+<Diagram
+  id="threat-model-dfd"
+  ariaLabel="Data-flow diagram for Mengty Learns showing CDN to Browser with localStorage, and external RSS feeds to CI runner to GitHub Issues"
+  caption="Trust boundaries sit between Browser and localStorage, and between external RSS feeds and the GitHub Actions runner."
+  nodes={[
+    { id: 'cdn', label: 'Static CDN', subtitle: 'Serves out/ HTML', icon: 'gateway', category: 'edge', rank: 0, order: 0 },
+    { id: 'browser', label: 'Visitor Browser', subtitle: 'Renders MDX + JS', icon: 'user', category: 'client', rank: 1, order: 0 },
+    { id: 'ls', label: 'localStorage', subtitle: 'mt-*-v1 JSON', icon: 'db', category: 'data', rank: 2, order: 0 },
+    { id: 'rss', label: 'External RSS', subtitle: 'Untrusted XML', icon: 'service', category: 'external', rank: 0, order: 1 },
+    { id: 'ci', label: 'Inbox Action', subtitle: 'scripts/inbox.mjs', icon: 'ci', category: 'service', rank: 1, order: 1 },
+    { id: 'gh', label: 'GitHub Issue', subtitle: 'Private triage', icon: 'git', category: 'data', rank: 2, order: 1 },
+  ]}
+  edges={[
+    { from: 'cdn', to: 'browser', kind: 'request', label: 'HTTPS' },
+    { from: 'browser', to: 'ls', kind: 'request', label: 'Read/Write' },
+    { from: 'rss', to: 'ci', kind: 'request', label: 'XML feeds' },
+    { from: 'ci', to: 'gh', kind: 'request', label: 'GITHUB_TOKEN' },
+  ]}
+/>
+
+## 2. What can go wrong? (STRIDE on this site)
+
+| Threat | Example on this site | Mitigation |
+|---|---|---|
+| **S**poofing | Spoofed CDN origin or fake GitHub Action dependency. | HTTPS + HSTS at edge; pin GitHub Actions to full 40-char SHAs (`supply-chain`). |
+| **T**ampering | User edits `localStorage` (`mt-*-v1`); malicious RSS `<title>` injects markdown/links into the inbox issue. | `localStorage` holds only personal study state (no auth/trust); sanitize/truncate RSS fields and never auto-publish `inbox.yml` output. |
+| **R**epudiation | Unclear who changed security-critical content or workflows. | Signed/reviewed PRs on `main` and Git commit history. |
+| **I**nformation Disclosure | Accidental `NEXT_PUBLIC_*` secret or private `inbox/*.json` published in `out/`. | Keep `inbox.yml` writing to GitHub Issues (not `public/`); never put secrets in client bundles. |
+| **D**enial of Service | Oversized RSS feed hangs `inbox.mjs` in CI; huge SVG/diagram stalls browser. | Fetch timeouts + size bounds in `inbox.mjs`; build-time diagram node/step caps (`DIAGRAM-RULES`). |
+| **E**levation of Privilege | Compromised `inbox.yml` token pushes code to `main`. | `inbox.yml` sets `permissions: issues: write` only—it cannot write repository contents. |
+
+## Do it: 4-step threat model in 30 minutes
+1. **Draw the DFD:** Boxes for processes/stores/externals, arrows for data flows, dashed lines for trust boundaries.
+2. **Walk each boundary with STRIDE:** Spend 5 minutes per crossing—skip categories that don't apply.
+3. **Decide mitigations:** Mitigate, accept (document why), transfer, or eliminate (for example, keeping this site static eliminates server auth threats entirely).
+4. **Verify in PRs:** Turn the top 2–3 mitigations into automated tests, CI permission checks, or checklist items.
+
+## Gotchas
+- **Threat modeling after launch:** Waiting until a pen test turns architectural flaws into expensive rewrites.
+- **Listing generic threats ("someone hacks the DB"):** Always tie each STRIDE item to a specific DFD edge and trust boundary.
+- **Forgetting `localStorage` is attacker-controlled:** Never trust `localStorage` values for authorization or render raw strings from `localStorage` into `innerHTML`.
+
+## Production checklist
+- [ ] Every new feature with a new trust boundary (auth, upload, webhook, external fetch) gets a 30-minute STRIDE review.
+- [ ] All external inputs (RSS feeds, user URLs, `localStorage` JSON) are validated/sanitized at the boundary.
+- [ ] CI workflows declare minimal `permissions:` so a compromised job cannot escalate privileges.
+- [ ] Accepted risks are recorded in an ADR or design doc with owner and date.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "In STRIDE, which threat category is mitigated by setting permissions: issues: write (and not contents: write) on .github/workflows/inbox.yml?",
+    options: [
+      { label: "Elevation of Privilege (and Tampering with repo code)", description: "Restricting GITHUB_TOKEN prevents a compromised RSS fetch job from pushing code to main.", correct: true },
+      { label: "Repudiation", description: "Repudiation concerns auditability/non-denial of actions, not token scope." },
+      { label: "Denial of Service", description: "Token permissions do not bound CPU or network timeouts." }
+    ]
+  },
+  {
+    question: "Why is 'Tampering with localStorage' low-impact for Mengty Learns' flashcard progress, yet critical if an app stores role='admin' in localStorage?",
+    options: [
+      { label: "In a static learning app, localStorage only affects the user's own study schedule; trusting it for authorization lets any user grant themselves admin", description: "Never cross a trust boundary from client storage into server authorization.", correct: true },
+      { label: "localStorage is encrypted by browsers for static sites", description: "localStorage is plain-text and user-editable in DevTools." },
+      { label: "Static sites cannot read localStorage", description: "Client-side React components read localStorage directly." }
+    ]
+  }
+]} />
+
+## Sources
+- [OWASP Threat Modeling Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Threat_Modeling_Cheat_Sheet.html)
+- [OWASP ASVS 5.0 (GitHub)](https://github.com/OWASP/ASVS)
+- [OWASP Top 10:2025](https://top10.owasp.org/2025/)

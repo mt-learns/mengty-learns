@@ -1,0 +1,230 @@
+---
+title: "CSRF & SSRF Defenses"
+description: How Cross-Site Request Forgery (CSRF) and Server-Side Request Forgery (SSRF) work, and how SameSite cookies, anti-CSRF tokens, allowlists, and metadata blocks stop them.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: concept
+type: explanation
+level: intermediate
+tags: [security, csrf, ssrf, cookies, network, asvs]
+tested_with:
+  asvs: "5.0.0 (V3, V4, V13)"
+  owasp_top_10: "2025 (A01)"
+cards:
+  - q: "Why does CSRF happen when an app uses cookie-based authentication?"
+    a: "Browsers automatically attach cookies on cross-site requests (forms, links, fetch), so an evil site can trigger state-changing requests using the victim's session."
+  - q: "What three defenses protect against CSRF?"
+    a: "SameSite=Lax/Strict cookies, unpredictable anti-CSRF tokens (synchronizer or double-submit) on state-changing requests, and verifying Origin / Sec-Fetch-Site headers."
+  - q: "Why was SSRF absorbed into A01:2025 Broken Access Control?"
+    a: "SSRF tricks a server into making outbound requests to internal services or cloud metadata (169.254.169.254) that the external caller is not authorized to reach."
+  - q: "Why is resolving a hostname once and blocking private IP ranges not enough if redirects or DNS rebinding are allowed?"
+    a: "An attacker's DNS can return a public IP during validation and a private IP on the actual connect (DNS rebinding), or an allowed URL can 302-redirect to 169.254.169.254."
+related:
+  - security/owasp-top-10
+  - security/sessions-vs-jwt
+  - security/authn-vs-authz
+sources:
+  - title: "OWASP Cross-Site Request Forgery Prevention Cheat Sheet"
+    url: https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html
+  - title: "OWASP Server Side Request Forgery Prevention Cheat Sheet"
+    url: https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html
+  - title: "OWASP Top 10:2025 A01 Broken Access Control"
+    url: https://top10.owasp.org/2025/
+---
+
+## TL;DR
+**CSRF** abuses a victim's browser to send authenticated requests to your server; **SSRF** abuses your server to send requests into your private network or cloud metadata (`169.254.169.254`). Defend CSRF with **`SameSite` cookies + CSRF tokens + `Origin`/`Sec-Fetch-Site` checks**, and defend SSRF with **strict URL allowlists, disabled redirects, and pinned-IP private/metadata blocks**.
+
+## Intent
+<Intent>
+Separate browser-side request forgery (CSRF) from server-side request forgery (SSRF), and apply layered defenses that survive edge cases like subdomains and DNS rebinding.
+</Intent>
+
+## Problem
+Both attacks exploit **confused-deputy trust**:
+- In **CSRF**, your backend trusts cookies that the browser attaches automatically, even when the request was triggered by `evil.example`.
+- In **SSRF** (now part of `A01:2025 Broken Access Control`), your backend fetches a user-supplied URL (webhook, avatar importer, PDF generator) and unwittingly reaches internal admin APIs or cloud IMDSv1 credentials.
+
+<Diagram
+  id="csrf-vs-ssrf-diagram"
+  ariaLabel="CSRF tricks the victim browser into calling the app; SSRF tricks the app server into calling internal targets"
+  caption="CSRF forges requests from the victim's browser; SSRF forges requests from your server."
+  nodes={[
+    { id: 'evil', label: 'Evil Site', subtitle: 'Triggers request', icon: 'user', category: 'external', rank: 0, order: 0 },
+    { id: 'browser', label: 'Victim Browser', subtitle: 'Auto-sends cookie', icon: 'gateway', category: 'client', rank: 1, order: 0 },
+    { id: 'app', label: 'App Server', subtitle: 'Fetches user URL', icon: 'service', category: 'service', rank: 2, order: 0 },
+    { id: 'internal', label: 'Internal / IMDS', subtitle: '169.254.169.254', icon: 'db', category: 'data', rank: 3, order: 0 },
+  ]}
+  edges={[
+    { from: 'evil', to: 'browser', kind: 'error', label: 'CSRF' },
+    { from: 'browser', to: 'app', kind: 'error' },
+    { from: 'app', to: 'internal', kind: 'error', label: 'SSRF' },
+  ]}
+/>
+
+## Solution
+### Stopping CSRF
+1. **Use `SameSite=Lax` (or `Strict`)** on session cookies so cross-site `POST` forms do not carry cookies.
+2. **Require an unpredictable CSRF token** (or custom header validated with `Origin` / `Sec-Fetch-Site` checks) on every state-changing `POST`/`PUT`/`PATCH`/`DELETE` route.
+3. **Never mutate state on `GET` requests** (because `SameSite=Lax` still sends cookies on top-level `GET` navigations).
+
+### Stopping SSRF
+1. **Use a domain/scheme allowlist** (`https:` only, exact allowed hosts) whenever business logic permits.
+2. **Block private, loopback, link-local (`169.254.0.0/16`), and IPv6 ULA ranges** after DNS resolution, and **connect to the resolved IP directly** (preventing DNS rebinding).
+3. **Disable automatic HTTP redirects** (or re-validate every redirect target) and enforce cloud **IMDSv2** (session-token required).
+
+## Real-world analogy
+<Analogy>
+**CSRF** is someone forging your signature by slipping a bank transfer form into a stack of harmless flyers you sign without looking. **SSRF** is tricking a company receptionist into walking into the locked server room to read a sticky note on the wall because they have badge access and you don't.
+</Analogy>
+
+## ▶ Flow: watch it work
+
+### CSRF protection flow
+<Flow
+  id="csrf-flow"
+  title="CSRF Attack Blocked by SameSite + Token + Origin Check"
+  nodes={[
+    { id: 'evil', label: 'Evil Page', subtitle: 'Submits hidden POST', icon: 'user', category: 'external', rank: 0, order: 0 },
+    { id: 'browser', label: 'Victim Browser', subtitle: 'Holds SameSite cookie', icon: 'gateway', category: 'client', rank: 1, order: 0 },
+    { id: 'app', label: 'App Server', subtitle: 'Checks Origin + token', icon: 'service', category: 'service', rank: 2, order: 0 },
+  ]}
+  steps={[
+    { edge: 'evil->browser', title: '1. Trigger cross-site POST', text: 'Evil page auto-submits a hidden form to https://bank.example/transfer.' },
+    { edge: 'browser->app', title: '2. Browser withholds cookie', text: 'With SameSite=Lax, browser omits the session cookie and sends Origin: https://evil.test.' },
+    { edge: 'app->browser', title: '3. Server rejects with 403', text: 'App sees mismatched Origin / missing CSRF token and rejects the request.', kind: 'error', label: '403' },
+  ]}
+/>
+
+### SSRF protection flow
+<Flow
+  id="ssrf-flow"
+  title="SSRF Blocked by Allowlist, Pinned DNS & Redirect Guard"
+  nodes={[
+    { id: 'caller', label: 'Caller', subtitle: 'Sends webhook URL', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'app', label: 'App Server', subtitle: 'Resolves & pins IP', icon: 'service', category: 'service', rank: 1, order: 0 },
+    { id: 'imds', label: 'Cloud Metadata', subtitle: '169.254.169.254', icon: 'db', category: 'data', rank: 2, order: 0 },
+    { id: 'ext', label: 'Allowed Webhook', subtitle: 'Public HTTPS', icon: 'gateway', category: 'network', rank: 2, order: 1 },
+  ]}
+  steps={[
+    { edge: 'caller->app', title: '1. Submit target URL', text: 'User submits http://169.254.169.254/latest/meta-data/ as a webhook URL.' },
+    { edge: 'app->imds', title: '2. Block link-local / private IP', text: 'Validator rejects non-HTTPS scheme and 169.254.0.0/16 before opening a socket.', kind: 'error', label: 'Blocked' },
+    { edge: 'app->ext', title: '3. Allowlist public HTTPS', text: 'Valid allowlisted HTTPS host resolves to a public IP, pinned with redirects off.' },
+    { edge: 'ext->app', title: '4. Webhook returns 200', text: 'Allowed external webhook responds safely to the app server.', kind: 'response' },
+  ]}
+/>
+
+## Code
+Validating `Origin` for CSRF and checking resolved IP + disabling redirects for SSRF:
+
+```ts
+// UNSAFE: fetches any URL from the user with redirects enabled
+const unsafeRes = await fetch(req.body.webhookUrl);
+
+// SAFE: enforce https:, reject private/link-local IPs, disable redirects (ASVS V4, V13)
+import { lookup } from 'node:dns/promises';
+import net from 'node:net';
+
+function isPrivateOrLinkLocal(ip: string): boolean {
+  if (net.isIPv4(ip)) {
+    return (
+      ip.startsWith('10.') ||
+      ip.startsWith('127.') ||
+      ip.startsWith('169.254.') ||
+      ip.startsWith('192.168.') ||
+      /^172\.(1[6-9]|2\d|3[01])\./.test(ip)
+    );
+  }
+  return ip === '::1' || ip.startsWith('fe80:') || ip.startsWith('fc') || ip.startsWith('fd');
+}
+
+export async function safeFetchWebhook(rawUrl: string) {
+  const url = new URL(rawUrl);
+  if (url.protocol !== 'https:') throw new Error('Only HTTPS allowed');
+  const { address } = await lookup(url.hostname);
+  if (isPrivateOrLinkLocal(address)) throw new Error('Blocked private/metadata IP');
+  return fetch(url, { redirect: 'error' });
+}
+```
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'Use SameSite=Lax + CSRF token + Origin/Sec-Fetch-Site validation on all cookie-authenticated mutations.',
+    'Use an explicit domain allowlist wherever possible for server-side outbound fetches.',
+    'Enable IMDSv2 on cloud VMs and block 169.254.169.254 from application egress.',
+  ]}
+  avoid={[
+    'Do not rely on CORS alone to stop CSRF—simple form POSTs bypass CORS preflight.',
+    'Do not validate only the URL string against "localhost" (attackers use 127.0.0.1, [::1], 0.0.0.0, or DNS records pointing to 127.0.0.1).',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Harden cookies and state-changing routes
+    Set `SameSite=Lax; HttpOnly; Secure` and verify `Origin` / `Sec-Fetch-Site` + CSRF token on `POST`/`PUT`/`DELETE`.
+  </Step>
+  <Step>
+    ### Route outbound fetches through a safe client
+    Centralize `fetch` calls for user URLs behind an allowlist, DNS IP check, and `redirect: 'error'`.
+  </Step>
+  <Step>
+    ### Enforce network-level egress controls
+    Use Kubernetes `NetworkPolicy` or cloud security groups so app pods cannot reach internal metadata IPs at all.
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'Layered CSRF checks (SameSite + token + Origin) work across old and modern browsers.',
+    'Network egress policies + IMDSv2 stop SSRF even if an application parser has a bypass.',
+  ]}
+  cons={[
+    'DNS rebinding protection in Node/JS requires pinning the resolved IP in the HTTP agent, not just checking dns.lookup() before fetch().',
+    'Allowlists can feel restrictive when customers bring arbitrary webhook URLs.',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'OWASP Top 10:2025 Summary',
+      href: '/docs/security/owasp-top-10',
+      summary: 'Why SSRF moved into A01:2025 Broken Access Control.',
+    },
+    {
+      name: 'Authentication vs Authorization',
+      href: '/docs/security/authn-vs-authz',
+      summary: 'Enforcing access boundaries on internal and external resources.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "Why is CORS not a sufficient defense against CSRF?",
+    options: [
+      { label: "HTML <form> POSTs and simple requests are sent by the browser without a CORS preflight", description: "CORS blocks reading the response cross-origin, not sending the state-changing request.", correct: true },
+      { label: "CORS only works over HTTP, not HTTPS", description: "CORS works over both HTTP and HTTPS." },
+      { label: "CORS disables HttpOnly cookies", description: "CORS does not disable HttpOnly." }
+    ]
+  },
+  {
+    question: "An SSRF validator checks that a hostname is not '169.254.169.254', then calls fetch(url) with redirects enabled. How can an attacker bypass this?",
+    options: [
+      { label: "Return a 302 redirect to http://169.254.169.254/ or use DNS resolving to 169.254.169.254", description: "Validating only the initial hostname string fails against redirects, alternative IP notations, and DNS resolution.", correct: true },
+      { label: "Send a SameSite=Lax cookie", description: "SameSite cookies apply to browser requests, not server-side fetches." },
+      { label: "Use Content-Disposition: attachment", description: "Content-Disposition controls browser download behavior, not SSRF." }
+    ]
+  }
+]} />
+
+## Sources
+- [OWASP Cross-Site Request Forgery Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Request_Forgery_Prevention_Cheat_Sheet.html)
+- [OWASP Server Side Request Forgery Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html)
+- [OWASP Top 10:2025](https://top10.owasp.org/2025/)
