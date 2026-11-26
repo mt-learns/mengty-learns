@@ -298,11 +298,11 @@ function DiagramStage({
               <div className="min-w-0 flex-1">
                 <div
                   className={cn(
-                    'line-clamp-2 break-words font-semibold leading-[1.2] text-foreground',
+                    'line-clamp-2 font-semibold leading-[1.2] text-foreground',
                     compact ? 'text-[14px]' : 'text-[15px]',
                   )}
                 >
-                  {node.label}
+                  {node.label.replace(/([a-z0-9])([A-Z])/g, '$1\u200B$2')}
                 </div>
                 {!compact && node.subtitle && (
                   <div className="mt-0.5 line-clamp-1 break-words text-[13px] font-normal leading-tight text-muted-foreground">

@@ -19,7 +19,7 @@ export const NODE_MAX_WIDTH = 240;
 export const NODE_HEIGHT_SINGLE = 64;
 export const NODE_HEIGHT_DOUBLE = 80;
 
-export const COMPACT_NODE_MIN_WIDTH = 128;
+export const COMPACT_NODE_MIN_WIDTH = 112;
 export const COMPACT_NODE_MAX_WIDTH = 160;
 export const COMPACT_NODE_HEIGHT_SINGLE = 52;
 export const COMPACT_NODE_HEIGHT_DOUBLE = 58;
@@ -27,7 +27,7 @@ export const COMPACT_NODE_HEIGHT_DOUBLE = 58;
 export const RANK_GAP = 72;
 export const NODE_GAP = 40;
 export const COMPACT_RANK_GAP = 52;
-export const COMPACT_NODE_GAP = 16;
+export const COMPACT_NODE_GAP = 12;
 export const GROUP_PAD = 24;
 export const GROUP_LABEL_HEIGHT = 28;
 export const GROUP_PAD_TOP = GROUP_PAD + GROUP_LABEL_HEIGHT; // 52px
@@ -117,8 +117,19 @@ export function estimateTextWidth(text: string, fontSize = 15, semibold = true):
 }
 
 /**
+ * Splits a label into unbreakable word/camelCase tokens (matching <wbr> breaks).
+ */
+export function splitLabelTokens(label: string): string[] {
+  return label
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+}
+
+/**
  * Computes the uniform node width and per-node line count (1 or 2)
- * so labels never truncate with an ellipsis.
+ * so labels never truncate with an ellipsis or break mid-word.
  */
 export function computeNodeDimensions(
   nodes: FlowNode[],
@@ -135,9 +146,10 @@ export function computeNodeDimensions(
   );
   const fontSize = compact ? 14 : 15;
   // Normal: 36px icon + 10px gap + 24px pad + 10px safety = 80
-  // Compact: 28px icon + 8px gap + 20px pad + 6px safety = 62
-  const chromeWidth = compact ? 62 : 80;
+  // Compact: 28px icon + 6px gap + 16px pad + 4px safety = 54
+  const chromeWidth = compact ? 54 : 80;
   let maxIdeal = minW;
+  let minWordWidth = minW;
 
   for (const node of nodes) {
     const labelW = estimateTextWidth(node.label, fontSize, true);
@@ -148,9 +160,21 @@ export function computeNodeDimensions(
     if (ideal > maxIdeal) {
       maxIdeal = ideal;
     }
+    for (const token of splitLabelTokens(node.label)) {
+      const tokenNeeded = Math.ceil(
+        estimateTextWidth(token, fontSize, true) + chromeWidth + problemExtra,
+      );
+      if (tokenNeeded > minWordWidth) {
+        minWordWidth = tokenNeeded;
+      }
+    }
   }
 
-  const nodeWidth = Math.max(minW, Math.min(maxW, maxIdeal));
+  const nodeWidth = Math.max(
+    minW,
+    minWordWidth,
+    Math.min(maxW, maxIdeal),
+  );
   const nodeLines = new Map<string, 1 | 2>();
 
   for (const node of nodes) {

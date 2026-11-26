@@ -73,7 +73,7 @@ export function IosNode({ data }: NodeProps<IosFlowNode>) {
       title={compact && data.subtitle ? `${data.label}: ${data.subtitle}` : undefined}
       className={cn(
         'relative flex items-center rounded-panel',
-        compact ? 'gap-2 px-2.5 py-1.5' : 'gap-2.5 px-3 py-2',
+        compact ? 'gap-1.5 px-2 py-1.5' : 'gap-2.5 px-3 py-2',
         'transition-[transform,box-shadow,background-color,border-color] duration-200 ease-[var(--ease-ios)]',
         'motion-reduce:transition-none motion-reduce:transform-none',
         isDimmed
@@ -112,11 +112,11 @@ export function IosNode({ data }: NodeProps<IosFlowNode>) {
       <div className="min-w-0 flex-1">
         <div
           className={cn(
-            'line-clamp-2 break-words font-semibold leading-[1.2] text-foreground',
+            'line-clamp-2 font-semibold leading-[1.2] text-foreground',
             compact ? 'text-[14px]' : 'text-[15px]',
           )}
         >
-          {data.label}
+          {data.label.replace(/([a-z0-9])([A-Z])/g, '$1\u200B$2')}
         </div>
         {!compact && data.subtitle && (
           <div className="mt-0.5 line-clamp-1 break-words text-[13px] font-normal leading-tight text-muted-foreground">

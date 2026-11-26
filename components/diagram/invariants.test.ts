@@ -8,7 +8,9 @@ import {
   buildStackedTreePath,
   buildTreeBusPath,
   computeDiagramLayout,
+  estimateTextWidth,
   getHandleCoords,
+  splitLabelTokens,
   type NodeBox,
 } from './layout';
 import {
@@ -20,8 +22,8 @@ import {
 
 const DOCS_DIR = path.resolve(process.cwd(), 'content/docs');
 
-// §3.3 / §9.1: EVERY flow and diagram in content is checked at these widths (296 = 360px viewport canvas).
-const TEST_WIDTHS = [296, 360, 720, 1024] as const;
+// §3.3 / §9.1: EVERY flow and diagram in content is checked at these widths (265/288 = 360px viewport canvas).
+const TEST_WIDTHS = [265, 288, 360, 720, 1024] as const;
 
 /** Recursively collects every .mdx file under content/docs that uses <Flow> or <Diagram>. */
 function collectContentMdx(dir: string): string[] {
@@ -180,8 +182,8 @@ function assertLayoutInvariants(
 ) {
   const boxes = [...layoutResult.nodes.values()];
 
-  // 0. §3.3 Fit-before-pan: every diagram in content must fit without pan at 360, 720, 1024
-  if (containerWidth >= 360) {
+  // 0. §3.3 Fit-before-pan: every diagram in content must fit without pan at 265, 288, 360, 720, 1024
+  if (containerWidth >= 265) {
     expect(
       layoutResult.panMode,
       `${label} must fit without pan at ${containerWidth}px`,
@@ -332,6 +334,20 @@ function assertLayoutInvariants(
     `${label} rendered label size >= 14px`,
   ).toBeGreaterThanOrEqual(14);
 
+  // 6a. §4.1: No label wraps inside a word (longest word/camelCase token fits nodeWidth)
+  const chromeW = layoutResult.compact ? 54 : 80;
+  for (const raw of rawNodes) {
+    const box = layoutResult.nodes.get(raw.id);
+    if (!box || !('label' in raw) || typeof raw.label !== 'string') continue;
+    const availW = box.width - chromeW + 4;
+    for (const token of splitLabelTokens(raw.label)) {
+      expect(
+        estimateTextWidth(token, baseFontSize, true),
+        `${label} node ${raw.id} token "${token}" must not wrap mid-word`,
+      ).toBeLessThanOrEqual(availW);
+    }
+  }
+
   // 7. Bounds x zoom fit inside canvas with no node outside viewport
   if (!layoutResult.panMode) {
     expect(
@@ -344,8 +360,13 @@ function assertLayoutInvariants(
     ).toBeLessThanOrEqual(layoutResult.canvasHeight + 0.5);
   }
 
-  // 8. Siblings in a 2-node rank must sit side-by-side (never stacked into a chain) for flows
-  if (!isStaticDiagram && !layoutResult.stacked && layoutResult.direction === 'TB') {
+  // 8. Siblings in a 2-node rank must sit side-by-side (never stacked into a chain) when 2 nodes fit
+  if (
+    !isStaticDiagram &&
+    !layoutResult.stacked &&
+    layoutResult.direction === 'TB' &&
+    layoutResult.nodeWidth * 2 + 12 <= containerWidth - 12
+  ) {
     const byRank = new Map<number, NodeBox[]>();
     for (const raw of rawNodes) {
       if (raw.rank === undefined) continue;
