@@ -2,7 +2,11 @@
   "title": "IaC",
   "pages": [
     "first-project",
-    "plan-apply"
+    "plan-apply",
+    "remote-state-locking",
+    "modules",
+    "terraform-vs-opentofu",
+    "tofu-cheatsheet"
   ],
   "icon": "iac"
 }

@@ -6,6 +6,8 @@
     "pods-deployments",
     "probes",
     "requests-limits-oom",
+    "configmaps-secrets",
+    "helm-basics",
     "kubectl-cheatsheet"
   ],
   "icon": "kubernetes"

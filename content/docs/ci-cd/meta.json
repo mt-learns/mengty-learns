@@ -3,9 +3,10 @@
   "pages": [
     "github-actions",
     "pipeline-anatomy",
-    "this-site-pipeline",
+    "caching",
+    "oidc-not-keys",
     "deploy-and-rollback",
-    "oidc-not-keys"
+    "this-site-pipeline"
   ],
   "icon": "ci-cd"
 }

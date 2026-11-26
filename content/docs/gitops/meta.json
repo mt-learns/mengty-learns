@@ -2,7 +2,8 @@
   "title": "GitOps",
   "pages": [
     "what-is-gitops",
-    "drift-reconciliation"
+    "drift-reconciliation",
+    "argocd-vs-flux"
   ],
   "icon": "gitops"
 }
