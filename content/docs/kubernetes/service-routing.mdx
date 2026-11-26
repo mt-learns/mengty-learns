@@ -1,0 +1,281 @@
+---
+title: "Service Routing: Ingress → Service → Pod"
+description: How a Kubernetes request travels from a user's browser through Ingress and Service to a healthy Pod and back.
+type: explanation
+level: intermediate
+tags: [kubernetes, networking, ingress, service]
+tested_with:
+  kubernetes: "1.31"
+status: stable
+updated: "2026-11-26"
+---
+
+{/* TODO(schema-v2): Add kind: 'concept', verified, cards, related, and sources to frontmatter once lib/source.ts supports them. */}
+
+## 1. Intent
+
+<Intent>
+Understand how Kubernetes decouples external traffic from ephemeral Pod IPs: **Ingress** handles Layer 7 HTTP routing, **Service** provides a stable virtual IP and load-balancing across endpoints, and **Pods** run the actual application containers.
+</Intent>
+
+## 2. Problem
+
+Pods in Kubernetes are ephemeral—they get rescheduled, scaled up, or replaced during deployments, and each new Pod receives a new IP address. If clients or an external load balancer hardcoded Pod IPs, every rollout or crash would break traffic.
+
+<figure className="my-6">
+  <svg
+    viewBox="0 0 560 150"
+    className="w-full h-auto rounded-card border border-border bg-card p-3"
+    role="img"
+    aria-label="Without a Service, clients pointing directly at Pod IPs break when a Pod is replaced"
+  >
+    <rect x="24" y="48" width="120" height="52" rx="12" fill="var(--card)" stroke="var(--border)" />
+    <text x="84" y="78" textAnchor="middle" fill="var(--foreground)" fontSize="13" fontWeight="600">Client</text>
+
+    <line x1="144" y1="74" x2="260" y2="42" stroke="var(--destructive)" strokeWidth="2" strokeDasharray="5 4" />
+    <line x1="144" y1="74" x2="260" y2="108" stroke="var(--primary)" strokeWidth="2" />
+
+    <rect x="260" y="16" width="160" height="48" rx="12" fill="var(--muted)" stroke="var(--destructive)" />
+    <text x="340" y="38" textAnchor="middle" fill="var(--destructive)" fontSize="12" fontWeight="600">Old Pod (10.244.1.5)</text>
+    <text x="340" y="54" textAnchor="middle" fill="var(--muted-foreground)" fontSize="11">Terminated / 502</text>
+
+    <rect x="260" y="84" width="160" height="48" rx="12" fill="var(--card)" stroke="var(--primary)" />
+    <text x="340" y="106" textAnchor="middle" fill="var(--foreground)" fontSize="12" fontWeight="600">New Pod (10.244.2.9)</text>
+    <text x="340" y="122" textAnchor="middle" fill="var(--muted-foreground)" fontSize="11">Unknown to client</text>
+  </svg>
+  <figcaption className="mt-2 text-center text-caption-1 text-muted-foreground">
+    Direct Pod IP addressing breaks whenever Kubernetes reschedules or replaces a Pod.
+  </figcaption>
+</figure>
+
+## 3. Solution
+
+Kubernetes inserts two stable abstractions between external callers and Pods:
+
+1. **Ingress** terminates TLS and inspects HTTP host/path rules (e.g. `shop.example.com/cart`), routing the request to the matching **Service** (`web`).
+2. **Service** (`ClusterIP`) owns a stable virtual IP and DNS name (`web.default.svc.cluster.local`). An `EndpointSlice` continuously tracks only **Ready** Pods matching the Service's label selector (`app: web`), and `kube-proxy` (via iptables/IPVS/eBPF) distributes traffic to a healthy Pod.
+
+## 4. Real-world analogy
+
+<Analogy>
+Think of **Ingress** as the building's front-desk directory ("Accounting is on Floor 3"), the **Service** as the department's shared phone extension (`ext. 300`), and **Pods** as the individual staff members answering that extension. Callers never need anyone's personal mobile number, and if someone goes on break (fails a readiness probe), the extension stops ringing their desk.
+</Analogy>
+
+## 5. Flow: watch it work
+
+<Flow
+  id="k8s-request"
+  title="Kubernetes Request: User → Ingress → Service → Pod"
+  nodes={[
+    { id: 'user', label: 'User', subtitle: 'Browser', icon: 'user', x: 0, y: 1 },
+    { id: 'ing', label: 'Ingress', subtitle: 'L7 HTTP router', icon: 'gateway', x: 1, y: 1 },
+    { id: 'svc', label: 'Service', subtitle: 'ClusterIP :80', icon: 'service', x: 2, y: 1 },
+    { id: 'podA', label: 'Pod A', subtitle: 'Ready', icon: 'pod', x: 3, y: 0 },
+    { id: 'podB', label: 'Pod B', subtitle: 'Ready', icon: 'pod', x: 3, y: 2 },
+  ]}
+  steps={[
+    { edge: 'user->ing', text: 'Browser sends HTTPS GET /cart to the cluster Ingress controller' },
+    { edge: 'ing->svc', text: 'Ingress matches host + path rule and forwards to Service "web" on port 80' },
+    { edge: 'svc->podA', text: 'kube-proxy picks a healthy Pod endpoint (Pod A) from EndpointSlice' },
+    { edge: 'podA->svc', text: 'Pod A processes /cart and responds 200 OK', kind: 'response' },
+    { edge: 'svc->ing', text: 'Service returns the 200 OK response to the Ingress controller', kind: 'response' },
+    { edge: 'ing->user', text: 'Ingress sends the HTTPS response back to the user browser', kind: 'response' },
+  ]}
+/>
+
+## 6. Structure
+
+<figure className="my-6">
+  <svg
+    viewBox="0 0 560 160"
+    className="w-full h-auto rounded-card border border-border bg-card p-3"
+    role="img"
+    aria-label="Kubernetes routing components: Ingress targets Service, Service selects Ready Pods via labels"
+  >
+    <rect x="20" y="52" width="130" height="56" rx="12" fill="var(--card)" stroke="var(--primary)" strokeWidth="1.5" />
+    <text x="85" y="76" textAnchor="middle" fill="var(--foreground)" fontSize="13" fontWeight="600">Ingress</text>
+    <text x="85" y="94" textAnchor="middle" fill="var(--muted-foreground)" fontSize="11">/cart → web:80</text>
+
+    <line x1="150" y1="80" x2="210" y2="80" stroke="var(--primary)" strokeWidth="2" />
+
+    <rect x="210" y="52" width="145" height="56" rx="12" fill="var(--card)" stroke="var(--primary)" strokeWidth="1.5" />
+    <text x="282" y="76" textAnchor="middle" fill="var(--foreground)" fontSize="13" fontWeight="600">Service (web)</text>
+    <text x="282" y="94" textAnchor="middle" fill="var(--muted-foreground)" fontSize="11">selector: app=web</text>
+
+    <line x1="355" y1="70" x2="415" y2="42" stroke="var(--border)" strokeWidth="1.5" />
+    <line x1="355" y1="90" x2="415" y2="118" stroke="var(--border)" strokeWidth="1.5" />
+
+    <rect x="415" y="18" width="125" height="48" rx="10" fill="var(--muted)" stroke="var(--border)" />
+    <text x="477" y="40" textAnchor="middle" fill="var(--foreground)" fontSize="12" fontWeight="600">Pod A</text>
+    <text x="477" y="56" textAnchor="middle" fill="var(--muted-foreground)" fontSize="11">app=web · :8080</text>
+
+    <rect x="415" y="94" width="125" height="48" rx="10" fill="var(--muted)" stroke="var(--border)" />
+    <text x="477" y="116" textAnchor="middle" fill="var(--foreground)" fontSize="12" fontWeight="600">Pod B</text>
+    <text x="477" y="132" textAnchor="middle" fill="var(--muted-foreground)" fontSize="11">app=web · :8080</text>
+  </svg>
+  <figcaption className="mt-2 text-center text-caption-1 text-muted-foreground">
+    Ingress routes by HTTP host/path; Service selects Pods by label and maps port 80 to targetPort 8080.
+  </figcaption>
+</figure>
+
+## 7. Code
+
+<Tabs items={['TypeScript (kubectl-style config)', 'YAML']}>
+  <Tab value="TypeScript (kubectl-style config)">
+```ts
+// Declarative representation of a Service + Ingress routing pair
+interface ServiceSpec {
+  name: string;
+  selector: Record<string, string>;
+  port: number;
+  targetPort: number;
+}
+
+interface IngressRule {
+  host: string;
+  path: string;
+  serviceName: string;
+  servicePort: number;
+}
+
+const webService: ServiceSpec = {
+  name: 'web',
+  selector: { app: 'web' },
+  port: 80,
+  targetPort: 8080,
+};
+
+const webIngress: IngressRule = {
+  host: 'shop.example.com',
+  path: '/cart',
+  serviceName: webService.name,
+  servicePort: webService.port,
+};
+
+console.log(
+  `Route https://${webIngress.host}${webIngress.path} -> ${webIngress.serviceName}:${webIngress.servicePort} -> Pod:${webService.targetPort}`,
+);
+```
+  </Tab>
+  <Tab value="YAML">
+```yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: web
+spec:
+  selector:
+    app: web
+  ports:
+    - port: 80
+      targetPort: 8080
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: web-ingress
+spec:
+  rules:
+    - host: shop.example.com
+      http:
+        paths:
+          - path: /cart
+            pathType: Prefix
+            backend:
+              service:
+                name: web
+                port:
+                  number: 80
+```
+  </Tab>
+</Tabs>
+
+<LabLink
+  name="k8s-service-routing"
+  description="Apply the Service and Ingress manifests in a local kind or minikube cluster."
+  command="kubectl apply -f labs/k8s-service-routing/k8s/"
+/>
+
+## 8. When to use / when to avoid
+
+<Checklist
+  use={[
+    'You need HTTP/HTTPS host or path-based routing, TLS termination, or virtual hosting across multiple Services.',
+    'You want a single external entry point instead of provisioning a cloud LoadBalancer per Service.',
+    'Your backend Pods scale dynamically and need automatic endpoint discovery.',
+  ]}
+  avoid={[
+    'You only need internal cluster-to-cluster communication (use a ClusterIP Service directly).',
+    'You need non-HTTP TCP/UDP routing (consider Gateway API TCPRoute/UDPRoute or a LoadBalancer Service).',
+    'You are starting a brand-new cluster that already standardizes on Kubernetes Gateway API.',
+  ]}
+/>
+
+## 9. How to implement
+
+<Steps>
+  <Step>
+    ### Label your Pods consistently
+    Ensure your Deployment's `spec.template.metadata.labels` includes `app: web`.
+  </Step>
+  <Step>
+    ### Create the ClusterIP Service
+    Match `spec.selector` to `app: web`, expose `port: 80`, and forward to the container's `targetPort: 8080`.
+  </Step>
+  <Step>
+    ### Configure readiness probes
+    Add a `readinessProbe` on the Pod so unready Pods are excluded from the Service's `EndpointSlice`.
+  </Step>
+  <Step>
+    ### Add the Ingress resource
+    Define the `host` and `path` rule pointing `backend.service.name` to `web` on port `80`, then verify with `kubectl describe ingress web-ingress`.
+  </Step>
+</Steps>
+
+## 10. Pros / Cons
+
+<ProsCons
+  pros={[
+    'Decouples external URLs and TLS certificates from internal Pod IPs.',
+    'One Ingress controller can route to dozens of Services behind a single public IP.',
+    'Automatic zero-downtime endpoint updates during rolling deployments.',
+  ]}
+  cons={[
+    'Requires an Ingress controller (e.g. ingress-nginx, Traefik, Envoy) installed in the cluster.',
+    'Ingress is L7 HTTP/HTTPS only; custom annotations vary between controllers.',
+  ]}
+/>
+
+## 11. Relations
+
+<Relations
+  items={[
+    {
+      name: 'Kubectl Cheatsheet',
+      href: '/docs/kubernetes/kubectl-cheatsheet',
+      summary: 'Quick commands to inspect Pods, Services, and Endpoints during debugging.',
+    },
+    {
+      name: 'Ingress vs Gateway API',
+      summary: 'Gateway API is the successor to Ingress with role-oriented resources (GatewayClass, Gateway, HTTPRoute) and native TCP/UDP support.',
+    },
+    {
+      name: 'ClusterIP vs NodePort vs LoadBalancer',
+      summary: 'Service types control whether a Service is reachable only inside the cluster or directly on node/cloud IPs.',
+    },
+  ]}
+/>
+
+## 12. Check yourself
+
+<MyTake>
+When a Service returns `502` or `503` behind an Ingress, my first command is always `kubectl get endpointslices -l kubernetes.io/service-name=web`. Nine times out of ten, either the label selector does not match the Pod labels or the Pod's readiness probe is failing.
+</MyTake>
+
+{/* TODO(step-11): Add <Quiz> component once Step 11 is merged. */}
+
+### Sources
+
+- [Kubernetes Docs: Service](https://kubernetes.io/docs/concepts/services-networking/service/)
+- [Kubernetes Docs: Ingress](https://kubernetes.io/docs/concepts/services-networking/ingress/)
+- [Kubernetes Docs: EndpointSlices](https://kubernetes.io/docs/concepts/services-networking/endpoint-slices/)

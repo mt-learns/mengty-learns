@@ -1,0 +1,304 @@
+---
+title: Bridge Pattern
+description: Separate an abstraction from its implementation so both can evolve independently.
+type: explanation
+level: intermediate
+tags: [design-patterns, oop, typescript]
+tested_with:
+  typescript: "5.x"
+status: stable
+updated: "2026-11-26"
+---
+
+{/* TODO(schema-v2): Add kind: 'concept', verified, cards, related, and sources to frontmatter once lib/source.ts supports them. */}
+
+## 1. Intent
+
+<Intent>
+Split a large class or tightly coupled hierarchy into two independent hierarchies—**Abstraction** and **Implementation**—connected by composition instead of inheritance, so each side can vary without multiplying subclasses.
+</Intent>
+
+## 2. Problem
+
+Suppose you are building a remote control library for smart devices. You start with a `RemoteControl` base class and subclass it for each device: `TVRemote` and `RadioRemote`. Then you add an `AdvancedRemote` with mute and voice controls. Suddenly you need `AdvancedTVRemote` and `AdvancedRadioRemote`.
+
+Every new remote type or new device multiplies the class count (`M remotes × N devices`). Adding a third device means writing two more remote subclasses; adding a third remote style means writing three more.
+
+<figure className="my-6">
+  <svg
+    viewBox="0 0 560 190"
+    className="w-full h-auto rounded-card border border-border bg-card p-3"
+    role="img"
+    aria-label="Class explosion without Bridge: 2 remotes times 2 devices equals 4 concrete subclasses"
+  >
+    <rect x="200" y="12" width="160" height="36" rx="10" fill="var(--muted)" stroke="var(--border)" />
+    <text x="280" y="34" textAnchor="middle" fill="var(--foreground)" fontSize="13" fontWeight="600">RemoteControl</text>
+
+    <line x1="240" y1="48" x2="140" y2="82" stroke="var(--border)" strokeWidth="1.5" />
+    <line x1="320" y1="48" x2="420" y2="82" stroke="var(--border)" strokeWidth="1.5" />
+
+    <rect x="65" y="82" width="150" height="32" rx="8" fill="var(--muted)" stroke="var(--border)" />
+    <text x="140" y="102" textAnchor="middle" fill="var(--foreground)" fontSize="12">BasicRemote</text>
+
+    <rect x="345" y="82" width="150" height="32" rx="8" fill="var(--muted)" stroke="var(--border)" />
+    <text x="420" y="102" textAnchor="middle" fill="var(--foreground)" fontSize="12">AdvancedRemote</text>
+
+    <line x1="110" y1="114" x2="70" y2="144" stroke="var(--destructive)" strokeWidth="1.5" />
+    <line x1="170" y1="114" x2="210" y2="144" stroke="var(--destructive)" strokeWidth="1.5" />
+    <line x1="390" y1="114" x2="350" y2="144" stroke="var(--destructive)" strokeWidth="1.5" />
+    <line x1="450" y1="114" x2="490" y2="144" stroke="var(--destructive)" strokeWidth="1.5" />
+
+    <rect x="10" y="144" width="120" height="32" rx="8" fill="var(--card)" stroke="var(--destructive)" />
+    <text x="70" y="164" textAnchor="middle" fill="var(--foreground)" fontSize="11">BasicTVRemote</text>
+
+    <rect x="145" y="144" width="130" height="32" rx="8" fill="var(--card)" stroke="var(--destructive)" />
+    <text x="210" y="164" textAnchor="middle" fill="var(--foreground)" fontSize="11">BasicRadioRemote</text>
+
+    <rect x="290" y="144" width="125" height="32" rx="8" fill="var(--card)" stroke="var(--destructive)" />
+    <text x="352" y="164" textAnchor="middle" fill="var(--foreground)" fontSize="11">AdvTVRemote</text>
+
+    <rect x="425" y="144" width="125" height="32" rx="8" fill="var(--card)" stroke="var(--destructive)" />
+    <text x="487" y="164" textAnchor="middle" fill="var(--foreground)" fontSize="11">AdvRadioRemote</text>
+  </svg>
+  <figcaption className="mt-2 text-center text-caption-1 text-muted-foreground">
+    Inheritance couples both dimensions: M remotes × N devices produces M×N subclasses.
+  </figcaption>
+</figure>
+
+## 3. Solution
+
+Instead of inheriting from every combination, extract the **device** operations into an interface (`Device`) and give `RemoteControl` a reference to a `Device` instance.
+
+- The **Abstraction** (`RemoteControl`, `AdvancedRemote`) handles user-facing controls like `togglePower()` or `mute()`.
+- The **Implementation** (`Device`, implemented by `TV` and `Radio`) handles low-level state like `enable()`, `disable()`, and `setVolume()`.
+
+The reference from `RemoteControl` to `Device` is the **bridge**. Now you can add new remotes or new devices independently (`M + N` classes instead of `M × N`).
+
+## 4. Real-world analogy
+
+<Analogy>
+Think of a universal remote and a TV. The remote's buttons (Power, Volume Up, Mute) are the **abstraction**. The infrared receiver inside your Sony TV or Bose radio is the **implementation**. You can upgrade to a touchscreen remote without rewiring your TV, and you can swap your TV without relearning the remote's layout.
+</Analogy>
+
+## 5. Flow: watch it work
+
+<Flow
+  id="bridge"
+  title="Bridge Pattern: RemoteControl → Device"
+  nodes={[
+    { id: 'client', label: 'Client', subtitle: 'App code', icon: 'user', x: 0, y: 1 },
+    { id: 'remote', label: 'RemoteControl', subtitle: 'Abstraction', icon: 'class', x: 1, y: 1 },
+    { id: 'device', label: 'Device', subtitle: 'Implementor', icon: 'interface', x: 2, y: 1 },
+    { id: 'tv', label: 'TV', subtitle: 'Concrete', icon: 'service', x: 3, y: 0 },
+    { id: 'radio', label: 'Radio', subtitle: 'Concrete', icon: 'service', x: 3, y: 2 },
+  ]}
+  steps={[
+    { edge: 'client->remote', text: 'Client calls remote.togglePower() on an Abstraction instance' },
+    { edge: 'remote->device', text: 'RemoteControl delegates to its held Device reference' },
+    { edge: 'device->tv', text: 'TV.enable() powers on the concrete TV hardware' },
+    { edge: 'tv->remote', text: 'TV confirms power state is now enabled', kind: 'response' },
+    { edge: 'client->remote', text: 'Client swaps the device or uses AdvancedRemote.mute() on Radio' },
+    { edge: 'remote->device', text: 'AdvancedRemote calls device.setVolume(0) through the same interface' },
+    { edge: 'device->radio', text: 'Radio.setVolume(0) mutes the Radio without changing RemoteControl' },
+  ]}
+/>
+
+## 6. Structure
+
+<figure className="my-6">
+  <svg
+    viewBox="0 0 560 170"
+    className="w-full h-auto rounded-card border border-border bg-card p-3"
+    role="img"
+    aria-label="Bridge structure: RemoteControl composes Device interface, implemented by TV and Radio"
+  >
+    <rect x="24" y="24" width="170" height="54" rx="12" fill="var(--card)" stroke="var(--primary)" strokeWidth="1.5" />
+    <text x="109" y="46" textAnchor="middle" fill="var(--foreground)" fontSize="13" fontWeight="600">RemoteControl</text>
+    <text x="109" y="64" textAnchor="middle" fill="var(--muted-foreground)" fontSize="11">- device: Device</text>
+
+    <line x1="194" y1="51" x2="310" y2="51" stroke="var(--primary)" strokeWidth="2" />
+    <text x="252" y="42" textAnchor="middle" fill="var(--primary)" fontSize="11" fontWeight="600">bridge</text>
+
+    <rect x="310" y="24" width="170" height="54" rx="12" fill="var(--card)" stroke="var(--primary)" strokeWidth="1.5" />
+    <text x="395" y="46" textAnchor="middle" fill="var(--foreground)" fontSize="13" fontWeight="600">«interface» Device</text>
+    <text x="395" y="64" textAnchor="middle" fill="var(--muted-foreground)" fontSize="11">+ enable() / setVolume()</text>
+
+    <line x1="109" y1="78" x2="109" y2="112" stroke="var(--border)" strokeWidth="1.5" />
+    <rect x="24" y="112" width="170" height="38" rx="10" fill="var(--muted)" stroke="var(--border)" />
+    <text x="109" y="135" textAnchor="middle" fill="var(--foreground)" fontSize="12">AdvancedRemote</text>
+
+    <line x1="355" y1="78" x2="320" y2="112" stroke="var(--border)" strokeWidth="1.5" strokeDasharray="4 3" />
+    <line x1="435" y1="78" x2="470" y2="112" stroke="var(--border)" strokeWidth="1.5" strokeDasharray="4 3" />
+    <rect x="255" y="112" width="120" height="38" rx="10" fill="var(--muted)" stroke="var(--border)" />
+    <text x="315" y="135" textAnchor="middle" fill="var(--foreground)" fontSize="12">TV</text>
+    <rect x="415" y="112" width="120" height="38" rx="10" fill="var(--muted)" stroke="var(--border)" />
+    <text x="475" y="135" textAnchor="middle" fill="var(--foreground)" fontSize="12">Radio</text>
+  </svg>
+  <figcaption className="mt-2 text-center text-caption-1 text-muted-foreground">
+    Composition over inheritance: Abstraction delegates to the Implementor interface.
+  </figcaption>
+</figure>
+
+## 7. Code
+
+<Tabs items={['TypeScript']}>
+  <Tab value="TypeScript">
+```ts
+// Implementation interface
+interface Device {
+  isEnabled(): boolean;
+  enable(): void;
+  disable(): void;
+  getVolume(): number;
+  setVolume(percent: number): void;
+}
+
+// Concrete Implementations
+class TV implements Device {
+  private on = false;
+  private volume = 30;
+
+  isEnabled() { return this.on; }
+  enable() { this.on = true; }
+  disable() { this.on = false; }
+  getVolume() { return this.volume; }
+  setVolume(percent: number) {
+    this.volume = Math.max(0, Math.min(100, percent));
+  }
+}
+
+class Radio implements Device {
+  private on = false;
+  private volume = 15;
+
+  isEnabled() { return this.on; }
+  enable() { this.on = true; }
+  disable() { this.on = false; }
+  getVolume() { return this.volume; }
+  setVolume(percent: number) {
+    this.volume = Math.max(0, Math.min(100, percent));
+  }
+}
+
+// Abstraction
+class RemoteControl {
+  constructor(protected readonly device: Device) {}
+
+  togglePower(): void {
+    if (this.device.isEnabled()) {
+      this.device.disable();
+    } else {
+      this.device.enable();
+    }
+  }
+
+  volumeUp(): void {
+    this.device.setVolume(this.device.getVolume() + 10);
+  }
+}
+
+// Refined Abstraction
+class AdvancedRemote extends RemoteControl {
+  mute(): void {
+    this.device.setVolume(0);
+  }
+}
+
+// Usage
+const tvRemote = new RemoteControl(new TV());
+tvRemote.togglePower();
+
+const radioRemote = new AdvancedRemote(new Radio());
+radioRemote.togglePower();
+radioRemote.mute();
+```
+  </Tab>
+</Tabs>
+
+<LabLink
+  name="bridge-pattern-ts"
+  description="Practice separating abstraction and implementation in TypeScript."
+  command="npx tsx bridge.ts"
+/>
+
+## 8. When to use / when to avoid
+
+<Checklist
+  use={[
+    'You have two orthogonal dimensions that vary independently (e.g. UI controls × platform APIs, or shapes × renderers).',
+    'You want to switch implementations at runtime without changing client code.',
+    'A monolithic class is growing too large because it mixes high-level logic with platform-specific details.',
+  ]}
+  avoid={[
+    'There is only one implementation and no realistic plan to add another.',
+    'The abstraction and implementation are tightly bound by performance or lifecycle constraints.',
+    'A simple function callback or Strategy would solve the variation with less boilerplate.',
+  ]}
+/>
+
+## 9. How to implement
+
+<Steps>
+  <Step>
+    ### Identify the two independent dimensions
+    Separate what the caller interacts with (**Abstraction**) from the low-level work (**Implementation**).
+  </Step>
+  <Step>
+    ### Define the Implementor interface
+    Keep it focused on primitive operations (`enable`, `disable`, `setVolume`) rather than high-level workflows.
+  </Step>
+  <Step>
+    ### Store the Implementor on the Abstraction
+    Inject the `Device` via the `RemoteControl` constructor and delegate work to it.
+  </Step>
+  <Step>
+    ### Extend either side independently
+    Add `AdvancedRemote` without touching `TV` or `Radio`, and add `Projector` without touching any remote class.
+  </Step>
+</Steps>
+
+## 10. Pros / Cons
+
+<ProsCons
+  pros={[
+    'Prevents M × N subclass explosion when two dimensions grow.',
+    'Follows Open/Closed Principle: add new abstractions or implementations without modifying existing ones.',
+    'Keeps platform-specific details isolated behind a clean interface.',
+  ]}
+  cons={[
+    'Adds extra indirection and interfaces, which is overkill for simple hierarchies.',
+    'Harder to read at a glance if both sides are over-abstracted too early.',
+  ]}
+/>
+
+## 11. Relations
+
+<Relations
+  items={[
+    {
+      name: 'Bridge vs Adapter',
+      summary: 'Bridge is designed up front so two hierarchies evolve independently; Adapter wraps an incompatible existing interface after the fact.',
+    },
+    {
+      name: 'Bridge vs Strategy',
+      summary: 'Both use composition, but Strategy swaps a single interchangeable algorithm while Bridge decouples an entire abstraction hierarchy from an implementation hierarchy.',
+    },
+    {
+      name: 'Abstract Factory + Bridge',
+      summary: 'An Abstract Factory can create and pair the right Abstraction and Implementation together at startup.',
+    },
+  ]}
+/>
+
+## 12. Check yourself
+
+<MyTake>
+In TypeScript codebases, I reach for Bridge when I catch myself naming classes like `PostgresOrderExporter` and `CsvOrderExporter` alongside `AsyncPostgresOrderExporter`. Splitting `Exporter` (sync/async) from `StorageDriver` (Postgres/CSV) immediately stops the combinatorial growth.
+</MyTake>
+
+{/* TODO(step-11): Add <Quiz> component once Step 11 is merged. */}
+
+### Sources
+
+- [TypeScript Handbook: Classes & Interfaces](https://www.typescriptlang.org/docs/handbook/2/classes.html)
+- [Refactoring.Guru: Bridge Pattern (structure reference)](https://refactoring.guru/design-patterns/bridge)
