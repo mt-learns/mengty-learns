@@ -72,8 +72,8 @@ Think of a universal remote and a TV. The remote's buttons (Power, Volume Up, Mu
     { id: 'client', label: 'Client', subtitle: 'App code', icon: 'user', category: 'client', rank: 0, order: 0 },
     { id: 'remote', label: 'RemoteControl', subtitle: 'Abstraction', icon: 'class', category: 'service', rank: 1, order: 0 },
     { id: 'device', label: 'Device', subtitle: 'Implementor', icon: 'interface', category: 'edge', rank: 2, order: 0 },
-    { id: 'tv', label: 'TV', subtitle: 'Concrete', icon: 'service', category: 'external', rank: 3, order: 0 },
-    { id: 'radio', label: 'Radio', subtitle: 'Concrete', icon: 'service', category: 'external', rank: 3, order: 1 },
+    { id: 'tv', label: 'TV', subtitle: 'Concrete', icon: 'service', category: 'concrete', rank: 3, order: 0 },
+    { id: 'radio', label: 'Radio', subtitle: 'Concrete', icon: 'service', category: 'concrete', rank: 3, order: 1 },
   ]}
   steps={[
     { edge: 'client->remote', title: 'Toggle power on remote', text: 'Client calls remote.togglePower() on an Abstraction instance' },
@@ -96,8 +96,8 @@ Think of a universal remote and a TV. The remote's buttons (Power, Volume Up, Mu
     { id: 'remote', label: 'RemoteControl', subtitle: '- device: Device', icon: 'class', category: 'service', rank: 0, order: 0 },
     { id: 'adv', label: 'AdvancedRemote', subtitle: 'Refined Abstraction', icon: 'class', category: 'service', rank: 1, order: 0 },
     { id: 'device', label: 'Device', subtitle: '«interface»', icon: 'interface', category: 'edge', rank: 1, order: 1 },
-    { id: 'tv', label: 'TV', subtitle: 'Concrete', icon: 'service', category: 'external', rank: 2, order: 0 },
-    { id: 'radio', label: 'Radio', subtitle: 'Concrete', icon: 'service', category: 'external', rank: 2, order: 1 },
+    { id: 'tv', label: 'TV', subtitle: 'Concrete', icon: 'service', category: 'concrete', rank: 2, order: 0 },
+    { id: 'radio', label: 'Radio', subtitle: 'Concrete', icon: 'service', category: 'concrete', rank: 2, order: 1 },
   ]}
   edges={[
     { from: 'remote', to: 'device', label: 'bridge' },

@@ -1,30 +1,52 @@
 /* Static <Diagram> container queries & shared iOS category tints (tokens only, no hex) */
+/* §4.3 category tints (icon tile only, never red): client gray, network blue,
+   service indigo, data green, external orange, abstraction purple, concrete teal.
+   Red/destructive is reserved for kind:'error'. */
 :root {
   --border-strong: color-mix(in oklab, var(--foreground) 42%, var(--grouped));
-  --flow-cat-client-bg: var(--secondary);
-  --flow-cat-client-fg: var(--foreground);
+  /* client = gray */
+  --flow-cat-client-bg: color-mix(in oklab, var(--ios-gray) 16%, var(--card));
+  --flow-cat-client-fg: color-mix(in oklab, var(--ios-gray) 78%, var(--foreground));
+  /* network = blue */
   --flow-cat-edge-bg: color-mix(in oklab, var(--primary) 14%, var(--card));
   --flow-cat-edge-fg: var(--primary);
-  --flow-cat-service-bg: color-mix(in oklab, var(--primary) 10%, var(--secondary));
-  --flow-cat-service-fg: var(--primary);
-  --flow-cat-data-bg: color-mix(in oklab, var(--foreground) 8%, var(--secondary));
-  --flow-cat-data-fg: var(--foreground);
-  --flow-cat-external-bg: color-mix(in oklab, var(--destructive) 12%, var(--card));
-  --flow-cat-external-fg: var(--destructive);
+  --flow-cat-network-bg: color-mix(in oklab, var(--primary) 14%, var(--card));
+  --flow-cat-network-fg: var(--primary);
+  /* service = indigo */
+  --flow-cat-service-bg: color-mix(in oklab, var(--ios-indigo) 14%, var(--card));
+  --flow-cat-service-fg: var(--ios-indigo);
+  /* data = green */
+  --flow-cat-data-bg: color-mix(in oklab, var(--ios-green) 16%, var(--card));
+  --flow-cat-data-fg: color-mix(in oklab, var(--ios-green) 82%, var(--foreground));
+  /* external = orange */
+  --flow-cat-external-bg: color-mix(in oklab, var(--ios-orange) 16%, var(--card));
+  --flow-cat-external-fg: color-mix(in oklab, var(--ios-orange) 80%, var(--foreground));
+  /* abstraction = purple */
+  --flow-cat-abstraction-bg: color-mix(in oklab, var(--ios-purple) 14%, var(--card));
+  --flow-cat-abstraction-fg: color-mix(in oklab, var(--ios-purple) 80%, var(--foreground));
+  /* concrete = teal */
+  --flow-cat-concrete-bg: color-mix(in oklab, var(--ios-teal) 16%, var(--card));
+  --flow-cat-concrete-fg: color-mix(in oklab, var(--ios-teal) 82%, var(--foreground));
 }
 
 .dark {
   --border-strong: color-mix(in oklab, var(--foreground) 42%, var(--grouped));
-  --flow-cat-client-bg: var(--secondary);
-  --flow-cat-client-fg: var(--foreground);
+  --flow-cat-client-bg: color-mix(in oklab, var(--ios-gray) 22%, var(--card));
+  --flow-cat-client-fg: color-mix(in oklab, var(--ios-gray) 70%, var(--foreground));
   --flow-cat-edge-bg: color-mix(in oklab, var(--primary) 20%, transparent);
   --flow-cat-edge-fg: var(--primary);
-  --flow-cat-service-bg: color-mix(in oklab, var(--primary) 15%, var(--secondary));
-  --flow-cat-service-fg: var(--primary);
-  --flow-cat-data-bg: color-mix(in oklab, var(--foreground) 12%, var(--secondary));
-  --flow-cat-data-fg: var(--foreground);
-  --flow-cat-external-bg: color-mix(in oklab, var(--destructive) 20%, transparent);
-  --flow-cat-external-fg: var(--destructive);
+  --flow-cat-network-bg: color-mix(in oklab, var(--primary) 20%, transparent);
+  --flow-cat-network-fg: var(--primary);
+  --flow-cat-service-bg: color-mix(in oklab, var(--ios-indigo) 24%, var(--card));
+  --flow-cat-service-fg: color-mix(in oklab, var(--ios-indigo) 60%, var(--foreground));
+  --flow-cat-data-bg: color-mix(in oklab, var(--ios-green) 22%, var(--card));
+  --flow-cat-data-fg: color-mix(in oklab, var(--ios-green) 62%, var(--foreground));
+  --flow-cat-external-bg: color-mix(in oklab, var(--ios-orange) 22%, var(--card));
+  --flow-cat-external-fg: color-mix(in oklab, var(--ios-orange) 62%, var(--foreground));
+  --flow-cat-abstraction-bg: color-mix(in oklab, var(--ios-purple) 24%, var(--card));
+  --flow-cat-abstraction-fg: color-mix(in oklab, var(--ios-purple) 62%, var(--foreground));
+  --flow-cat-concrete-bg: color-mix(in oklab, var(--ios-teal) 22%, var(--card));
+  --flow-cat-concrete-fg: color-mix(in oklab, var(--ios-teal) 62%, var(--foreground));
 }
 
 .diagram-container {

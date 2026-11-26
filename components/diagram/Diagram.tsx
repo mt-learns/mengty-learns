@@ -48,6 +48,7 @@ const ICON_MAP: Record<FlowIconName, typeof Server> = {
 const CATEGORY_STYLE: Record<FlowNodeCategory, { bg: string; fg: string }> = {
   client: { bg: 'var(--flow-cat-client-bg)', fg: 'var(--flow-cat-client-fg)' },
   edge: { bg: 'var(--flow-cat-edge-bg)', fg: 'var(--flow-cat-edge-fg)' },
+  network: { bg: 'var(--flow-cat-network-bg)', fg: 'var(--flow-cat-network-fg)' },
   service: { bg: 'var(--flow-cat-service-bg)', fg: 'var(--flow-cat-service-fg)' },
   data: { bg: 'var(--flow-cat-data-bg)', fg: 'var(--flow-cat-data-fg)' },
   external: { bg: 'var(--flow-cat-external-bg)', fg: 'var(--flow-cat-external-fg)' },

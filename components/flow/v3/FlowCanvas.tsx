@@ -1,6 +1,7 @@
 'use client';
 
 import '@xyflow/react/dist/base.css';
+import '../../diagram/diagram.css';
 import './flow.css';
 
 import {

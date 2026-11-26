@@ -21,6 +21,7 @@ export type FlowEdgeKind = z.infer<typeof FlowEdgeKindSchema>;
 export const FLOW_NODE_CATEGORIES = [
   'client',
   'edge',
+  'network',
   'service',
   'data',
   'external',

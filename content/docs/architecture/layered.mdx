@@ -38,8 +38,8 @@ Over time, two classic layered pitfalls appear even after splitting files:
   ]}
   edges={[
     { from: 'pres', to: 'biz', kind: 'request' },
-    { from: 'biz', to: 'data', kind: 'error' },
-    { from: 'pres', to: 'data', kind: 'error', dashed: true, label: 'Leaky' },
+    { from: 'biz', to: 'data', kind: 'request' },
+    { from: 'pres', to: 'data', kind: 'request', dashed: true, label: 'Leaky' },
   ]}
 />
 
@@ -101,9 +101,9 @@ Think of a restaurant with a **waiter** (Presentation), a **chef** (Business), a
       ],
       steps: [
         { edge: 'http->pres', title: 'Send POST /orders', text: 'Client sends POST /orders' },
-        { edge: 'pres->data', title: 'Bypass Business layer', text: 'Controller bypasses OrderService and calls OrderRepo directly', kind: 'error' },
-        { edge: 'data->db', title: 'Skip domain checks', text: 'Data inserts row without running Business discount or stock checks', kind: 'error' },
-        { edge: 'db->pres', title: 'Leak raw DB row', text: 'Raw database row leaks back into the HTTP response shape', kind: 'error' },
+        { edge: 'pres->data', title: 'Bypass Business layer', text: 'Controller bypasses OrderService and calls OrderRepo directly' },
+        { edge: 'data->db', title: 'Skip domain checks', text: 'Data inserts row without running Business discount or stock checks' },
+        { edge: 'db->pres', title: 'Leak raw DB row', text: 'Raw database row leaks back into the HTTP response shape' },
       ],
     },
   ]}

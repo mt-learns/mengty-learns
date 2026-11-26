@@ -37,8 +37,8 @@ The single biggest difference between Layered and the three domain-centric style
     { id: 'h-pg', label: 'Postgres', icon: 'db', category: 'data', rank: 2, order: 1 },
   ]}
   edges={[
-    { from: 'l-pres', to: 'l-biz', kind: 'error' },
-    { from: 'l-biz', to: 'l-db', kind: 'error' },
+    { from: 'l-pres', to: 'l-biz', kind: 'request' },
+    { from: 'l-biz', to: 'l-db', kind: 'request' },
     { from: 'h-ui', to: 'h-dom', kind: 'request' },
     { from: 'h-pg', to: 'h-dom', kind: 'request' },
   ]}
