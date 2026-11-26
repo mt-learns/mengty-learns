@@ -18,16 +18,49 @@ export type FlowIconName = (typeof FLOW_ICON_NAMES)[number];
 export const FlowEdgeKindSchema = z.enum(['request', 'response', 'error']);
 export type FlowEdgeKind = z.infer<typeof FlowEdgeKindSchema>;
 
+export const FLOW_NODE_CATEGORIES = [
+  'client',
+  'edge',
+  'service',
+  'data',
+  'external',
+] as const;
+
+export const FlowNodeCategorySchema = z.enum(FLOW_NODE_CATEGORIES);
+export type FlowNodeCategory = z.infer<typeof FlowNodeCategorySchema>;
+
 export const FlowNodeSchema = z.object({
   id: z.string().min(1, 'Node id is required'),
   label: z.string().min(1, 'Node label is required'),
   subtitle: z.string().optional(),
   icon: z.enum(FLOW_ICON_NAMES).optional(),
+  category: FlowNodeCategorySchema.optional(),
   x: z.number().int().min(0),
   y: z.number().int().min(0),
 });
 
 export type FlowNode = z.infer<typeof FlowNodeSchema>;
+
+/**
+ * Resolves the visual category tint for a node, falling back from its icon.
+ */
+export function resolveNodeCategory(node: Pick<FlowNode, 'category' | 'icon'>): FlowNodeCategory {
+  if (node.category) return node.category;
+  switch (node.icon) {
+    case 'user':
+      return 'client';
+    case 'gateway':
+      return 'edge';
+    case 'db':
+    case 'queue':
+      return 'data';
+    case 'git':
+    case 'ci':
+      return 'external';
+    default:
+      return 'service';
+  }
+}
 
 export const FlowGroupSchema = z.object({
   id: z.string().min(1, 'Group id is required'),
@@ -43,6 +76,7 @@ export type ParsedFlowGroup = z.infer<typeof FlowGroupSchema>;
 
 export const FlowStepSchema = z.object({
   edge: z.string().min(1, 'Step edge is required'),
+  title: z.string().optional(),
   text: z.string().min(1, 'Step text is required'),
   kind: FlowEdgeKindSchema.default('request'),
 });

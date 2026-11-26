@@ -1,16 +1,13 @@
 'use client';
 
-import dynamic from 'next/dynamic';
-import type { FlowProps } from './types';
-
-const FlowClient = dynamic(
-  () => import('./Flow').then((mod) => mod.Flow),
-  { ssr: true },
-);
+import { Player } from './v3/Player';
+import type { ParsedFlowProps } from './types';
 
 /**
- * Code-split wrapper so Flow + motion are only loaded on pages that render <Flow>.
+ * Client wrapper for Flow v3. The lightweight Player shell + static SVG skeleton
+ * + <details> step list are SSR'd, while @xyflow/react + @dagrejs/dagre are
+ * dynamically imported only when scrolled into view.
  */
-export function FlowLazy(props: FlowProps) {
-  return <FlowClient {...props} />;
+export function FlowLazy(props: ParsedFlowProps) {
+  return <Player {...props} />;
 }
