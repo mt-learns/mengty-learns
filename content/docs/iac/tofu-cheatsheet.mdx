@@ -1,0 +1,109 @@
+---
+title: OpenTofu Cheatsheet
+description: Everyday tofu CLI commands for init, plan, apply, state inspection, formatting, and unlocking—verified against the OpenTofu 1.13 docs.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: cheatsheet
+type: reference
+level: beginner
+tags: [iac, opentofu, tofu, cheatsheet, cli]
+tested_with:
+  opentofu: "1.13 (docs only; tofu not installed locally)"
+cards:
+  - q: "Which command downloads providers, initializes the backend, and updates .terraform/?"
+    a: "tofu init (add -upgrade to bump provider versions within constraints, or -reconfigure when changing backends)."
+  - q: "How do you save a deterministic plan file and apply that exact plan in CI?"
+    a: "Run tofu plan -out=tfplan, then tofu apply tfplan."
+  - q: "Which command removes a resource from OpenTofu state without destroying the real cloud resource?"
+    a: "tofu state rm <address>."
+  - q: "Which two commands should run in every CI pull-request check for IaC?"
+    a: "tofu fmt -check -recursive and tofu validate (after tofu init -backend=false)."
+related:
+  - iac/first-project
+  - iac/plan-apply
+  - iac/remote-state-locking
+sources:
+  - title: "OpenTofu Docs: CLI Commands"
+    url: https://opentofu.org/docs/cli/commands/
+  - title: "OpenTofu Docs: State Subcommands"
+    url: https://opentofu.org/docs/cli/commands/state/
+---
+
+## TL;DR
+Daily `tofu` commands for initializing, planning, applying, formatting, and safely inspecting state. *(Note: `tofu` is not installed on this local machine, so every command below was verified against the OpenTofu 1.13 documentation and marked `# not run`.)*
+
+## Setup & validation
+
+```bash
+# Initialize working directory, download providers, configure backend (not run)
+tofu init
+tofu init -upgrade              # upgrade providers within versions.tf constraints
+tofu init -backend=false        # init providers only (great for CI validate)
+
+# Format and validate HCL (not run)
+tofu fmt -recursive             # auto-format all .tf files
+tofu fmt -check -recursive      # fail if unformatted (CI gate)
+tofu validate                   # syntax & type check without cloud creds
+```
+
+## Plan, apply, and destroy
+
+```bash
+# Preview changes and save exact plan for CI apply (not run)
+tofu plan -out=tfplan
+tofu apply tfplan               # applies exact saved plan (no confirmation prompt)
+
+# Target a single resource for emergency debugging only (not run)
+tofu plan -target=aws_instance.bastion
+
+# Preview and tear down all managed resources (not run)
+tofu plan -destroy
+tofu destroy
+```
+
+## State & outputs
+
+```bash
+# Inspect state without touching cloud resources (not run)
+tofu state list
+tofu state show aws_s3_bucket.assets
+tofu output -json
+
+# Remove a resource from state WITHOUT deleting it in the cloud (not run)
+tofu state rm aws_s3_bucket.legacy
+
+# Import an existing cloud resource into state (or use import {} blocks) (not run)
+tofu import aws_s3_bucket.assets my-existing-bucket
+
+# Release a stuck lock ONLY after confirming no apply is running (not run)
+tofu force-unlock <LOCK_ID>
+```
+
+## Gotchas
+- **Never commit `tfplan` files:** saved plan files can contain plaintext secret variables and resource attributes.
+- **Avoid `-target` as a habit:** targeting skips dependency graphs and leaves state partially converged.
+- **Prefer `moved {}` and `import {}` blocks** in `.tf` files over imperative `tofu state mv` / `tofu import` so teammates and CI get the same state transitions.
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "You want CI to validate HCL syntax and provider schemas on a pull request without needing AWS credentials for the remote backend. Which command sequence works?",
+    options: [
+      { label: "tofu init -backend=false && tofu validate", description: "-backend=false skips backend initialization while downloading provider schemas needed by validate.", correct: true },
+      { label: "tofu validate without running init", description: "tofu validate requires provider schemas downloaded by tofu init." },
+      { label: "tofu apply -auto-approve", description: "apply modifies real infrastructure and requires backend and cloud credentials." }
+    ]
+  },
+  {
+    question: "What does tofu state rm aws_s3_bucket.logs do?",
+    options: [
+      { label: "Removes the bucket from OpenTofu's state file while leaving the real S3 bucket untouched in AWS", description: "state rm only forgets the resource in state; use destroy to delete cloud resources.", correct: true },
+      { label: "Deletes the S3 bucket in AWS immediately", description: "state rm never calls cloud delete APIs." },
+      { label: "Deletes main.tf from disk", description: "You must also remove the resource block from .tf files or the next plan will propose creating it." }
+    ]
+  }
+]} />
+
+## Sources
+- [OpenTofu Docs: CLI Commands](https://opentofu.org/docs/cli/commands/)
+- [OpenTofu Docs: State Subcommands](https://opentofu.org/docs/cli/commands/state/)
