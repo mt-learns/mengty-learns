@@ -1,0 +1,38 @@
+---
+title: Docker Basics
+description: Learn the core concepts of Docker and containers.
+type: tutorial
+level: beginner
+tags: [docker, containers]
+status: stable
+updated: 2026-11-26
+tested_with:
+  docker: "27.x"
+---
+
+# Docker Basics
+
+Docker is a platform for developing, shipping, and running applications.
+
+<Tip>
+  Always use explicit tags for base images instead of `latest`.
+</Tip>
+
+<Sidenote>
+  Containers share the host kernel, making them lightweight compared to full VMs.
+</Sidenote>
+
+## What is a Container?
+
+A container is a standard unit of software that packages up code and all its dependencies.
+
+<Gotcha>
+  Data inside containers is ephemeral unless volumes are mounted.
+</Gotcha>
+
+### Key Commands
+
+<Terminal title="bash">
+docker run hello-world
+docker ps
+</Terminal>
