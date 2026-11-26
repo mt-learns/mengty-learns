@@ -1,0 +1,101 @@
+---
+title: "HTTP Security Headers Cheatsheet"
+description: Practical reference for CSP, HSTS (and preload caveats), X-Content-Type-Options, Referrer-Policy, Permissions-Policy, frame-ancestors, and COOP/COEP using Cloudflare Pages _headers.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: cheatsheet
+type: reference
+level: beginner
+tags: [security, headers, csp, hsts, cloudflare, asvs]
+tested_with:
+  asvs: "5.0.0 (V3, V12)"
+cards:
+  - q: "What does X-Content-Type-Options: nosniff prevent?"
+    a: "It stops browsers from MIME-sniffing a response into a different content type (for example treating a plain-text or uploaded file as executable JavaScript or HTML)."
+  - q: "What are the three requirements and main caveat of HSTS preload?"
+    a: "Requires max-age >= 31536000 (1 year), includeSubDomains, and preload; the caveat is that removing a domain from browser preload lists takes months and breaks any subdomain without HTTPS."
+  - q: "Which CSP directive replaces X-Frame-Options for clickjacking protection?"
+    a: "frame-ancestors 'none' (or 'self'), which controls which origins may embed the page in an <iframe>."
+  - q: "What do COOP and COEP enable when combined?"
+    a: "Cross-Origin-Opener-Policy: same-origin and Cross-Origin-Embedder-Policy: require-corp create cross-origin isolation (required for SharedArrayBuffer) and isolate browsing contexts."
+related:
+  - security/xss-csp
+  - security/asvs-5-overview
+sources:
+  - title: "OWASP HTTP Headers Cheat Sheet"
+    url: https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html
+  - title: "OWASP ASVS 5.0: V3 Web Frontend Security & V12 Secure Communication"
+    url: https://github.com/OWASP/ASVS
+  - title: "Cloudflare Pages: Headers"
+    url: https://developers.cloudflare.com/pages/configuration/headers/
+  - title: "MDN: Strict-Transport-Security"
+    url: https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Strict-Transport-Security
+---
+
+## TL;DR
+HTTP security headers instruct browsers to lock down framing, MIME sniffing, downgrades to HTTP, referrer leaks, and script execution. On Cloudflare Pages, you ship them via `public/_headers`—and **this repo does not have a `public/_headers` file yet** (checked `public/`), so the example below is the target config to add before deploying.
+
+## Header reference
+
+| Header | Recommended baseline | Purpose |
+|---|---|---|
+| `Strict-Transport-Security` | `max-age=31536000; includeSubDomains` | Forces HTTPS in the browser after first visit. Add `; preload` only when every subdomain is permanently HTTPS. |
+| `Content-Security-Policy` | `default-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'self'` | Restricts script/style/connect origins and blocks clickjacking (`frame-ancestors`). |
+| `X-Content-Type-Options` | `nosniff` | Disables browser MIME-type sniffing. |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` | Sends full path on same-origin, origin-only on cross-origin HTTPS, nothing on downgrade. |
+| `Permissions-Policy` | `camera=(), microphone=(), geolocation=()` | Disables powerful browser APIs your site does not use. |
+| `Cross-Origin-Opener-Policy` | `same-origin` | Isolates top-level browsing context from cross-origin popups (Spectre/XS-Leak mitigation). |
+| `Cross-Origin-Embedder-Policy` | `require-corp` | Opts into cross-origin isolation (`SharedArrayBuffer`); only enable if all subresources send CORP/CORS. |
+
+## Cloudflare Pages `_headers` example
+
+> **Repo status:** Checked `public/` in this repository—**no `public/_headers` file exists yet**. Add the file below (after testing CSP in `Content-Security-Policy-Report-Only` first) when deploying to Cloudflare Pages.
+
+```text
+# public/_headers (example — not yet present in this repo)
+/*
+  Strict-Transport-Security: max-age=31536000; includeSubDomains
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+  Permissions-Policy: camera=(), microphone=(), geolocation=()
+  Cross-Origin-Opener-Policy: same-origin
+  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'
+```
+
+## Gotchas
+- **HSTS `preload` is hard to undo:** Submitting to the HSTS preload list bakes your domain into browser binaries. If a legacy internal subdomain still uses plain HTTP, `includeSubDomains` + `preload` will break it for months.
+- **COEP breaks third-party embeds:** Adding `Cross-Origin-Embedder-Policy: require-corp` blocks third-party images/iframes that lack `Cross-Origin-Resource-Policy: cross-origin` or CORS headers.
+- **`_headers` does not apply to Next.js `next dev`:** Cloudflare Pages `_headers` is only read by Cloudflare's edge on deployed static assets—verify headers in staging with `curl -I`.
+
+## Production checklist
+- [ ] `X-Content-Type-Options: nosniff` and `Referrer-Policy` are set on all responses.
+- [ ] Clickjacking is blocked with CSP `frame-ancestors 'none'` (or `'self'`).
+- [ ] `Strict-Transport-Security` starts with a short `max-age` (e.g. `300`) before ramping to `31536000; includeSubDomains`.
+- [ ] CSP is tested in `Report-Only` mode before enforcing so inline hydration/styles are not broken.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "Why should you test HSTS with a short max-age before enabling includeSubDomains and preload?",
+    options: [
+      { label: "HSTS with includeSubDomains forces HTTPS on every subdomain, and preload removal takes months", description: "Any HTTP-only subdomain immediately becomes unreachable in browsers.", correct: true },
+      { label: "HSTS disables TLS 1.3", description: "HSTS enforces HTTPS; it does not disable TLS 1.3." },
+      { label: "Short max-age is required by Cloudflare Pages", description: "Cloudflare Pages accepts any valid max-age; starting short is an operational safety step." }
+    ]
+  },
+  {
+    question: "Which header prevents a browser from executing an uploaded .txt file as HTML or JavaScript?",
+    options: [
+      { label: "X-Content-Type-Options: nosniff", description: "nosniff stops the browser from guessing a different MIME type than Content-Type.", correct: true },
+      { label: "Referrer-Policy: no-referrer", description: "Referrer-Policy controls the Referer header on outbound navigation/requests." },
+      { label: "Permissions-Policy: geolocation=()", description: "Permissions-Policy restricts browser hardware/API features." }
+    ]
+  }
+]} />
+
+## Sources
+- [OWASP HTTP Headers Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html)
+- [OWASP ASVS 5.0 (GitHub)](https://github.com/OWASP/ASVS)
+- [Cloudflare Pages: Headers](https://developers.cloudflare.com/pages/configuration/headers/)
+- [MDN: Strict-Transport-Security](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Strict-Transport-Security)
