@@ -8,7 +8,8 @@ import {
   ReactFlowProvider,
   useReactFlow,
 } from '@xyflow/react';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { cn } from '../../../lib/utils';
 import {
   FIT_PADDING,
   MIN_READABLE_ZOOM,
@@ -131,8 +132,9 @@ function FlowCanvasInner({
   );
 
   const { panMode, canvasHeight, direction, bounds } = graph.layout;
-  const hasHorizontalOverflow =
-    panMode && bounds.width * MIN_READABLE_ZOOM > containerWidth - 16;
+  // §3.3a: pan hint only on MEASURED overflow, never when everything fits.
+  const [hasHorizontalOverflow, setHasHorizontalOverflow] = useState(false);
+  const [overflowSide, setOverflowSide] = useState<'left' | 'right' | null>(null);
 
   useEffect(() => {
     onLayoutChange?.({ canvasHeight, panMode });
@@ -150,6 +152,28 @@ function FlowCanvasInner({
     });
     return () => onControlsReady?.(null);
   }, [reactFlow, reducedMotion, onControlsReady]);
+
+  // Measure actual rendered overflow (§3.3a): only show pan hint when content really exceeds the canvas.
+  const measureOverflow = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const canvas = el.querySelector<HTMLElement>('.react-flow');
+    const vpEl = el.querySelector<HTMLElement>('.react-flow__viewport');
+    if (!canvas || !vpEl) return;
+    const cRect = canvas.getBoundingClientRect();
+    const nodes = [...el.querySelectorAll<HTMLElement>('.react-flow__node')];
+    let rightOverflow = 0;
+    let leftOverflow = 0;
+    for (const n of nodes) {
+      const r = n.getBoundingClientRect();
+      rightOverflow = Math.max(rightOverflow, r.right - cRect.right);
+      leftOverflow = Math.max(leftOverflow, cRect.left - r.left);
+    }
+    const overflowRight = rightOverflow > 1;
+    const overflowLeft = leftOverflow > 1;
+    setHasHorizontalOverflow(overflowRight || overflowLeft);
+    setOverflowSide(overflowRight ? 'right' : overflowLeft ? 'left' : null);
+  }, []);
 
   // Fit on mount, container resize, and variant change — never on step change (§3.1, §3.4)
   useEffect(() => {
@@ -176,6 +200,8 @@ function FlowCanvasInner({
           duration: 0,
         });
       }
+      // measure overflow after viewport settles
+      requestAnimationFrame(() => measureOverflow());
     });
     return () => cancelAnimationFrame(frame);
   }, [
@@ -187,6 +213,7 @@ function FlowCanvasInner({
     canvasHeight,
     bounds.width,
     bounds.height,
+    measureOverflow,
   ]);
 
   return (
@@ -222,12 +249,19 @@ function FlowCanvasInner({
         fitView={!panMode}
         fitViewOptions={{ padding: FIT_PADDING, minZoom: MIN_READABLE_ZOOM }}
         proOptions={{ hideAttribution: true }}
+        onMoveEnd={measureOverflow}
       />
       {hasHorizontalOverflow && (
         <>
+          {/* fade edge on the overflowing side (§3.3a) */}
           <div
             aria-hidden="true"
-            className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-grouped to-transparent"
+            className={cn(
+              'pointer-events-none absolute inset-y-0 w-8',
+              overflowSide === 'left'
+                ? 'left-0 bg-gradient-to-r from-grouped to-transparent'
+                : 'right-0 bg-gradient-to-l from-grouped to-transparent',
+            )}
           />
           <div className="pointer-events-none absolute right-2.5 bottom-2.5 rounded-pill border border-border bg-card/90 px-2.5 py-1 text-caption-1 font-medium text-muted-foreground shadow-xs">
             Drag to see more →
