@@ -11,6 +11,11 @@ const frontmatterSchema = pageSchema.extend({
   tested_with: z.record(z.string(), z.string()).optional(),
   status: z.enum(['draft', 'stable', 'outdated']).default('stable'),
   updated: z.string().optional(),
+  verified: z.string().optional(),
+  kind: z.enum(['note', 'concept', 'cheatsheet', 'lab', 'decision', 'postmortem', 'radar', 'digest']).default('note'),
+  cards: z.array(z.object({ q: z.string(), a: z.string() })).default([]),
+  related: z.array(z.string()).default([]),
+  sources: z.array(z.object({ title: z.string(), url: z.string() })).default([]),
 });
 
 const docs = defineDocs({

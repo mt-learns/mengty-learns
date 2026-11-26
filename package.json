@@ -4,12 +4,14 @@
   "private": true,
   "packageManager": "pnpm@11.6.0",
   "scripts": {
-    "build": "next build",
+    "build": "node scripts/build-cards.mjs && next build",
+    "prebuild": "node scripts/build-cards.mjs",
     "dev": "next dev",
     "start": "serve out",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "new": "node scripts/new.mjs"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.5.0",
@@ -19,12 +21,14 @@
     "fumadocs-core": "16.19.7",
     "fumadocs-mdx": "15.6.4",
     "fumadocs-ui": "npm:@fumadocs/base-ui@16.19.7",
+    "gray-matter": "^4.0.3",
     "lucide-react": "^1.71.0",
     "motion": "14.14.0",
     "next": "16.4.6",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "tailwind-merge": "^3.7.1",
+    "ts-fsrs": "^6.0.1",
     "zod": "^4.6.7"
   },
   "devDependencies": {

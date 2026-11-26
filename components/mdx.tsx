@@ -2,7 +2,8 @@ import defaultMdxComponents from 'fumadocs-ui/mdx';
 import { Tab, Tabs } from 'fumadocs-ui/components/tabs';
 import { Callout } from 'fumadocs-ui/components/callout';
 import { Card, Cards } from 'fumadocs-ui/components/card';
-import { Sidenote, Gotcha, Tip, Figure } from '@/components/mdx/sidenote';
+import { Sidenote, Gotcha, Tip } from '@/components/mdx/sidenote';
+import { Figure } from '@/components/mdx/figure';
 import { Terminal } from '@/components/mdx/terminal';
 import {
   Analogy,

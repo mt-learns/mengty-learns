@@ -6,8 +6,23 @@ level: beginner
 tags: [docker, containers]
 status: stable
 updated: 2026-11-26
+verified: 2026-11-26
+kind: note
 tested_with:
   docker: "27.x"
+cards:
+  - q: "What is the difference between a container and a VM?"
+    a: "Containers share the host kernel and are lightweight, while VMs run a full guest OS over a hypervisor."
+  - q: "Why should you avoid using the :latest tag in production?"
+    a: "It makes builds non-deterministic because :latest changes when new images are pushed."
+  - q: "How do you preserve data across container restarts?"
+    a: "By using Docker volumes or bind mounts."
+related:
+  - kubernetes/kubectl-cheatsheet
+  - ci-cd/github-actions
+sources:
+  - title: Docker Overview
+    url: https://docs.docker.com/get-started/overview/
 ---
 
 # Docker Basics

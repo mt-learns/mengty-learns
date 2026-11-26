@@ -12,19 +12,33 @@ import { getMDXComponents } from '@/components/mdx';
 import type { Metadata } from 'next';
 import { createRelativeLink } from 'fumadocs-ui/mdx';
 import { getPageImageUrl, gitConfig } from '@/lib/shared';
+import { OutdatedBanner } from '@/components/learn/OutdatedBanner';
+import { PageFooter } from '@/components/learn/PageFooter';
+import { MarkDone } from '@/components/learn/MarkDone';
 
-export default async function Page(props: PageProps<'/docs/[[...slug]]'>) {
-  const params = await props.params;
-  const page = source.getPage(params.slug);
+export default async function Page({ params }: { params: Promise<{ slug?: string[] }> }) {
+  const resolvedParams = await params;
+  const page = source.getPage(resolvedParams.slug);
   if (!page) notFound();
 
   const MDX = page.data.body;
   const markdownUrl = `/llms.mdx${page.url}.md`;
 
+  // Find next in path from section meta/pages
+  const allPages = source.getPages();
+  const currentIndex = allPages.findIndex((p) => p.url === page.url);
+  const nextInPath = currentIndex !== -1 && currentIndex + 1 < allPages.length ? allPages[currentIndex + 1] : null;
+
   return (
     <DocsPage toc={page.data.toc} full={page.data.full}>
-      <DocsTitle>{page.data.title}</DocsTitle>
-      <DocsDescription className="mb-0">{page.data.description}</DocsDescription>
+      <OutdatedBanner verified={page.data.verified} status={page.data.status} />
+      <div className="flex justify-between items-start gap-4 mb-2">
+        <div>
+          <DocsTitle>{page.data.title}</DocsTitle>
+          <DocsDescription className="mb-0">{page.data.description}</DocsDescription>
+        </div>
+        <MarkDone slug={page.url} />
+      </div>
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground my-2">
         {page.data.type && (
           <span className="inline-flex items-center rounded-full bg-primary/10 text-primary px-2.5 py-0.5 font-medium capitalize">
@@ -62,6 +76,17 @@ export default async function Page(props: PageProps<'/docs/[[...slug]]'>) {
           })}
         />
       </DocsBody>
+      <PageFooter related={page.data.related} sources={page.data.sources} slug={page.url} />
+      {nextInPath && (
+        <div className="mt-8 pt-6 border-t flex justify-end">
+          <a
+            href={nextInPath.url}
+            className="inline-flex items-center gap-2 text-sm font-medium text-primary hover:underline"
+          >
+            Next in path: {nextInPath.data.title} →
+          </a>
+        </div>
+      )}
     </DocsPage>
   );
 }
@@ -70,9 +95,9 @@ export async function generateStaticParams() {
   return source.generateParams();
 }
 
-export async function generateMetadata(props: PageProps<'/docs/[[...slug]]'>): Promise<Metadata> {
-  const params = await props.params;
-  const page = source.getPage(params.slug);
+export async function generateMetadata({ params }: { params: Promise<{ slug?: string[] }> }): Promise<Metadata> {
+  const resolvedParams = await params;
+  const page = source.getPage(resolvedParams.slug);
   if (!page) notFound();
 
   return {
