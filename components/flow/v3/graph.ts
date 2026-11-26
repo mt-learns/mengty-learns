@@ -62,6 +62,7 @@ export interface ClientFlowGraph {
   edges: FlowStepEdge[];
   direction: 'LR' | 'TB';
   bounds: { width: number; height: number };
+  zoom: number;
   panMode: boolean;
   canvasHeight: number;
 }
@@ -86,7 +87,7 @@ export function buildFlowGraphFromPrecomputed({
   reducedMotion: boolean;
 }): ClientFlowGraph {
   const chosen = selectPrecomputedLayout(precomputed, containerWidth);
-  const { panMode, canvasHeight } = finalizeLayoutForWidth(chosen, containerWidth);
+  const { zoom, panMode, canvasHeight } = finalizeLayoutForWidth(chosen, containerWidth);
   const edgeBuckets = buildEdgeBuckets(steps);
 
   const isOverview = activeStepIndex < 0;
@@ -116,6 +117,8 @@ export function buildFlowGraphFromPrecomputed({
       id: node.id,
       type: 'ios',
       position: { x: box.x, y: box.y },
+      width: box.width,
+      height: box.height,
       draggable: false,
       selectable: false,
       data: {
@@ -172,6 +175,7 @@ export function buildFlowGraphFromPrecomputed({
     edges: flowEdges,
     direction: chosen.direction,
     bounds: chosen.bounds,
+    zoom,
     panMode,
     canvasHeight,
   };

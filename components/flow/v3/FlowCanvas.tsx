@@ -133,6 +133,7 @@ function FlowCanvasInner({
         edges: res.edges,
         direction: res.layout.direction,
         bounds: res.layout.bounds,
+        zoom: res.layout.zoom,
         panMode: res.layout.panMode,
         canvasHeight: res.layout.canvasHeight,
       });
@@ -168,6 +169,7 @@ function FlowCanvasInner({
         edges: [],
         direction: 'TB',
         bounds: { width: 320, height: 240 },
+        zoom: 1,
         panMode: false,
         canvasHeight: 240,
       }
@@ -182,7 +184,7 @@ function FlowCanvasInner({
     reducedMotion,
   ]);
 
-  const { panMode, canvasHeight, direction, bounds } = graph;
+  const { panMode, canvasHeight, direction, bounds, zoom } = graph;
   // §3.3a: pan hint only on MEASURED overflow, never when everything fits.
   const [hasHorizontalOverflow, setHasHorizontalOverflow] = useState(false);
   const [overflowSide, setOverflowSide] = useState<'left' | 'right' | null>(null);
@@ -226,34 +228,30 @@ function FlowCanvasInner({
     setOverflowSide(overflowRight ? 'right' : overflowLeft ? 'left' : null);
   }, []);
 
-  // Fit on mount, container resize, and variant change — never on step change (§3.1, §3.4)
+  // Fit on mount, container resize, and variant change — never on step change (§3.1, §3.4).
+  // Center directly on computed bounds × zoom so we never clip the top node or race with fitView.
   useEffect(() => {
-    const frame = requestAnimationFrame(() => {
-      if (panMode) {
-        const scaledW = bounds.width * MIN_READABLE_ZOOM;
-        const xOffset =
-          scaledW < containerWidth
-            ? Math.round((containerWidth - scaledW) / 2)
-            : 16;
-        const scaledH = bounds.height * MIN_READABLE_ZOOM;
-        const yOffset =
-          scaledH < canvasHeight
-            ? Math.round((canvasHeight - scaledH) / 2)
-            : 16;
-        reactFlow.setViewport(
-          { x: xOffset, y: yOffset, zoom: MIN_READABLE_ZOOM },
-          { duration: 0 },
-        );
-      } else {
-        reactFlow.fitView({
-          padding: FIT_PADDING,
-          minZoom: MIN_READABLE_ZOOM,
-          duration: 0,
-        });
-      }
-      // measure overflow after viewport settles
+    const applyCenteredViewport = () => {
+      const scaledW = bounds.width * zoom;
+      const scaledH = bounds.height * zoom;
+      const xOffset = panMode
+        ? scaledW < containerWidth
+          ? Math.round((containerWidth - scaledW) / 2)
+          : 12
+        : Math.round((containerWidth - scaledW) / 2);
+      const yOffset = panMode
+        ? scaledH < canvasHeight
+          ? Math.round((canvasHeight - scaledH) / 2)
+          : 12
+        : Math.round((canvasHeight - scaledH) / 2);
+      reactFlow.setViewport(
+        { x: xOffset, y: yOffset, zoom },
+        { duration: 0 },
+      );
       requestAnimationFrame(() => measureOverflow());
-    });
+    };
+
+    const frame = requestAnimationFrame(applyCenteredViewport);
     return () => cancelAnimationFrame(frame);
   }, [
     reactFlow,
@@ -264,6 +262,7 @@ function FlowCanvasInner({
     canvasHeight,
     bounds.width,
     bounds.height,
+    zoom,
     measureOverflow,
   ]);
 
@@ -297,8 +296,6 @@ function FlowCanvasInner({
         panOnDrag={panMode}
         minZoom={MIN_READABLE_ZOOM}
         maxZoom={2}
-        fitView={!panMode}
-        fitViewOptions={{ padding: FIT_PADDING, minZoom: MIN_READABLE_ZOOM }}
         proOptions={{ hideAttribution: true }}
         onMoveEnd={measureOverflow}
       />

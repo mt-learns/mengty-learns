@@ -77,18 +77,19 @@ export function finalizeLayoutForWidth(
   canvasHeight: number;
 } {
   const safeWidth = Math.max(240, containerWidth);
-  const padFactor = 1 + FIT_PADDING;
-  const xZoom = layout.bounds.width > 0 ? safeWidth / (layout.bounds.width * padFactor) : 1;
+  const xPad = safeWidth < 480 ? 12 : Math.round(layout.bounds.width * FIT_PADDING);
+  const yPad = safeWidth < 480 ? 24 : Math.round(layout.bounds.height * FIT_PADDING);
+  const xZoom = layout.bounds.width > 0 ? (safeWidth - xPad) / layout.bounds.width : 1;
   const yZoom =
     clampHeight && layout.bounds.height > 0
-      ? MAX_CANVAS_HEIGHT / (layout.bounds.height * padFactor)
+      ? (MAX_CANVAS_HEIGHT - yPad) / layout.bounds.height
       : 1;
   const finalFitZoom = Math.min(1, xZoom, yZoom);
   const reqZoom = layout.compact ? 1 : MIN_READABLE_ZOOM;
   const canFit = finalFitZoom >= reqZoom;
   const panMode = !canFit && safeWidth < NO_PAN_CONTAINER_MIN;
   const zoom = canFit ? Math.max(reqZoom, finalFitZoom) : reqZoom;
-  const rawHeight = layout.bounds.height * zoom * padFactor;
+  const rawHeight = layout.bounds.height * zoom + yPad;
   const canvasHeight = clampHeight
     ? Math.round(Math.max(MIN_CANVAS_HEIGHT, Math.min(MAX_CANVAS_HEIGHT, rawHeight)))
     : Math.round(Math.max(MIN_CANVAS_HEIGHT, rawHeight));
@@ -192,18 +193,19 @@ export function buildSkipRankPath(
   }
 
   const outDir = ty >= sy ? 1 : -1;
+  const laneDir = laneCoord >= sx ? 1 : -1;
   const y1 = sy + outDir * stepOut;
   const y2 = ty - outDir * stepOut;
   const midY = (y1 + y2) / 2;
   const path = [
     `M ${sx} ${sy}`,
     `L ${sx} ${y1 - outDir * r}`,
-    `Q ${sx} ${y1} ${sx + r} ${y1}`,
-    `L ${laneCoord - r} ${y1}`,
+    `Q ${sx} ${y1} ${sx + laneDir * r} ${y1}`,
+    `L ${laneCoord - laneDir * r} ${y1}`,
     `Q ${laneCoord} ${y1} ${laneCoord} ${y1 + outDir * r}`,
     `L ${laneCoord} ${y2 - outDir * r}`,
-    `Q ${laneCoord} ${y2} ${laneCoord - r} ${y2}`,
-    `L ${tx + r} ${y2}`,
+    `Q ${laneCoord} ${y2} ${laneCoord - laneDir * r} ${y2}`,
+    `L ${tx + laneDir * r} ${y2}`,
     `Q ${tx} ${y2} ${tx} ${y2 + outDir * r}`,
     `L ${tx} ${ty}`,
   ].join(' ');

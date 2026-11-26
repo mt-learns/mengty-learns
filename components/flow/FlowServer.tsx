@@ -14,7 +14,7 @@ import {
 } from './types';
 import { buildEdgeBuckets } from './v3/graph';
 
-const PRECOMPUTE_WIDTHS = [280, 320, 360, 480, 640, 720] as const;
+const PRECOMPUTE_WIDTHS = [296, 320, 360, 480, 640, 720] as const;
 
 function precomputeVariantLayouts(
   nodes: FlowNode[],

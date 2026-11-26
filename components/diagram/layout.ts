@@ -27,7 +27,7 @@ export const COMPACT_NODE_HEIGHT_DOUBLE = 58;
 export const RANK_GAP = 72;
 export const NODE_GAP = 40;
 export const COMPACT_RANK_GAP = 52;
-export const COMPACT_NODE_GAP = 20;
+export const COMPACT_NODE_GAP = 16;
 export const GROUP_PAD = 24;
 export const GROUP_LABEL_HEIGHT = 28;
 export const GROUP_PAD_TOP = GROUP_PAD + GROUP_LABEL_HEIGHT; // 52px
@@ -123,12 +123,16 @@ export function estimateTextWidth(text: string, fontSize = 15, semibold = true):
 export function computeNodeDimensions(
   nodes: FlowNode[],
   compact = false,
+  maxWidthOverride?: number,
 ): {
   nodeWidth: number;
   nodeLines: Map<string, 1 | 2>;
 } {
   const minW = compact ? COMPACT_NODE_MIN_WIDTH : NODE_MIN_WIDTH;
-  const maxW = compact ? COMPACT_NODE_MAX_WIDTH : NODE_MAX_WIDTH;
+  const maxW = Math.min(
+    compact ? COMPACT_NODE_MAX_WIDTH : NODE_MAX_WIDTH,
+    maxWidthOverride ?? Infinity,
+  );
   const fontSize = compact ? 14 : 15;
   // Normal: 36px icon + 10px gap + 24px pad + 10px safety = 80
   // Compact: 28px icon + 8px gap + 20px pad + 6px safety = 62
@@ -690,11 +694,27 @@ function buildEdgeRoutes(
             crossX.some((cx) => b.x + b.width > cx + eps && b.x < cx - eps),
         );
         if (blocking.length > 0) {
-          const maxBlockingRight = Math.max(
-            ...blocking.map((b) => b.x + b.width),
-            toBox.x + toBox.width,
-          );
-          skipLaneCoord = maxBlockingRight + 24;
+          if (fromBox.cx < toBox.cx) {
+            const verticalNeighbors = allBoxes.filter(
+              (b) =>
+                b.id !== fromBox.id &&
+                b.id !== toBox.id &&
+                b.y + b.height > gapTop + eps &&
+                b.y < gapBottom - eps,
+            );
+            const minLeft = Math.min(...verticalNeighbors.map((b) => b.x), toBox.x);
+            const leftLane = minLeft - 28;
+            if (leftLane >= 0) {
+              skipLaneCoord = leftLane;
+            }
+          }
+          if (skipLaneCoord === undefined) {
+            const maxBlockingRight = Math.max(
+              ...blocking.map((b) => b.x + b.width),
+              toBox.x + toBox.width,
+            );
+            skipLaneCoord = maxBlockingRight + 24;
+          }
         }
       }
     }
@@ -743,13 +763,14 @@ export function computeDiagramLayout({
   clampHeight?: boolean;
 }): ComputedDiagramLayout {
   const safeWidth = Math.max(240, containerWidth);
-  const padFactor = 1 + FIT_PADDING;
   const isTree = layout === 'tree';
 
   const computeFitZoom = (b: { width: number; height: number }) => {
-    const xZoom = b.width > 0 ? safeWidth / (b.width * padFactor) : 1;
+    const xPad = safeWidth < 480 ? 12 : Math.round(b.width * FIT_PADDING);
+    const yPad = safeWidth < 480 ? 24 : Math.round(b.height * FIT_PADDING);
+    const xZoom = b.width > 0 ? (safeWidth - xPad) / b.width : 1;
     const yZoom =
-      clampHeight && b.height > 0 ? MAX_CANVAS_HEIGHT / (b.height * padFactor) : 1;
+      clampHeight && b.height > 0 ? (MAX_CANVAS_HEIGHT - yPad) / b.height : 1;
     return Math.min(1, xZoom, yZoom);
   };
   type Pass = ReturnType<typeof runDagrePass>;
@@ -822,7 +843,8 @@ export function computeDiagramLayout({
   // (b) compact node variant (128-160px, 28px icon, 14px label) if still < 0.87
   if (!fitsAtReadable(pass, direction, stacked)) {
     compact = true;
-    dims = computeNodeDimensions(nodes, true);
+    const maxCompactForTwo = safeWidth < 480 ? Math.floor((safeWidth - 64 - COMPACT_NODE_GAP) / 2) : COMPACT_NODE_MAX_WIDTH;
+    dims = computeNodeDimensions(nodes, true, Math.max(COMPACT_NODE_MIN_WIDTH, maxCompactForTwo));
     pass = runDagre(direction, true, null, dims);
 
     // re-check direction choice with compact nodes
@@ -842,12 +864,12 @@ export function computeDiagramLayout({
     const maxPerRowCap = Math.max(
       1,
       Math.floor(
-        (safeWidth / (minZoomFor(compact) * padFactor) + nodeGap) /
-          (dims.nodeWidth + nodeGap),
+        (safeWidth - (safeWidth < 480 ? 12 : Math.round(safeWidth * FIT_PADDING)) + nodeGap) / (dims.nodeWidth + nodeGap),
       ),
     );
     // try wrapping, reducing N until it fits (single column always fits at any width >= 320)
-    for (let n = Math.min(maxPerRowCap, nodes.length - 1); n >= 1; n--) {
+    const minN = !isTree && clampHeight && maxPerRowCap >= 2 ? 2 : 1;
+    for (let n = Math.min(maxPerRowCap, nodes.length - 1); n >= minN; n--) {
       const wrapped = runDagre('TB', compact, n, dims);
       if (fitsAtReadable(wrapped, 'TB', stacked, compact)) {
         direction = 'TB';
@@ -898,7 +920,8 @@ export function computeDiagramLayout({
   // canFit -> render at fitZoom (>=reqZoom, <=1); otherwise readable pan zoom
   const zoom = canFit ? Math.max(reqZoom, finalFitZoom) : reqZoom;
 
-  const rawHeight = finalBounds.height * zoom * padFactor;
+  const yPad = safeWidth < 480 ? 24 : Math.round(finalBounds.height * FIT_PADDING);
+  const rawHeight = finalBounds.height * zoom + yPad;
   const canvasHeight = clampHeight
     ? Math.round(Math.max(MIN_CANVAS_HEIGHT, Math.min(MAX_CANVAS_HEIGHT, rawHeight)))
     : Math.round(Math.max(MIN_CANVAS_HEIGHT, rawHeight));

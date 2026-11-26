@@ -20,8 +20,8 @@ import {
 
 const DOCS_DIR = path.resolve(process.cwd(), 'content/docs');
 
-// §3.3 / §9.1: EVERY flow and diagram in content is checked at these widths.
-const TEST_WIDTHS = [360, 720, 1024] as const;
+// §3.3 / §9.1: EVERY flow and diagram in content is checked at these widths (296 = 360px viewport canvas).
+const TEST_WIDTHS = [296, 360, 720, 1024] as const;
 
 /** Recursively collects every .mdx file under content/docs that uses <Flow> or <Diagram>. */
 function collectContentMdx(dir: string): string[] {
@@ -331,6 +331,39 @@ function assertLayoutInvariants(
     baseFontSize * layoutResult.zoom,
     `${label} rendered label size >= 14px`,
   ).toBeGreaterThanOrEqual(14);
+
+  // 7. Bounds x zoom fit inside canvas with no node outside viewport
+  if (!layoutResult.panMode) {
+    expect(
+      layoutResult.bounds.width * layoutResult.zoom,
+      `${label} scaled width fits inside ${containerWidth}px`,
+    ).toBeLessThanOrEqual(containerWidth + 0.5);
+    expect(
+      layoutResult.bounds.height * layoutResult.zoom,
+      `${label} scaled height fits inside canvasHeight ${layoutResult.canvasHeight}px`,
+    ).toBeLessThanOrEqual(layoutResult.canvasHeight + 0.5);
+  }
+
+  // 8. Siblings in a 2-node rank must sit side-by-side (never stacked into a chain) for flows
+  if (!isStaticDiagram && !layoutResult.stacked && layoutResult.direction === 'TB') {
+    const byRank = new Map<number, NodeBox[]>();
+    for (const raw of rawNodes) {
+      if (raw.rank === undefined) continue;
+      const box = layoutResult.nodes.get(raw.id);
+      if (!box) continue;
+      const list = byRank.get(raw.rank) ?? [];
+      list.push(box);
+      byRank.set(raw.rank, list);
+    }
+    for (const [rank, rankBoxes] of byRank.entries()) {
+      if (rankBoxes.length === 2) {
+        expect(
+          Math.abs(rankBoxes[0].cy - rankBoxes[1].cy),
+          `${label} rank ${rank} siblings must sit side-by-side (not stacked into a chain)`,
+        ).toBeLessThanOrEqual(0.5);
+      }
+    }
+  }
 }
 
 describe('DIAGRAM-RULES §9.1 layout invariants across all MDX flows and diagrams', () => {
