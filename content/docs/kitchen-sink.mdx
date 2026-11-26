@@ -36,14 +36,19 @@ This is a test page to verify the iOS design system port.
 
 ### Tabs
 
-<Tabs items={['Docker', 'Kubernetes']}>
+<Tabs items={['Docker', 'Kubernetes', 'Code']}>
   <Tab value="Docker">Docker is for containers.</Tab>
   <Tab value="Kubernetes">Kubernetes is for orchestration.</Tab>
+  <Tab value="Code">
+    ```bash
+    kubectl get pods -A
+    ```
+  </Tab>
 </Tabs>
 
 ### Code Blocks
 
-```bash
+```bash title="deploy.sh"
 pnpm install
 pnpm build
 ```
@@ -67,3 +72,20 @@ console.log(hello);
   <Card title="Introduction" href="/docs" description="Learn the basics" />
   <Card title="Projects" href="/projects" description="View my work" />
 </Cards>
+
+## Flow
+
+<Flow
+  id="kitchen-sink-flow"
+  title="Sample request flow"
+  nodes={[
+    { id: 'client', label: 'Browser', subtitle: 'Client', icon: 'user', category: 'client', x: 0, y: 0 },
+    { id: 'gw', label: 'Gateway', subtitle: 'HTTPS', icon: 'gateway', category: 'edge', x: 1, y: 0 },
+    { id: 'api', label: 'API', subtitle: 'Service', icon: 'service', category: 'service', x: 2, y: 0 },
+  ]}
+  steps={[
+    { edge: 'client->gw', title: 'Send request', text: 'Browser sends GET /api/health over TLS.' },
+    { edge: 'gw->api', title: 'Forward to API', text: 'Gateway routes the request to the API service.' },
+    { edge: 'api->client', title: 'Return 200 OK', text: 'API responds with JSON status.', kind: 'response' },
+  ]}
+/>
