@@ -1,0 +1,16 @@
+{
+  "title": "Process",
+  "pages": [
+    "scrum-kanban-waterfall",
+    "idea-to-production",
+    "prd-and-user-stories",
+    "raci",
+    "adr",
+    "dor-dod-quality-gates",
+    "code-review",
+    "incident-management",
+    "retrospectives",
+    "estimation-and-prioritization"
+  ],
+  "icon": "process"
+}
