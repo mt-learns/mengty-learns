@@ -47,7 +47,7 @@ export default async function DigestEntryPage({
           href="/digest"
           className="inline-flex items-center gap-1.5 min-h-tap text-footnote font-medium text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring rounded-control"
         >
-          <ArrowLeft className="size-4" aria-hidden="true" />
+          <ArrowLeft className="size-4" strokeWidth={1.75} aria-hidden="true" />
           <span>All Digests</span>
         </Link>
       </div>
@@ -75,7 +75,7 @@ export default async function DigestEntryPage({
                   className="inline-flex items-center gap-1.5 text-body font-semibold text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring rounded-control w-fit"
                 >
                   <span>{item.title}</span>
-                  <ExternalLink className="size-3.5 shrink-0" aria-hidden="true" />
+                  <ExternalLink className="size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
                 </a>
                 <p className="text-subheadline text-muted-foreground">{item.why}</p>
                 <p className="text-footnote text-muted-foreground">

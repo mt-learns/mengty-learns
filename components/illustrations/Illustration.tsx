@@ -72,36 +72,92 @@ export function Illustration({
 
       {name === 'hero-desk' && (
         <g>
-          {/* Desk mat */}
+          {/* Desk slab */}
           <rect
-            x="22"
-            y="108"
-            width="196"
-            height="34"
+            x="14"
+            y="116"
+            width="212"
+            height="30"
             rx="14"
             fill={`url(#${uid}-surface)`}
             stroke="var(--border, #ebebeb)"
             strokeWidth="1.5"
           />
+          <path d="M 30 117.5 H 210" stroke="#ffffff" strokeOpacity="0.55" strokeWidth="1.5" strokeLinecap="round" />
+
+          {/* Contact shadows */}
+          <g fill="#000000" fillOpacity="0.08">
+            <ellipse cx="68" cy="118" rx="46" ry="4" />
+            <ellipse cx="134" cy="118" rx="26" ry="3.5" />
+            <ellipse cx="200" cy="117" rx="24" ry="3.5" />
+            <ellipse cx="168" cy="118" rx="22" ry="3" />
+          </g>
+
           <g filter={`url(#${uid}-soft)`}>
-            {/* Blueprint roll */}
-            <rect x="36" y="72" width="54" height="32" rx="10" fill={`url(#${uid}-lavender)`} />
-            <ellipse cx="42" cy="88" rx="5" ry="16" fill="#ede9fe" />
-            <rect x="58" y="70" width="7" height="36" rx="3.5" fill={`url(#${uid}-amber)`} />
+            {/* Kubernetes helm wheel badge */}
+            <g transform="translate(148 44)">
+              <g stroke={`url(#${uid}-blue)`} strokeWidth="3.8" strokeLinecap="round">
+                <line x1="4.16" y1="1.72" x2="22.17" y2="9.18" />
+                <line x1="1.72" y1="4.16" x2="9.18" y2="22.17" />
+                <line x1="-1.72" y1="4.16" x2="-9.18" y2="22.17" />
+                <line x1="-4.16" y1="1.72" x2="-22.17" y2="9.18" />
+                <line x1="-4.16" y1="-1.72" x2="-22.17" y2="-9.18" />
+                <line x1="-1.72" y1="-4.16" x2="-9.18" y2="-22.17" />
+                <line x1="1.72" y1="-4.16" x2="9.18" y2="-22.17" />
+                <line x1="4.16" y1="-1.72" x2="22.17" y2="-9.18" />
+              </g>
+              <circle cx="0" cy="0" r="15" fill="none" stroke={`url(#${uid}-blue)`} strokeWidth="4.5" />
+              <path d="M -13 -7.5 A 15 15 0 0 1 7.5 -13" fill="none" stroke="#ffffff" strokeOpacity="0.5" strokeWidth="1.8" strokeLinecap="round" />
+              <g fill="#93c5fd">
+                <circle cx="24.02" cy="9.95" r="3" />
+                <circle cx="9.95" cy="24.02" r="3" />
+                <circle cx="-9.95" cy="24.02" r="3" />
+                <circle cx="-24.02" cy="9.95" r="3" />
+                <circle cx="-24.02" cy="-9.95" r="3" />
+                <circle cx="-9.95" cy="-24.02" r="3" />
+                <circle cx="9.95" cy="-24.02" r="3" />
+                <circle cx="24.02" cy="-9.95" r="3" />
+              </g>
+              <circle cx="0" cy="0" r="5" fill="#dbeafe" stroke="var(--primary, #0066CC)" strokeWidth="1.8" />
+            </g>
+
             {/* Container crate */}
-            <rect x="96" y="58" width="48" height="46" rx="10" fill={`url(#${uid}-amber)`} />
-            <rect x="103" y="72" width="7" height="22" rx="3.5" fill="#92400e" fillOpacity="0.3" />
-            <rect x="116" y="72" width="7" height="22" rx="3.5" fill="#92400e" fillOpacity="0.3" />
-            <rect x="129" y="72" width="7" height="22" rx="3.5" fill="#92400e" fillOpacity="0.3" />
-            {/* Shield */}
+            <rect x="112" y="74" width="44" height="42" rx="9" fill={`url(#${uid}-amber)`} />
+            <rect x="112" y="74" width="44" height="10" rx="5" fill="#fef3c7" fillOpacity="0.55" />
+            <rect x="119" y="88" width="7" height="24" rx="3.5" fill="#92400e" fillOpacity="0.3" />
+            <rect x="131" y="88" width="7" height="24" rx="3.5" fill="#92400e" fillOpacity="0.3" />
+            <rect x="143" y="88" width="7" height="24" rx="3.5" fill="#92400e" fillOpacity="0.3" />
+
+            {/* Laptop / terminal */}
+            <rect x="26" y="104" width="84" height="12" rx="6" fill={`url(#${uid}-surface)`} stroke="var(--border, #ebebeb)" strokeWidth="1.5" />
+            <rect x="30" y="52" width="76" height="56" rx="9" fill={`url(#${uid}-surface)`} stroke="var(--border, #ebebeb)" strokeWidth="1.5" />
+            <rect x="35" y="57" width="66" height="46" rx="5" fill="#1e293b" />
+            <circle cx="42" cy="64" r="2" fill="#f97316" />
+            <circle cx="49" cy="64" r="2" fill="#fbbf24" />
+            <circle cx="56" cy="64" r="2" fill="#10b981" />
+            <rect x="41" y="72" width="34" height="3" rx="1.5" fill="#93c5fd" />
+            <rect x="41" y="79" width="48" height="3" rx="1.5" fill="#6ee7b7" />
+            <rect x="41" y="86" width="26" height="3" rx="1.5" fill="#fde68a" />
+            <rect x="41" y="93" width="40" height="3" rx="1.5" fill="#ffffff" fillOpacity="0.28" />
+
+            {/* Security shield */}
             <path
-              d="M 168 48 L 194 57 V 76 C 194 92 181 102 168 107 C 155 102 142 92 142 76 V 57 Z"
+              d="M 200 52 L 220 60 V 76 C 220 89 210 97 200 101 C 190 97 180 89 180 76 V 60 Z"
               fill={`url(#${uid}-mint)`}
             />
-            <path d="M 159 77 L 166 84 L 178 70" fill="none" stroke="#ffffff" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
-            {/* Floating wheel badge */}
-            <circle cx="72" cy="44" r="16" fill="none" stroke={`url(#${uid}-blue)`} strokeWidth="6" />
-            <circle cx="72" cy="44" r="5" fill="#dbeafe" />
+            <path d="M 191 76 L 198 83 L 211 69" fill="none" stroke="#ffffff" strokeWidth="4" strokeLinecap="round" strokeLinejoin="round" />
+
+            {/* Notebook stack */}
+            <rect x="152" y="100" width="34" height="8" rx="4" fill={`url(#${uid}-lavender)`} />
+            <rect x="156" y="92" width="26" height="8" rx="4" fill={`url(#${uid}-amber)`} />
+            <rect x="159" y="94.5" width="20" height="1.6" rx="0.8" fill="#ffffff" fillOpacity="0.7" />
+
+            {/* Pencil */}
+            <g transform="rotate(-14 70 112)">
+              <rect x="48" y="109" width="44" height="6" rx="3" fill={`url(#${uid}-amber)`} />
+              <path d="M 48 109 L 42 112 L 48 115 Z" fill="#fde68a" />
+              <rect x="80" y="109" width="12" height="6" rx="2" fill="#d97706" />
+            </g>
           </g>
         </g>
       )}

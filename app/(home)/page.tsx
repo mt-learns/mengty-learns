@@ -1,5 +1,6 @@
 import Link from 'next/link';
-import { LargeTitle, Tile, SectionIcon } from '@/components/ios/tile';
+import { LargeTitle, Tile, SectionIcon as LegacySectionIcon } from '@/components/ios/tile';
+import { Illustration, SectionIcon } from '@/components/illustrations';
 import { GroupedList, GroupedRow } from '@/components/ios/grouped-list';
 import { Button } from '@/components/ui/button';
 import { source } from '@/lib/source';
@@ -16,21 +17,26 @@ export default function HomePage() {
 
   return (
     <div className="container max-w-screen-xl px-4 py-12">
-      <section className="py-12 md:py-20 flex flex-col items-center text-center">
-        <div className="h-24 w-24 rounded-[28px] bg-primary/10 flex items-center justify-center text-primary mb-6 shadow-inner">
-          <SectionIcon name="learn" className="h-12 w-12" />
+      <section className="py-10 md:py-16 flex flex-col-reverse md:flex-row items-center justify-between gap-8 md:gap-12">
+        <div className="flex flex-col items-center md:items-start text-center md:text-left max-w-xl">
+          <LargeTitle subtitle="Learning DevOps, architecture and security — one note at a time.">
+            Hi, I&apos;m Mengty.
+          </LargeTitle>
+          <div className="flex flex-wrap justify-center md:justify-start gap-4 mt-2">
+            <Button asChild className="min-h-tap rounded-control px-6">
+              <Link href="/docs">Start learning</Link>
+            </Button>
+            <Button variant="outline" asChild className="min-h-tap rounded-control px-6">
+              <Link href="/projects">View projects</Link>
+            </Button>
+          </div>
         </div>
-        <LargeTitle subtitle="Learning DevOps, architecture and security — one note at a time.">
-          Hi, I&apos;m Mengty.
-        </LargeTitle>
-        <div className="flex gap-4 mt-4">
-          <Button asChild className="min-h-tap rounded-control px-6">
-            <Link href="/docs">Start learning</Link>
-          </Button>
-          <Button variant="outline" asChild className="min-h-tap rounded-control px-6">
-            <Link href="/projects">View projects</Link>
-          </Button>
-        </div>
+        <Illustration
+          name="hero-desk"
+          size={256}
+          className="w-full max-w-[340px] md:max-w-[420px] h-auto shrink-0"
+          decorative
+        />
       </section>
 
       <section className="my-12">
@@ -42,14 +48,15 @@ export default function HomePage() {
               description="Master containerization, image building, and runtime fundamentals."
               href="/docs/containers/docker-basics"
               badge="Featured"
-              icon={<SectionIcon name="containers" />}
+              icon={<SectionIcon name="containers" size={48} decorative />}
+              bareIcon
               large
               section="containers"
             />
           </div>
-          <Tile title="Kubernetes" description="Orchestration and cluster management." href="/docs/kubernetes/kubectl-cheatsheet" icon={<SectionIcon name="kubernetes" />} section="kubernetes" />
-          <Tile title="CI/CD Pipelines" description="Automate testing and deployments." href="/docs/ci-cd/github-actions" icon={<SectionIcon name="cicd" />} section="ci-cd" />
-          <Tile title="Security" description="Practical security notes and OWASP basics." href="/docs" icon={<SectionIcon name="security" />} section="security" />
+          <Tile title="Kubernetes" description="Orchestration and cluster management." href="/docs/kubernetes/kubectl-cheatsheet" icon={<SectionIcon name="kubernetes" size={48} decorative />} bareIcon section="kubernetes" />
+          <Tile title="CI/CD Pipelines" description="Automate testing and deployments." href="/docs/ci-cd/github-actions" icon={<SectionIcon name="ci-cd" size={48} decorative />} bareIcon section="ci-cd" />
+          <Tile title="Security" description="Practical security notes and OWASP basics." href="/docs/security/owasp-top-10" icon={<SectionIcon name="security" size={48} decorative />} bareIcon section="security" />
         </div>
       </section>
 
@@ -78,7 +85,7 @@ export default function HomePage() {
               description={project.description}
               href={project.url}
               badge={project.tags[0]}
-              icon={<SectionIcon name="project" />}
+              icon={<LegacySectionIcon name="project" />}
             />
           ))}
         </div>

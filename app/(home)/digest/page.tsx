@@ -28,7 +28,7 @@ export default function DigestPage() {
           href="/digest/rss.xml"
           className="inline-flex items-center gap-2 min-h-tap rounded-control border border-border bg-card px-4 py-2 text-footnote font-medium text-foreground hover:bg-muted transition-colors motion-reduce:transition-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         >
-          <Rss className="size-4 text-primary" aria-hidden="true" />
+          <Rss className="size-4 text-primary" strokeWidth={1.75} aria-hidden="true" />
           <span>RSS Feed</span>
         </Link>
       </div>

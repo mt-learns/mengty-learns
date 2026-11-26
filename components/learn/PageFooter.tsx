@@ -11,7 +11,7 @@ export function PageFooter({ related, sources, slug }: PageFooterProps) {
     <div className="mt-12 pt-8 border-t space-y-6">
       {related && related.length > 0 && (
         <div>
-          <h4 className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">Related Notes</h4>
+          <h3 className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">Related Notes</h3>
           <div className="flex flex-wrap gap-2">
             {related.map((rel) => (
               <Link
@@ -28,7 +28,7 @@ export function PageFooter({ related, sources, slug }: PageFooterProps) {
 
       {sources && sources.length > 0 && (
         <div>
-          <h4 className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">Sources</h4>
+          <h3 className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">Sources</h3>
           <ul className="space-y-1.5 text-subheadline">
             {sources.map((src, i) => (
               <li key={i}>

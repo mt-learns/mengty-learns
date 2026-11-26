@@ -5,5 +5,6 @@
     "hexagonal",
     "compare-styles",
     "dependency-inversion"
-  ]
+  ],
+  "icon": "architecture"
 }

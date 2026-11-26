@@ -67,7 +67,7 @@ export function GroupedRow({ title, description, icon, detail, href }: GroupedRo
       {(detail || href) && (
         <div className="flex-shrink-0 flex items-center gap-1 text-muted-foreground ml-auto">
           {detail && <span className="text-body">{detail}</span>}
-          {href && <ChevronRight className="size-4 opacity-30" />}
+          {href && <ChevronRight className="size-4 opacity-30" strokeWidth={1.75} aria-hidden="true" />}
         </div>
       )}
     </>
@@ -75,7 +75,7 @@ export function GroupedRow({ title, description, icon, detail, href }: GroupedRo
 
   const className = cn(
     'flex items-center gap-4 px-4 py-2.5 min-h-tap',
-    href && 'hover:bg-muted/50 transition-colors'
+    href && 'hover:bg-muted/50 transition-colors motion-reduce:transition-none'
   );
 
   if (href) {

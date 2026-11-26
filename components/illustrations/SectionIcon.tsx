@@ -149,14 +149,38 @@ export function SectionIcon({
 
         {name === 'kubernetes' && (
           <g>
-            {/* Original 6-spoke rounded clay helm wheel (non-trademark) */}
-            <g stroke={`url(#${uid}-clay-blue)`} strokeWidth="5.5" strokeLinecap="round">
-              <line x1="48" y1="20" x2="48" y2="76" />
-              <line x1="23.8" y1="34" x2="72.2" y2="62" />
-              <line x1="72.2" y1="34" x2="23.8" y2="62" />
+            {/* Original 8-spoke ship's helm wheel with handle knobs (non-trademark) */}
+            <g stroke={`url(#${uid}-clay-blue)`} strokeWidth="4.5" strokeLinecap="round">
+              <line x1="53.54" y1="50.30" x2="76.64" y2="59.86" />
+              <line x1="50.30" y1="53.54" x2="59.86" y2="76.64" />
+              <line x1="45.70" y1="53.54" x2="36.14" y2="76.64" />
+              <line x1="42.46" y1="50.30" x2="19.36" y2="59.86" />
+              <line x1="42.46" y1="45.70" x2="19.36" y2="36.14" />
+              <line x1="45.70" y1="42.46" x2="36.14" y2="19.36" />
+              <line x1="50.30" y1="42.46" x2="59.86" y2="19.36" />
+              <line x1="53.54" y1="45.70" x2="76.64" y2="36.14" />
             </g>
-            <circle cx="48" cy="48" r="17" fill="none" stroke={`url(#${uid}-clay-blue)`} strokeWidth="6" />
-            <circle cx="48" cy="48" r="7" fill="#dbeafe" stroke="var(--primary, #0066CC)" strokeWidth="2.5" />
+            <circle cx="48" cy="48" r="18" fill="none" stroke={`url(#${uid}-clay-blue)`} strokeWidth="5.5" />
+            <path
+              d="M 32.41 39 A 18 18 0 0 1 57 32.41"
+              fill="none"
+              stroke="#ffffff"
+              strokeOpacity="0.5"
+              strokeWidth="2"
+              strokeLinecap="round"
+            />
+            <g fill="#93c5fd">
+              <circle cx="78.95" cy="60.82" r="3.6" />
+              <circle cx="60.82" cy="78.95" r="3.6" />
+              <circle cx="35.18" cy="78.95" r="3.6" />
+              <circle cx="17.05" cy="60.82" r="3.6" />
+              <circle cx="17.05" cy="35.18" r="3.6" />
+              <circle cx="35.18" cy="17.05" r="3.6" />
+              <circle cx="60.82" cy="17.05" r="3.6" />
+              <circle cx="78.95" cy="35.18" r="3.6" />
+            </g>
+            <circle cx="48" cy="48" r="6" fill="#dbeafe" stroke="var(--primary, #0066CC)" strokeWidth="2" />
+            <circle cx="46.5" cy="46.5" r="1.6" fill="#ffffff" fillOpacity="0.9" />
           </g>
         )}
 
