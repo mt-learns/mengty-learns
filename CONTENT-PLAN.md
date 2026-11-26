@@ -170,7 +170,30 @@ Legend: **kind**: N note · C concept (+ `<Flow>`) · S cheatsheet · L lab · D
 
 Target after 4 weeks: **≥ 14 pages, 4 flows, 3 labs, ~50 flashcards**. That meets the PLAN §1 goal of 10 notes across 4 sections.
 
-## 5. Maintenance rhythm
+## 5. Execution waves (assigned to agy workers)
+
+> Added 2026-11-26. One wave = one worktree = one worker. **One commit per page** (`docs(<section>): <page>`), no trailers, never push.
+> Every page meets the §1 definition of done. Use the `pnpm new` templates, and the `<Flow>`/`<Diagram>` API on `main` after the `diagram-rules` merge (DIAGRAM-RULES.md §10 checklist). Every command has actually been run, and `tested_with` + `verified` are set.
+> The lead reviews each page for accuracy against its `sources` before merging. A page that teaches something wrong is worse than no page.
+
+**Gate:** Wave 1 starts after `diagram-rules` is merged. Wave 0 starts after `docs/audit/CONTENT-AUDIT.md` is approved by the owner. After that, waves run one at a time; the next one starts after the previous one is merged.
+
+| Wave | Goal | Pages (section/slug · kind · flow/lab) |
+|---|---|---|
+| **0: Fix** | Fix what the content audit finds as Critical/High (wrong facts, broken `related`, missing sources, flow paths that don't match reality, card errors) and fill the `TODO`s on the 6 flow pages | `architecture/{layered,hexagonal,compare-styles,dependency-inversion}`, `design/bridge`, `kubernetes/service-routing` plus the audit list. Decide whether the kitchen-sink pages are published (move them out of `content/docs` or set `draft`) |
+| **1: Finish P1** | Complete the first-month backlog (§2 P1 items not yet written) | `foundations/networking-basics` C (Flow: DNS → TCP → TLS → HTTP) · `kubernetes/kubectl-apply` C (Flow: API server → etcd → scheduler → kubelet → runtime) · `iac/plan-apply` C (Flow `tofu-plan`: config + state → refresh → diff → plan → apply) · `ci-cd/pipeline-anatomy` C (Flow: push → parallel jobs → cache → deploy) · `architecture/onion` C · `architecture/clean` C |
+| **2: Security** | The application-security topics (OWASP ASVS 5.0 as the reference, Top 10 2025 for naming) | `security/asvs-5-overview` N/reference (what each chapter verifies, how to use it as a checklist) · `security/authn-vs-authz` C (RBAC vs ABAC, permission boundaries) · `security/sessions-vs-jwt` C (token lifecycle, refresh rotation, revocation; Flow) · `security/oauth21-oidc-pkce` C (Flow: app → auth server → code + PKCE → tokens → ID token) · `security/passwords` N (hashing with argon2id/bcrypt, MFA, lockout vs rate limit) · `security/xss-csp` C (compare toggle) · `security/sql-injection` C (compare toggle) · `security/csrf-ssrf` C · `security/security-headers` S (CSP, HSTS, frame-ancestors… with this site's `_headers` as the example) · `security/file-uploads` N · `security/rate-limiting` C (token bucket; Flow) · `security/secrets-management` N · `security/supply-chain` N (lockfiles, pinning actions by SHA, `pnpm audit`, SBOM) · `security/threat-modeling` N/how-to (STRIDE on this site) |
+| **3: Operations** | The DevOps and infrastructure topics, each with "when you DON'T need it" and the cost/complexity trade-off | `containers/compose` C (Flow: service DNS, depends_on + healthcheck) · `containers/non-root-and-scanning` N (USER, read-only fs, Trivy/Grype) · `containers/volumes-vs-bind-mounts` N · `foundations/linux-processes-signals` N (Flow: SIGTERM → graceful → SIGKILL) · `foundations/reverse-proxy-tls` C (Nginx/Caddy, TLS termination; Flow) · `architecture/caching-redis` C (cache-aside, TTL, invalidation, failure modes; Flow) · `architecture/queues-async` C (retry, DLQ, idempotency; Flow) · `ci-cd/deploy-and-rollback` C (blue-green, canary, Cloudflare Pages instant rollback) · `ci-cd/oidc-not-keys` N · `foundations/backups-and-dr` N (RPO/RTO, the 3-2-1 rule, restore drills) · `foundations/observability` C (logs, metrics, traces, alerts on symptoms) · `kubernetes/probes` C · `kubernetes/requests-limits-oom` N + P |
+| **4: Patterns** | Patterns the owner studies from *Dive Into Design Patterns* (paraphrase and cite the chapter; never copy text or images), each with "when NOT to use it" | `design/strategy` C · `design/observer` C · `design/adapter` C · `design/decorator` C · `design/factory-method` C · `design/pattern-relations` N (Bridge vs Adapter vs Strategy vs Decorator) · `design/composition-vs-inheritance` N · `design/dependency-injection` N |
+| **5: Engineering process** | How software gets from idea to production, sized for small teams | `process/scrum-kanban-waterfall` D (plus hybrid, and when to pick each) · `process/prd-and-user-stories` N/how-to (acceptance criteria) · `process/raci` S · `process/adr` N/how-to (with this site's ADRs) · `process/dor-dod-quality-gates` S · `process/code-review` N · `process/incident-management` N + a P postmortem template · `process/retrospectives` S. Needs a new `process` section (meta.json + a section icon) |
+
+Rules for the worker in every wave:
+- Sources first, official ones (docs.docker.com, kubernetes.io, opentofu.org, owasp.org, RFCs, the vendor docs). If a claim can't be sourced or run, drop it.
+- 3–5 cards per page: one fact per card, with a correct and unambiguous answer. Plus a `<Quiz>` with an explanation for each answer.
+- Every `<Flow>` follows DIAGRAM-RULES §10: responses retrace the real path, there's no red category, and it's checked at 360/1280 with the flows scrolled into view (`scripts/qa-shots.mjs`).
+- Each wave ends with `pnpm lint && pnpm typecheck && pnpm test && pnpm build` green, a screenshot of every new page at 360/1280, and a report listing every page with its sources.
+
+## 6. Maintenance rhythm
 - **Monthly:** open the "May be outdated" list (pages where `verified` is more than 12 months old), re-run them, and bump `verified`.
 - **Quarterly:** review the radar rings, and retire or merge thin notes.
 - **On every tool major release** (from the inbox): check the pages with that tool in `tested_with`.
