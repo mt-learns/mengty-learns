@@ -1,16 +1,33 @@
 ---
 title: Dependency Inversion in Practice
 description: Break compile-time coupling between business logic and infrastructure by having both depend on an interface owned by the domain.
+kind: note
 type: explanation
 level: beginner
 tags: [architecture, solid, dependency-inversion, typescript]
 tested_with:
-  typescript: "5.x"
+  typescript: "7.0.2"
 status: stable
 updated: "2026-11-26"
+verified: "2026-11-26"
+cards:
+  - q: "What does the Dependency Inversion Principle (DIP) state?"
+    a: "High-level policy should not depend on low-level details; both should depend on abstractions."
+  - q: "Which module must own the OrderRepository interface for DIP to actually invert dependencies?"
+    a: "The domain/business module that calls it—not the infrastructure module that implements it."
+  - q: "How does DIP relate to the Bridge pattern?"
+    a: "Both use composition over an interface: Bridge applies it at the OOP class level, while DIP applies it at architectural module boundaries."
+related:
+  - design/bridge
+  - architecture/hexagonal
+  - architecture/layered
+  - design/solid
+sources:
+  - title: "Robert C. Martin: The Clean Architecture"
+    url: https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html
+  - title: "Martin Fowler: Inversion of Control Containers and the Dependency Injection pattern"
+    url: https://martinfowler.com/articles/injection.html
 ---
-
-{/* TODO(schema-v2): Add kind: 'note', verified, cards, related, and sources to frontmatter once lib/source.ts supports them. */}
 
 <Intent>
 The **Dependency Inversion Principle (DIP)** is the mechanism behind Hexagonal, Onion, and Clean architectures: high-level business rules (`PlaceOrderService`) do not import low-level drivers (`PostgresOrderRepo`). Instead, **both depend on an abstraction** (`OrderRepository`) owned by the business layer.
@@ -97,7 +114,7 @@ export class PlaceOrderService {
 
 Notice how identical this structure is to the [Bridge Pattern](/docs/design/bridge):
 
-- **Bridge** separates an Abstraction hierarchy (`RemoteControl`) from an Implementation hierarchy (`Device` interface → `TV`, `Radio`) using composition.
+- **Bridge** separates an Abstraction hierarchy (`OrderExporter`) from an Implementation hierarchy (`StorageDriver` interface → `PostgresDriver`, `CsvDriver`) using composition.
 - **Dependency Inversion** applies that same composition-over-interface idea at **architectural module boundaries** (`PlaceOrderService` → `OrderRepository` ← `PostgresOrderRepo`).
 
 <Checklist
@@ -139,7 +156,26 @@ Notice how identical this structure is to the [Bridge Pattern](/docs/design/brid
 The most common mistake with Dependency Inversion is putting the `OrderRepository` interface in the `infra/` folder. If `domain/` imports an interface from `infra/`, you have not inverted anything—the domain still depends on infrastructure. Always place the interface in the module that **calls** it.
 </MyTake>
 
-{/* TODO(step-11): Add <Quiz> component once Step 11 is merged. */}
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "If PlaceOrderService (in domain/) imports OrderRepository from infra/order-repository.ts, have you achieved Dependency Inversion?",
+    options: [
+      { label: "No — domain/ still has a compile-time import pointing into infra/", description: "For dependencies to be inverted, the interface must live in domain/ so infra/ imports domain/.", correct: true },
+      { label: "Yes, because OrderRepository is a TypeScript interface", description: "An interface owned by infra/ still couples domain/ to the infrastructure module." },
+      { label: "Yes, as long as PostgresOrderRepo is passed in the constructor", description: "Constructor injection alone does not invert the module dependency if the imported interface lives in infra/." }
+    ]
+  },
+  {
+    question: "After applying DIP, which direction does runtime control flow vs compile-time source dependency?",
+    options: [
+      { label: "Runtime control flows domain → Postgres; compile-time imports point Postgres → domain", description: "That inversion of the compile-time arrow is what gives Dependency Inversion its name.", correct: true },
+      { label: "Both runtime control and compile-time imports point domain → Postgres", description: "That describes a standard layered dependency without inversion." },
+      { label: "Both runtime control and compile-time imports point Postgres → domain", description: "The business service still initiates calls to save an order at runtime." }
+    ]
+  }
+]} />
 
 ### Sources
 

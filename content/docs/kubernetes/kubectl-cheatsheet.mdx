@@ -1,47 +1,105 @@
 ---
 title: Kubectl Cheatsheet
-description: Essential kubectl commands for daily use.
+description: Essential kubectl commands for inspecting resources, applying manifests, tailing logs, and debugging Pods.
+kind: cheatsheet
 type: reference
 level: intermediate
-tags: [kubernetes, kubectl]
+tags: [kubernetes, kubectl, cli]
 status: stable
-updated: 2026-11-26
-verified: 2026-11-26
-kind: cheatsheet
+updated: "2026-11-26"
+verified: "2026-11-26"
+tested_with:
+  kubernetes: "1.35.10"
 cards:
   - q: "How do you view logs of a running pod in Kubernetes?"
-    a: "kubectl logs <pod-name>"
+    a: "kubectl logs <pod-name> (add -f to stream, or -c <container> for multi-container pods)."
   - q: "How do you open an interactive shell inside a running container?"
-    a: "kubectl exec -it <pod-name> -- /bin/bash"
+    a: "kubectl exec -it <pod-name> -- sh (use /bin/bash only when bash is installed in the image)."
   - q: "How do you get built-in documentation for a resource field?"
-    a: "kubectl explain <resource>.<field>"
+    a: "kubectl explain <resource>.<field> (for example kubectl explain pod.spec.securityContext)."
+  - q: "How do you check why a Pod is stuck in Pending or CrashLoopBackOff?"
+    a: "kubectl describe pod <pod-name> to inspect Events, probe failures, and scheduling messages."
 related:
+  - kubernetes/service-routing
+  - kubernetes/pods-deployments
   - containers/docker-basics
-  - ci-cd/github-actions
 sources:
-  - title: Kubectl Reference Documentation
+  - title: kubectl Quick Reference
+    url: https://kubernetes.io/docs/reference/kubectl/quick-reference/
+  - title: kubectl Commands Reference
     url: https://kubernetes.io/docs/reference/generated/kubectl/kubectl-commands
 ---
 
-# Kubectl Cheatsheet
+## TL;DR
+Daily `kubectl` commands for inspecting cluster state (`get`, `describe`, `explain`), applying manifests (`apply`, `delete`), debugging containers (`logs`, `exec`, `port-forward`), and watching deployments (`rollout status`).
 
-Quick reference for Kubernetes operations.
+## Inspecting resources
+
+```bash
+kubectl get pods -A                     # list pods across all namespaces
+kubectl get nodes -o wide               # show node IPs, OS, and kubelet version
+kubectl get svc,ing,endpointslices      # inspect Services, Ingresses, and Endpoints
+kubectl describe pod <pod-name>         # view Events, probes, and container status
+kubectl explain deployment.spec         # built-in API schema documentation
+```
 
 <Tip>
-  Use `kubectl explain <resource>` to get built-in documentation for any resource field.
+  Use `kubectl explain <resource>.<field>` whenever you forget a YAML field name or type—it queries the cluster's OpenAPI schema directly.
 </Tip>
 
-## Get Resources
+## Applying and managing manifests
 
 ```bash
-kubectl get pods
-kubectl get nodes
-kubectl get services
+kubectl apply -f manifest.yaml          # create or update resources declaratively
+kubectl apply -f k8s/ --dry-run=client  # validate YAML locally before sending
+kubectl diff -f k8s/                    # preview live changes before applying
+kubectl delete -f manifest.yaml         # remove resources defined in the file
 ```
 
-## Logs and Debugging
+## Logs, exec, and port-forward
 
 ```bash
-kubectl logs <pod-name>
-kubectl exec -it <pod-name> -- /bin/bash
+kubectl logs -f <pod-name>              # stream stdout/stderr from a single-container pod
+kubectl logs --previous <pod-name>      # view logs from the last crashed container
+kubectl exec -it <pod-name> -- sh       # open a POSIX shell (works on Alpine/BusyBox)
+# kubectl exec -it <pod-name> -- /bin/bash  # use bash only when installed in the image
+kubectl port-forward svc/web 8080:80    # forward local :8080 to Service web:80
 ```
+
+<Gotcha>
+  Minimal images like Alpine or distroless often omit `/bin/bash`. Default to `sh` in `kubectl exec`, and remember that distroless images have no shell at all (use `kubectl debug` ephemeral containers instead).
+</Gotcha>
+
+## Rollouts and debugging
+
+```bash
+kubectl rollout status deployment/web   # watch a rolling update until complete
+kubectl rollout history deployment/web  # list past ReplicaSet revisions
+kubectl rollout undo deployment/web     # roll back to the previous revision
+kubectl get events --sort-by=.metadata.creationTimestamp
+```
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "Why should you prefer `kubectl exec -it <pod> -- sh` over `/bin/bash` by default?",
+    options: [
+      { label: "Many minimal container images (such as Alpine) include sh but not bash", description: "Using sh avoids 'executable file not found' errors on minimal images.", correct: true },
+      { label: "kubectl blocks /bin/bash for security reasons", description: "kubectl runs whatever binary exists in the container; Alpine images simply lack bash." },
+      { label: "sh automatically restarts crashed containers", description: "kubectl exec only runs a command in an already-running container." }
+    ]
+  },
+  {
+    question: "Which command shows recent scheduling errors, image pull failures, and probe failures for a Pod?",
+    options: [
+      { label: "kubectl describe pod <pod-name>", description: "describe prints the Pod's Events table and container state reasons.", correct: true },
+      { label: "kubectl explain pod", description: "explain prints API field documentation, not live Pod events." },
+      { label: "kubectl rollout history", description: "rollout history lists Deployment revisions, not Pod-level events." }
+    ]
+  }
+]} />
+
+## Sources
+- [kubectl Quick Reference](https://kubernetes.io/docs/reference/kubectl/quick-reference/)
+- [kubectl Commands Reference](https://kubernetes.io/docs/reference/generated/kubectl/kubectl-commands)

@@ -1,16 +1,38 @@
 ---
 title: "Layered vs Hexagonal vs Onion vs Clean"
 description: Compare the four major application architecture styles side by side using the same TypeScript Order service request.
+kind: note
 type: explanation
 level: intermediate
 tags: [architecture, layered, hexagonal, onion, clean-architecture, typescript]
 tested_with:
-  typescript: "5.x"
+  typescript: "7.0.2"
 status: stable
 updated: "2026-11-26"
+verified: "2026-11-26"
+cards:
+  - q: "What is the single biggest difference between Layered and Hexagonal/Onion/Clean?"
+    a: "Layered points dependencies downward toward the database, while Hexagonal, Onion, and Clean invert them inward toward the domain."
+  - q: "What mechanism do Hexagonal, Onion, and Clean share in TypeScript?"
+    a: "The domain core defines a repository/gateway interface, and outer infrastructure adapters implement it."
+  - q: "When is Layered Architecture a better fit than Clean or Onion?"
+    a: "For simple CRUD apps, internal admin tools, or fast prototypes where extra boundary interfaces are pure ceremony."
+  - q: "How do Onion and Clean differ from Hexagonal?"
+    a: "Hexagonal focuses on driving/driven ports around one core, while Onion and Clean subdivide the core into concentric rings (Entities vs Use Cases / App Services)."
+related:
+  - architecture/layered
+  - architecture/hexagonal
+  - architecture/dependency-inversion
+sources:
+  - title: "Martin Fowler: PresentationDomainDataLayering"
+    url: https://martinfowler.com/bliki/PresentationDomainDataLayering.html
+  - title: "Alistair Cockburn: Hexagonal Architecture"
+    url: https://alistair.cockburn.us/hexagonal-architecture/
+  - title: "Jeffrey Palermo: The Onion Architecture (Part 1)"
+    url: https://jeffreypalermo.com/2008/07/the-onion-architecture-part-1/
+  - title: "Robert C. Martin: The Clean Architecture"
+    url: https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html
 ---
-
-{/* TODO(schema-v2): Add kind: 'note', verified, cards, related, and sources to frontmatter once lib/source.ts supports them. */}
 
 <Intent>
 **Layered** points dependencies **downward** toward the database. **Hexagonal**, **Onion**, and **Clean** all invert that bottom arrow so dependencies point **inward** toward the domain—they mainly differ in how they subdivide the core and name the boundaries.
@@ -103,18 +125,20 @@ Switch between the four variants below to trace how a `POST /orders` request tra
         { id: 'domain-ring', label: 'Domain Core (Model + Services)', nodeIds: ['dom'] },
       ],
       nodes: [
-        { id: 'ui', label: 'UI / API', subtitle: 'Outer ring', icon: 'gateway', category: 'edge', rank: 0, order: 0 },
-        { id: 'appsvc', label: 'App Service', subtitle: 'PlaceOrderSvc', icon: 'service', category: 'service', rank: 1, order: 0 },
-        { id: 'dom', label: 'Domain Model', subtitle: 'Order + Repo IF', icon: 'class', category: 'service', rank: 2, order: 0 },
-        { id: 'infra', label: 'Infrastructure', subtitle: 'PostgresRepo', icon: 'db', category: 'data', rank: 3, order: 0 },
+        { id: 'http', label: 'HTTP Client', subtitle: 'POST /orders', icon: 'user', category: 'client', rank: 0, order: 0 },
+        { id: 'ui', label: 'UI / API', subtitle: 'Outer ring', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+        { id: 'appsvc', label: 'App Service', subtitle: 'PlaceOrderSvc', icon: 'service', category: 'service', rank: 2, order: 0 },
+        { id: 'dom', label: 'Domain Model', subtitle: 'Order + Repo IF', icon: 'class', category: 'service', rank: 3, order: 0 },
+        { id: 'infra', label: 'Infrastructure', subtitle: 'PostgresRepo', icon: 'db', category: 'data', rank: 4, order: 0 },
       ],
       steps: [
+        { edge: 'http->ui', title: 'Send POST /orders', text: 'Client sends POST /orders to UI / API ring' },
         { edge: 'ui->appsvc', title: 'Call App Service', text: 'Outer API ring calls Application Service PlaceOrderSvc' },
         { edge: 'appsvc->dom', title: 'Check invariants', text: 'App Service creates Order entity and checks Domain invariants' },
         { edge: 'dom->infra', title: 'Resolve PostgresRepo', text: 'Domain-defined IOrderRepo is resolved to PostgresRepo at runtime' },
         { edge: 'infra->appsvc', title: 'Return persisted Order', text: 'Infrastructure persists Order and returns to App Service', kind: 'response' },
         { edge: 'appsvc->ui', title: 'Return DTO', text: 'App Service returns DTO to UI / API ring', kind: 'response' },
-        { edge: 'ui->appsvc', title: 'Respond 201 Created', text: 'API ring returns 201 Created to caller', kind: 'response' },
+        { edge: 'ui->http', title: 'Respond 201 Created', text: 'API ring returns 201 Created to caller', kind: 'response' },
       ],
     },
     {
@@ -124,18 +148,20 @@ Switch between the four variants below to trace how a `POST /orders` request tra
         { id: 'usecase-ring', label: 'Use Cases + Entities', nodeIds: ['uc', 'ent'] },
       ],
       nodes: [
-        { id: 'ctrl', label: 'Controller', subtitle: 'Interface Adapter', icon: 'gateway', category: 'edge', rank: 0, order: 0 },
-        { id: 'uc', label: 'PlaceOrderUC', subtitle: 'Interactor', icon: 'service', category: 'service', rank: 1, order: 0 },
-        { id: 'ent', label: 'Order Entity', subtitle: 'Enterprise rule', icon: 'class', category: 'service', rank: 2, order: 0 },
-        { id: 'gw', label: 'OrderGateway', subtitle: 'DB Adapter', icon: 'db', category: 'data', rank: 3, order: 0 },
+        { id: 'http', label: 'HTTP Client', subtitle: 'POST /orders', icon: 'user', category: 'client', rank: 0, order: 0 },
+        { id: 'ctrl', label: 'Controller', subtitle: 'Interface Adapter', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+        { id: 'uc', label: 'PlaceOrderUC', subtitle: 'Interactor', icon: 'service', category: 'service', rank: 2, order: 0 },
+        { id: 'ent', label: 'Order Entity', subtitle: 'Enterprise rule', icon: 'class', category: 'service', rank: 3, order: 0 },
+        { id: 'gw', label: 'OrderGateway', subtitle: 'DB Adapter', icon: 'db', category: 'data', rank: 4, order: 0 },
       ],
       steps: [
+        { edge: 'http->ctrl', title: 'Send POST /orders', text: 'Client sends POST /orders to Controller' },
         { edge: 'ctrl->uc', title: 'Invoke Interactor', text: 'Controller converts HTTP body to InputData and invokes Interactor' },
         { edge: 'uc->ent', title: 'Run pricing rules', text: 'Interactor creates Order Entity and runs enterprise pricing rules' },
         { edge: 'uc->gw', title: 'Call OrderGateway', text: 'Interactor calls OrderGateway interface implemented by DB Adapter' },
         { edge: 'gw->uc', title: 'Return persisted Order', text: 'DB Adapter returns persisted Order to Interactor', kind: 'response' },
         { edge: 'uc->ctrl', title: 'Pass OutputData', text: 'Interactor passes OutputData through Presenter to Controller', kind: 'response' },
-        { edge: 'ctrl->uc', title: 'Format ViewModel', text: 'Presenter formats ViewModel for HTTP 201 response', kind: 'response' },
+        { edge: 'ctrl->http', title: 'Respond 201 Created', text: 'Presenter formats ViewModel and Controller returns 201 Created to caller', kind: 'response' },
       ],
     },
   ]}
@@ -162,6 +188,27 @@ In TypeScript, **Hexagonal, Onion, and Clean share the exact same core mechanism
 <MyTake>
 In practice, Hexagonal is the easiest inward-dependency style to explain and maintain in TypeScript projects. You get 90% of the benefits of Onion and Clean—fast in-memory tests and zero framework lock-in—without maintaining separate Presenter and Input/Output boundary DTOs for every endpoint.
 </MyTake>
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "Which architecture styles enforce an inward Dependency Rule toward the domain?",
+    options: [
+      { label: "Hexagonal, Onion, and Clean", description: "All three invert the persistence dependency so infrastructure depends on domain-owned interfaces.", correct: true },
+      { label: "Layered, Hexagonal, and Onion", description: "Classic Layered points dependencies downward from Business to Data." },
+      { label: "Only Clean Architecture", description: "Hexagonal and Onion also invert dependencies toward the core." }
+    ]
+  },
+  {
+    question: "Why might a small CRUD API choose Layered over Clean Architecture?",
+    options: [
+      { label: "Less boilerplate when domain rules are thin and map closely to database tables", description: "Layered avoids extra boundary interfaces, presenters, and DTO mapping when CRUD is all you need.", correct: true },
+      { label: "Layered makes it easier to swap Postgres for an in-memory Map without interfaces", description: "Swapping databases without mocking internals is actually easier in Hexagonal/Onion/Clean." },
+      { label: "Layered forbids controllers from validating HTTP payloads", description: "Presentation in Layered is specifically responsible for HTTP validation and formatting." }
+    ]
+  }
+]} />
 
 ### Sources
 

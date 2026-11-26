@@ -1,16 +1,34 @@
 ---
 title: Layered (N-Tier) Architecture
 description: Organize an application into horizontal layers—Presentation, Business, and Data—where each layer only calls the layer directly below it.
+kind: concept
 type: explanation
 level: beginner
 tags: [architecture, layered, typescript]
 tested_with:
-  typescript: "5.x"
+  typescript: "7.0.2"
 status: stable
 updated: "2026-11-26"
+verified: "2026-11-26"
+cards:
+  - q: "What are the three classic horizontal layers in Layered Architecture?"
+    a: "Presentation (HTTP/UI), Business (domain/service logic), and Data (database/persistence)."
+  - q: "Which way do dependencies point in classic Layered Architecture?"
+    a: "Strictly downward: Presentation depends on Business, and Business depends on Data."
+  - q: "What is a 'leaky layer' in Layered Architecture?"
+    a: "When an outer layer bypasses Business to query Data directly, or when Business accepts raw HTTP/SQL types."
+  - q: "What is the 'sinkhole' anti-pattern in Layered Architecture?"
+    a: "When layers act as pure pass-throughs that forward calls down the stack without adding validation or domain logic."
+related:
+  - architecture/hexagonal
+  - architecture/compare-styles
+  - architecture/dependency-inversion
+sources:
+  - title: "Martin Fowler: PresentationDomainDataLayering"
+    url: https://martinfowler.com/bliki/PresentationDomainDataLayering.html
+  - title: "Mark Richards: Software Architecture Patterns"
+    url: https://www.oreilly.com/library/view/software-architecture-patterns/9781491971437/
 ---
-
-{/* TODO(schema-v2): Add kind: 'concept', verified, cards, related, and sources to frontmatter once lib/source.ts supports them. */}
 
 ## 1. Intent
 
@@ -179,11 +197,7 @@ export class OrderController {
   </Tab>
 </Tabs>
 
-<LabLink
-  name="arch-order-service"
-  description="Compare the Order service in layered, hexagonal, and clean branches."
-  command="npx tsx src/presentation/order-controller.ts"
-/>
+> **Lab planned:** A multi-branch `labs/arch-order-service` repository (`layered`, `hexagonal`, and `clean` branches) is planned in the content roadmap.
 
 ## 8. When to use / when to avoid
 
@@ -264,7 +278,24 @@ export class OrderController {
 Layered architecture is my default starting point for small APIs and prototypes. It only starts hurting when `OrderService` becomes a maze of ORM queries and mocking the database takes more lines than the test itself—that is my signal to invert the repository dependency.
 </MyTake>
 
-{/* TODO(step-11): Add <Quiz> component once Step 11 is merged. */}
+<Quiz questions={[
+  {
+    question: "In classic Layered Architecture, why is testing Business logic without a database harder than in Hexagonal Architecture?",
+    options: [
+      { label: "Business imports and depends directly on the Data layer", description: "Because dependencies point top-down, Business is coupled to Data unless you invert the dependency.", correct: true },
+      { label: "Presentation cannot call Business in unit tests", description: "Unit tests can call Business directly, but Business still pulls in Data dependencies." },
+      { label: "Layered Architecture forbids interfaces in TypeScript", description: "Layered Architecture allows interfaces, though classic implementations couple Business directly to Data." }
+    ]
+  },
+  {
+    question: "What happens in a 'leaky layer' shortcut?",
+    options: [
+      { label: "Presentation calls Data directly, bypassing Business validation and rules", description: "Bypassing Business lets invalid state reach the database and leaks DB row shapes to the API.", correct: true },
+      { label: "Data layer caches responses in Redis", description: "Caching is a performance optimization, not a leaky layer." },
+      { label: "Presentation validates JSON before calling Business", description: "Input shape validation in Presentation is normal and keeps HTTP parsing out of Business." }
+    ]
+  }
+]} />
 
 ### Sources
 

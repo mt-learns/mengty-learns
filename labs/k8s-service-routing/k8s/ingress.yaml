@@ -3,6 +3,8 @@ kind: Ingress
 metadata:
   name: web-ingress
 spec:
+  # Adjust to match your cluster's IngressClass (e.g. nginx, traefik, cilium).
+  ingressClassName: nginx
   rules:
     - host: shop.example.com
       http:

@@ -1,16 +1,34 @@
 ---
 title: Bridge Pattern
 description: Separate an abstraction from its implementation so both can evolve independently.
+kind: concept
 type: explanation
 level: intermediate
 tags: [design-patterns, oop, typescript]
 tested_with:
-  typescript: "5.x"
+  typescript: "7.0.2"
 status: stable
 updated: "2026-11-26"
+verified: "2026-11-26"
+cards:
+  - q: "What problem does the Bridge pattern solve?"
+    a: "It prevents M x N subclass explosion when a class varies along two independent dimensions (Abstraction and Implementation)."
+  - q: "How does Bridge connect Abstraction and Implementation?"
+    a: "Through composition: the Abstraction holds a reference to an Implementor interface and delegates low-level work to it."
+  - q: "How does Bridge differ from Adapter?"
+    a: "Bridge is designed up front so two hierarchies evolve independently; Adapter wraps an incompatible existing interface after the fact."
+  - q: "How does Bridge differ from Strategy?"
+    a: "Strategy swaps a single interchangeable algorithm, whereas Bridge decouples an entire abstraction hierarchy from an implementation hierarchy."
+related:
+  - design/oop-pillars
+  - design/solid
+  - architecture/dependency-inversion
+sources:
+  - title: "TypeScript Handbook: Classes & Interfaces"
+    url: https://www.typescriptlang.org/docs/handbook/2/classes.html
+  - title: "Refactoring.Guru: Bridge Pattern"
+    url: https://refactoring.guru/design-patterns/bridge
 ---
-
-{/* TODO(schema-v2): Add kind: 'concept', verified, cards, related, and sources to frontmatter once lib/source.ts supports them. */}
 
 ## 1. Intent
 
@@ -20,69 +38,70 @@ Split a large class or tightly coupled hierarchy into two independent hierarchie
 
 ## 2. Problem
 
-Suppose you are building a remote control library for smart devices. You start with a `RemoteControl` base class and subclass it for each device: `TVRemote` and `RadioRemote`. Then you add an `AdvancedRemote` with mute and voice controls. Suddenly you need `AdvancedTVRemote` and `AdvancedRadioRemote`.
+Suppose you are building an order-export module. You start with an `OrderExporter` base class and subclass it per backend: `PostgresOrderExporter` and `CsvOrderExporter`. Next, you need an `AsyncOrderExporter` that batches writes and retries transient errors. Suddenly you need `AsyncPostgresOrderExporter` and `AsyncCsvOrderExporter`.
 
-Every new remote type or new device multiplies the class count (`M remotes × N devices`). Adding a third device means writing two more remote subclasses; adding a third remote style means writing three more.
+Every new exporter mode or storage backend multiplies the class count (`M exporters × N drivers`). Adding a third storage driver (say S3) means writing two more exporter subclasses; adding a third exporter mode means writing three more.
 
 <Diagram
   id="bridge-problem"
   layout="tree"
-  ariaLabel="Class explosion without Bridge: 2 remotes times 2 devices equals 4 concrete subclasses"
-  caption="Inheritance couples both dimensions: M remotes × N devices produces M×N subclasses."
+  ariaLabel="Class explosion without Bridge: 2 exporters times 2 drivers equals 4 concrete subclasses"
+  caption="Inheritance couples both dimensions: M exporters × N drivers produces M×N subclasses."
   nodes={[
-    { id: 'rc', label: 'RemoteControl', icon: 'class', category: 'service', rank: 0, order: 0 },
-    { id: 'basic', label: 'BasicRemote', icon: 'class', category: 'service', rank: 1, order: 0 },
-    { id: 'adv', label: 'AdvancedRemote', icon: 'class', category: 'service', rank: 1, order: 1 },
-    { id: 'btv', label: 'BasicTVRemote', icon: 'class', category: 'external', rank: 2, order: 0, variant: 'problem' },
-    { id: 'bradio', label: 'BasicRadioRemote', icon: 'class', category: 'external', rank: 2, order: 1, variant: 'problem' },
-    { id: 'atv', label: 'AdvTVRemote', icon: 'class', category: 'external', rank: 2, order: 2, variant: 'problem' },
-    { id: 'aradio', label: 'AdvRadioRemote', icon: 'class', category: 'external', rank: 2, order: 3, variant: 'problem' },
+    { id: 'exp', label: 'OrderExporter', icon: 'class', category: 'service', rank: 0, order: 0 },
+    { id: 'sync', label: 'SyncExporter', icon: 'class', category: 'service', rank: 1, order: 0 },
+    { id: 'async', label: 'AsyncExporter', icon: 'class', category: 'service', rank: 1, order: 1 },
+    { id: 'spg', label: 'SyncPostgresExp', icon: 'class', category: 'external', rank: 2, order: 0, variant: 'problem' },
+    { id: 'scsv', label: 'SyncCsvExp', icon: 'class', category: 'external', rank: 2, order: 1, variant: 'problem' },
+    { id: 'apg', label: 'AsyncPostgresExp', icon: 'class', category: 'external', rank: 2, order: 2, variant: 'problem' },
+    { id: 'acsv', label: 'AsyncCsvExp', icon: 'class', category: 'external', rank: 2, order: 3, variant: 'problem' },
   ]}
   edges={[
-    { from: 'rc', to: 'basic' },
-    { from: 'rc', to: 'adv' },
-    { from: 'basic', to: 'btv' },
-    { from: 'basic', to: 'bradio' },
-    { from: 'adv', to: 'atv' },
-    { from: 'adv', to: 'aradio' },
+    { from: 'exp', to: 'sync' },
+    { from: 'exp', to: 'async' },
+    { from: 'sync', to: 'spg' },
+    { from: 'sync', to: 'scsv' },
+    { from: 'async', to: 'apg' },
+    { from: 'async', to: 'acsv' },
   ]}
 />
 
 ## 3. Solution
 
-Instead of inheriting from every combination, extract the **device** operations into an interface (`Device`) and give `RemoteControl` a reference to a `Device` instance.
+Instead of inheriting from every combination, extract the **storage** operations into an interface (`StorageDriver`) and give `OrderExporter` a reference to a `StorageDriver` instance.
 
-- The **Abstraction** (`RemoteControl`, `AdvancedRemote`) handles user-facing controls like `togglePower()` or `mute()`.
-- The **Implementation** (`Device`, implemented by `TV` and `Radio`) handles low-level state like `enable()`, `disable()`, and `setVolume()`.
+- The **Abstraction** (`OrderExporter`, `AsyncExporter`) handles export orchestration like formatting payloads, batching, or retrying.
+- The **Implementation** (`StorageDriver`, implemented by `PostgresDriver` and `CsvDriver`) handles low-level I/O like `connect()`, `writeRecord()`, and `close()`.
 
-The reference from `RemoteControl` to `Device` is the **bridge**. Now you can add new remotes or new devices independently (`M + N` classes instead of `M × N`).
+The reference from `OrderExporter` to `StorageDriver` is the **bridge**. Now you can add new exporters or new storage drivers independently (`M + N` classes instead of `M × N`).
 
 ## 4. Real-world analogy
 
 <Analogy>
-Think of a universal remote and a TV. The remote's buttons (Power, Volume Up, Mute) are the **abstraction**. The infrared receiver inside your Sony TV or Bose radio is the **implementation**. You can upgrade to a touchscreen remote without rewiring your TV, and you can swap your TV without relearning the remote's layout.
+Think of a shipping-label generator and a printer. The generator's layout rules (standard label, customs form) are the **abstraction**. The physical printer driver (Zebra thermal, PDF file) is the **implementation**. You can add a new customs-form layout without rewriting printer drivers, and you can swap to a new printer without changing label layouts.
 </Analogy>
 
 ## 5. Flow: watch it work
 
 <Flow
   id="bridge"
-  title="Bridge Pattern: RemoteControl → Device"
+  title="Bridge Pattern: OrderExporter → StorageDriver"
   nodes={[
     { id: 'client', label: 'Client', subtitle: 'App code', icon: 'user', category: 'client', rank: 0, order: 0 },
-    { id: 'remote', label: 'RemoteControl', subtitle: 'Abstraction', icon: 'class', category: 'service', rank: 1, order: 0 },
-    { id: 'device', label: 'Device', subtitle: 'Implementor', icon: 'interface', category: 'edge', rank: 2, order: 0 },
-    { id: 'tv', label: 'TV', subtitle: 'Concrete', icon: 'service', category: 'concrete', rank: 3, order: 0 },
-    { id: 'radio', label: 'Radio', subtitle: 'Concrete', icon: 'service', category: 'concrete', rank: 3, order: 1 },
+    { id: 'exp', label: 'OrderExporter', subtitle: 'Abstraction', icon: 'class', category: 'service', rank: 1, order: 0 },
+    { id: 'driver', label: 'StorageDriver', subtitle: 'Implementor', icon: 'interface', category: 'edge', rank: 2, order: 0 },
+    { id: 'pg', label: 'PostgresDriver', subtitle: 'Concrete', icon: 'db', category: 'concrete', rank: 3, order: 0 },
+    { id: 'csv', label: 'CsvDriver', subtitle: 'Concrete', icon: 'class', category: 'concrete', rank: 3, order: 1 },
   ]}
   steps={[
-    { edge: 'client->remote', title: 'Toggle power on remote', text: 'Client calls remote.togglePower() on an Abstraction instance' },
-    { edge: 'remote->device', title: 'Delegate to device', text: 'RemoteControl delegates to its held Device reference' },
-    { edge: 'device->tv', title: 'Power on TV hardware', text: 'TV.enable() powers on the concrete TV hardware' },
-    { edge: 'tv->remote', title: 'Confirm TV enabled', text: 'TV confirms power state is now enabled', kind: 'response' },
-    { edge: 'client->remote', title: 'Mute via AdvancedRemote', text: 'Client swaps the device or uses AdvancedRemote.mute() on Radio' },
-    { edge: 'remote->device', title: 'Set volume to zero', text: 'AdvancedRemote calls device.setVolume(0) through the same interface' },
-    { edge: 'device->radio', title: 'Mute Radio hardware', text: 'Radio.setVolume(0) mutes the Radio without changing RemoteControl' },
+    { edge: 'client->exp', title: 'Export order', text: 'Client calls exporter.exportOrder(order) on OrderExporter' },
+    { edge: 'exp->driver', title: 'Delegate to driver', text: 'OrderExporter delegates writeRecord() to its held StorageDriver' },
+    { edge: 'driver->pg', title: 'Write to Postgres', text: 'PostgresDriver inserts the serialized record into Postgres' },
+    { edge: 'pg->driver', title: 'Confirm row saved', text: 'PostgresDriver returns the saved record receipt', kind: 'response' },
+    { edge: 'driver->exp', title: 'Return driver receipt', text: 'StorageDriver passes the receipt back to OrderExporter', kind: 'response' },
+    { edge: 'exp->client', title: 'Return export result', text: 'OrderExporter returns the completed export status to Client', kind: 'response' },
+    { edge: 'client->exp', title: 'Swap to CsvDriver', text: 'Client constructs AsyncExporter(new CsvDriver()) and calls exportBatch()' },
+    { edge: 'exp->driver', title: 'Batch via CsvDriver', text: 'AsyncExporter delegates each record to CsvDriver without changing Exporter' },
   ]}
 />
 
@@ -90,20 +109,20 @@ Think of a universal remote and a TV. The remote's buttons (Power, Volume Up, Mu
 
 <Diagram
   id="bridge-structure"
-  ariaLabel="Bridge structure: RemoteControl composes Device interface, implemented by TV and Radio"
+  ariaLabel="Bridge structure: OrderExporter composes StorageDriver interface, implemented by PostgresDriver and CsvDriver"
   caption="Composition over inheritance: Abstraction delegates to the Implementor interface."
   nodes={[
-    { id: 'remote', label: 'RemoteControl', subtitle: '- device: Device', icon: 'class', category: 'service', rank: 0, order: 0 },
-    { id: 'adv', label: 'AdvancedRemote', subtitle: 'Refined Abstraction', icon: 'class', category: 'service', rank: 1, order: 0 },
-    { id: 'device', label: 'Device', subtitle: '«interface»', icon: 'interface', category: 'edge', rank: 1, order: 1 },
-    { id: 'tv', label: 'TV', subtitle: 'Concrete', icon: 'service', category: 'concrete', rank: 2, order: 0 },
-    { id: 'radio', label: 'Radio', subtitle: 'Concrete', icon: 'service', category: 'concrete', rank: 2, order: 1 },
+    { id: 'exp', label: 'OrderExporter', subtitle: '- driver: StorageDriver', icon: 'class', category: 'service', rank: 0, order: 0 },
+    { id: 'async', label: 'AsyncExporter', subtitle: 'Refined Abstraction', icon: 'class', category: 'service', rank: 1, order: 0 },
+    { id: 'driver', label: 'StorageDriver', subtitle: '«interface»', icon: 'interface', category: 'edge', rank: 1, order: 1 },
+    { id: 'pg', label: 'PostgresDriver', subtitle: 'Concrete', icon: 'db', category: 'concrete', rank: 2, order: 0 },
+    { id: 'csv', label: 'CsvDriver', subtitle: 'Concrete', icon: 'class', category: 'concrete', rank: 2, order: 1 },
   ]}
   edges={[
-    { from: 'remote', to: 'device', label: 'bridge' },
-    { from: 'remote', to: 'adv' },
-    { from: 'device', to: 'tv', kind: 'response', dashed: true },
-    { from: 'device', to: 'radio', kind: 'response', dashed: true },
+    { from: 'exp', to: 'driver', label: 'bridge' },
+    { from: 'exp', to: 'async' },
+    { from: 'driver', to: 'pg', kind: 'response', dashed: true },
+    { from: 'driver', to: 'csv', kind: 'response', dashed: true },
   ]}
 />
 
@@ -113,81 +132,69 @@ Think of a universal remote and a TV. The remote's buttons (Power, Volume Up, Mu
   <Tab value="TypeScript">
 ```ts
 // Implementation interface
-interface Device {
-  isEnabled(): boolean;
-  enable(): void;
-  disable(): void;
-  getVolume(): number;
-  setVolume(percent: number): void;
+interface StorageDriver {
+  connect(): Promise<void>;
+  writeRecord(collection: string, record: Record<string, unknown>): Promise<string>;
+  close(): Promise<void>;
 }
 
 // Concrete Implementations
-class TV implements Device {
-  private on = false;
-  private volume = 30;
-
-  isEnabled() { return this.on; }
-  enable() { this.on = true; }
-  disable() { this.on = false; }
-  getVolume() { return this.volume; }
-  setVolume(percent: number) {
-    this.volume = Math.max(0, Math.min(100, percent));
+class PostgresDriver implements StorageDriver {
+  async connect() { /* open connection pool */ }
+  async writeRecord(collection: string, record: Record<string, unknown>) {
+    return `pg:${collection}:${String(record.id ?? 'new')}`;
   }
+  async close() { /* drain pool */ }
 }
 
-class Radio implements Device {
-  private on = false;
-  private volume = 15;
-
-  isEnabled() { return this.on; }
-  enable() { this.on = true; }
-  disable() { this.on = false; }
-  getVolume() { return this.volume; }
-  setVolume(percent: number) {
-    this.volume = Math.max(0, Math.min(100, percent));
+class CsvDriver implements StorageDriver {
+  private rows: string[] = [];
+  async connect() { this.rows = []; }
+  async writeRecord(_collection: string, record: Record<string, unknown>) {
+    this.rows.push(JSON.stringify(record));
+    return `csv:row-${this.rows.length}`;
   }
+  async close() { /* flush file handle */ }
 }
 
 // Abstraction
-class RemoteControl {
-  constructor(protected readonly device: Device) {}
+class OrderExporter {
+  constructor(protected readonly driver: StorageDriver) {}
 
-  togglePower(): void {
-    if (this.device.isEnabled()) {
-      this.device.disable();
-    } else {
-      this.device.enable();
-    }
-  }
-
-  volumeUp(): void {
-    this.device.setVolume(this.device.getVolume() + 10);
+  async exportOrder(order: { id: string; totalCents: number }): Promise<string> {
+    await this.driver.connect();
+    const receipt = await this.driver.writeRecord('orders', order);
+    await this.driver.close();
+    return receipt;
   }
 }
 
 // Refined Abstraction
-class AdvancedRemote extends RemoteControl {
-  mute(): void {
-    this.device.setVolume(0);
+class AsyncExporter extends OrderExporter {
+  async exportBatch(orders: { id: string; totalCents: number }[]): Promise<string[]> {
+    await this.driver.connect();
+    const receipts = await Promise.all(
+      orders.map((order) => this.driver.writeRecord('orders', order)),
+    );
+    await this.driver.close();
+    return receipts;
   }
 }
 
 // Usage
-const tvRemote = new RemoteControl(new TV());
-tvRemote.togglePower();
+const pgExporter = new OrderExporter(new PostgresDriver());
+await pgExporter.exportOrder({ id: 'ord_1', totalCents: 2500 });
 
-const radioRemote = new AdvancedRemote(new Radio());
-radioRemote.togglePower();
-radioRemote.mute();
+const csvBatch = new AsyncExporter(new CsvDriver());
+await csvBatch.exportBatch([
+  { id: 'ord_2', totalCents: 1200 },
+  { id: 'ord_3', totalCents: 4900 },
+]);
 ```
   </Tab>
 </Tabs>
 
-<LabLink
-  name="bridge-pattern-ts"
-  description="Practice separating abstraction and implementation in TypeScript."
-  command="npx tsx bridge.ts"
-/>
+> **Lab planned:** A hands-on `labs/bridge-pattern-ts` exercise for `OrderExporter` and `StorageDriver` is planned. In the meantime, you can copy the TypeScript snippet above into a local file and run it with `npx tsx`.
 
 ## 8. When to use / when to avoid
 
@@ -213,15 +220,15 @@ radioRemote.mute();
   </Step>
   <Step>
     ### Define the Implementor interface
-    Keep it focused on primitive operations (`enable`, `disable`, `setVolume`) rather than high-level workflows.
+    Keep it focused on primitive operations (`connect`, `writeRecord`, `close`) rather than high-level workflows.
   </Step>
   <Step>
     ### Store the Implementor on the Abstraction
-    Inject the `Device` via the `RemoteControl` constructor and delegate work to it.
+    Inject the `StorageDriver` via the `OrderExporter` constructor and delegate work to it.
   </Step>
   <Step>
     ### Extend either side independently
-    Add `AdvancedRemote` without touching `TV` or `Radio`, and add `Projector` without touching any remote class.
+    Add `AsyncExporter` without touching `PostgresDriver` or `CsvDriver`, and add `S3Driver` without touching any exporter class.
   </Step>
 </Steps>
 
@@ -264,7 +271,24 @@ radioRemote.mute();
 In TypeScript codebases, I reach for Bridge when I catch myself naming classes like `PostgresOrderExporter` and `CsvOrderExporter` alongside `AsyncPostgresOrderExporter`. Splitting `Exporter` (sync/async) from `StorageDriver` (Postgres/CSV) immediately stops the combinatorial growth.
 </MyTake>
 
-{/* TODO(step-11): Add <Quiz> component once Step 11 is merged. */}
+<Quiz questions={[
+  {
+    question: "You have 3 Abstraction variants and 4 Implementation backends. Roughly how many concrete classes do you need with Bridge vs inheritance?",
+    options: [
+      { label: "3 + 4 = 7 with Bridge, instead of 3 x 4 = 12 with inheritance", description: "Bridge separates the two dimensions via composition so each grows additively.", correct: true },
+      { label: "3 x 4 = 12 in both cases", description: "Avoiding the M x N Cartesian product is the main reason to use Bridge." },
+      { label: "1 class total using inheritance", description: "A single class would mix both dimensions and still require branching." }
+    ]
+  },
+  {
+    question: "Which OOP mechanism forms the 'bridge' between Abstraction and Implementation?",
+    options: [
+      { label: "Composition: the Abstraction holds a reference to an Implementor interface", description: "Delegating to an injected interface lets you swap implementations without changing the abstraction.", correct: true },
+      { label: "Multiple inheritance from two concrete base classes", description: "TypeScript does not support multiple class inheritance, and Bridge specifically replaces inheritance with composition." },
+      { label: "Global singleton state", description: "Bridge injects the implementation reference into the abstraction instance." }
+    ]
+  }
+]} />
 
 ### Sources
 

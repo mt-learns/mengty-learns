@@ -8,7 +8,7 @@ type: explanation
 level: beginner
 tags: [kubernetes, pods, replicasets, deployments]
 tested_with:
-  kubectl: "1.34.1"
+  kubectl: "1.35.10"
 cards:
   - q: "Why do you rarely create a bare Pod directly in Kubernetes?"
     a: "A bare Pod is not rescheduled if its node dies or the Pod is deleted; a ReplicaSet or Deployment is needed to maintain desired replicas."
