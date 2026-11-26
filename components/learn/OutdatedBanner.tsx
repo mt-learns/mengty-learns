@@ -1,0 +1,12 @@
+export function OutdatedBanner({ verified, status }: { verified?: string; status?: string }) {
+  const isOutdated = status === 'outdated' || (verified && new Date().getTime() - new Date(verified).getTime() > 365 * 24 * 60 * 60 * 1000);
+
+  if (!isOutdated) return null;
+
+  return (
+    <div className="mb-6 p-4 rounded-panel bg-destructive/10 text-destructive border border-destructive/20 flex items-center gap-3 text-sm">
+      <span className="font-bold">⚠️ May be outdated:</span>
+      <span>This note was last verified over a year ago or marked as outdated. Commands or behaviors may have changed.</span>
+    </div>
+  );
+}
