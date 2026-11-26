@@ -1,0 +1,148 @@
+---
+title: "Pattern Relations: Bridge vs Adapter vs Strategy vs Decorator vs State"
+description: Five patterns that share composition and interface delegation—how their intents, lifecycles, and trade-offs differ.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: note
+type: explanation
+level: intermediate
+tags: [design-patterns, oop, typescript, architecture]
+tested_with:
+  typescript: "7.0.2"
+cards:
+  - q: "Why do Bridge, Adapter, Strategy, Decorator, and State look similar in UML?"
+    a: "All five rely on composition and interface delegation—one object holds a reference to an interface and forwards work to it—but each solves a different design problem."
+  - q: "How does Strategy differ from State when both wrap an interchangeable interface?"
+    a: "In Strategy, the client chooses the algorithm and strategies are independent; in State, state objects know about each other and drive Context transitions automatically."
+  - q: "How do Bridge and Adapter differ in when they are introduced?"
+    a: "Bridge is designed up front so an abstraction hierarchy and an implementation hierarchy evolve independently; Adapter is added after the fact to make an incompatible interface usable."
+  - q: "What makes Decorator structurally different from Adapter and Strategy?"
+    a: "Decorator implements the exact same interface as the object it wraps, enabling recursive stacking of multiple wrappers."
+related:
+  - design/bridge
+  - design/adapter
+  - design/strategy
+  - design/decorator
+sources:
+  - title: "TypeScript Handbook: Object Types"
+    url: https://www.typescriptlang.org/docs/handbook/2/objects.html
+  - title: "Refactoring.Guru: Strategy (Relations with Other Patterns)"
+    url: https://refactoring.guru/design-patterns/strategy
+  - title: "Dive Into Design Patterns — Structural & Behavioral Relations (Alexander Shvets)"
+    url: https://refactoring.guru/design-patterns/book
+---
+
+## TL;DR
+**Bridge, Adapter, Strategy, Decorator, and State** all look nearly identical in a class diagram—one object delegates to an injected interface—but their **intent** differs: **Bridge** splits two hierarchies up front, **Adapter** translates an incompatible API, **Strategy** swaps an algorithm, **Decorator** stacks layers over the same interface, and **State** drives lifecycle transitions.
+
+## Why it exists
+When you first learn GoF patterns, every diagram seems to be "Class A holds a reference to Interface B." Without a clear mental model of *intent*, teams misname wrappers, force State machines into Strategy switches, or build speculative Bridge hierarchies where a single Adapter was needed.
+
+## Mental model
+Compare the five patterns by *why* the delegation boundary exists and *who* controls it:
+
+| Pattern | Category | Structural shape | Intent | Who picks / swaps it |
+|---|---|---|---|---|
+| **Bridge** | Structural | Abstraction → Implementor | Decouple two independent hierarchies (`M + N` instead of `M × N`) | Caller pairs Abstraction + Implementor at construction |
+| **Adapter** | Structural | Client → Target ← Adapter → Adaptee | Translate an incompatible existing/third-party interface | Composition root wires the vendor adapter |
+| **Decorator** | Structural | Wrapper → Component (same interface) | Layer optional behaviors (logging, cache, retry) recursively | Caller stacks wrappers at construction |
+| **Strategy** | Behavioral | Context → Strategy | Swap one interchangeable algorithm (`rolling` vs `canary`) | Client chooses and swaps the strategy |
+| **State** | Behavioral | Context → State | Alter behavior and transition states as lifecycle events occur | State objects trigger transitions on the Context |
+
+## Do it
+
+### Decision guide: pick by intent
+1. **Two orthogonal dimensions are multiplying subclasses (`M × N`)?** Use [Bridge](/docs/design/bridge) up front.
+2. **A third-party SDK or legacy module has the wrong method signatures?** Wrap it with [Adapter](/docs/design/adapter).
+3. **You want to stack optional cross-cutting layers (retry, cache, log) over the same interface?** Stack [Decorator](/docs/design/decorator) wrappers.
+4. **The caller needs to swap one algorithm at runtime?** Inject a [Strategy](/docs/design/strategy).
+5. **An object's behavior changes based on internal lifecycle phase (`Pending -> Running -> Failed`) and transitions itself?** Use **State**.
+
+### Same shape, different intent in TypeScript
+Notice how `Strategy` and `State` share the exact same TypeScript composition mechanics, yet differ in who triggers the swap:
+
+```ts
+// Strategy: caller explicitly chooses the algorithm
+interface DeployStrategy {
+  execute(service: string): string;
+}
+
+class DeployRunner {
+  constructor(private strategy: DeployStrategy) {}
+  setStrategy(next: DeployStrategy) { this.strategy = next; }
+  run(service: string) { return this.strategy.execute(service); }
+}
+
+// State: each state controls the next transition on the Context
+interface PipelineState {
+  advance(ctx: PipelineContext): void;
+  readonly name: string;
+}
+
+class PipelineContext {
+  constructor(public state: PipelineState) {}
+  next() { this.state.advance(this); }
+}
+
+class QueuedState implements PipelineState {
+  name = 'queued';
+  advance(ctx: PipelineContext) {
+    ctx.state = new RunningState();
+  }
+}
+
+class RunningState implements PipelineState {
+  name = 'running';
+  advance(_ctx: PipelineContext) {
+    /* terminal or transition to CompletedState */
+  }
+}
+```
+
+### When NOT to use it
+
+Overengineering happens when you force a pattern label onto a simple 20-line module or introduce an interface hierarchy just to "match the pattern book." If a plain function parameter replaces `Strategy`, or a `switch (status)` over three enum values is clearer than five `State` classes, keep the simpler code.
+
+### Real-world example in this stack
+
+Across `components/diagram/` and `lib/`, this site uses **Strategy** for layout mode switching (`'flow'` vs `'tree'` in `components/diagram/layout.ts`), **Adapter** in `lib/source.ts` to filter and adapt Fumadocs' MDX source into Next.js `loader()` routes, and **Observer** (`IntersectionObserver` / `ResizeObserver`) to lazy-mount `<Flow>` canvases.
+
+## Gotchas
+- **Confusing Adapter with Decorator:** Adapter *changes* the interface (e.g. `AwsS3Sdk.send()` -> `BlobStore.putObject()`); Decorator *keeps* the exact same interface (`HttpClient` -> `HttpClient`).
+- **Turning a 3-state enum into State classes:** A state machine with three tiny transitions is often clearer as a typed `switch` with exhaustive `never` checking in TypeScript than a set of mutually referencing State classes.
+- **Mislabeling Bridge as Strategy:** If you only have one `Context` class (no refined abstraction subclasses), you are using Strategy, not Bridge.
+
+## Production checklist
+- [ ] Name classes after their domain role (`S3BlobAdapter`, `CanaryStrategy`, `RetryHttpClient`)—never invent pattern boilerplate without a second variant or incompatible API.
+- [ ] Keep interfaces narrow (1–3 methods) so Adapters, Strategies, and Decorators stay easy to compose and fake in tests.
+- [ ] When choosing between Strategy and State, check who owns transitions: caller = Strategy, internal lifecycle = State.
+
+## Check yourself
+
+<MyTake>
+Design patterns are a shared vocabulary for *intent*, not a contest to see how many interfaces you can create. When two patterns have the same TypeScript structure, pick the name that tells the next engineer *why* that boundary exists.
+</MyTake>
+
+<Quiz questions={[
+  {
+    question: "Which pattern preserves the wrapped object's exact interface so multiple layers can be stacked recursively?",
+    options: [
+      { label: "Decorator", description: "Every Decorator implements the same Component interface as the object it wraps.", correct: true },
+      { label: "Adapter", description: "Adapter translates an incompatible interface into a different Target interface." },
+      { label: "Bridge", description: "Bridge separates an Abstraction hierarchy from an Implementor interface rather than stacking wrappers." }
+    ]
+  },
+  {
+    question: "What is the key behavioral difference between Strategy and State?",
+    options: [
+      { label: "In Strategy, the client picks the algorithm; in State, state objects transition the Context internally", description: "Strategies are independent of one another, whereas State objects know about valid next states.", correct: true },
+      { label: "Strategy uses inheritance while State uses composition", description: "Both use composition and interface delegation." },
+      { label: "State cannot change behavior at runtime", description: "Both Strategy and State swap behavior dynamically at runtime." }
+    ]
+  }
+]} />
+
+## Sources
+- [TypeScript Handbook: Object Types](https://www.typescriptlang.org/docs/handbook/2/objects.html)
+- [Refactoring.Guru: Strategy (Relations with Other Patterns)](https://refactoring.guru/design-patterns/strategy)
+- *Dive Into Design Patterns* (Alexander Shvets), chapters "Structural Design Patterns" and "Behavioral Design Patterns"

@@ -1,0 +1,313 @@
+---
+title: Observer Pattern
+description: Notify multiple subscribers automatically when a subject's state changes, without coupling the subject to concrete listeners.
+kind: concept
+type: explanation
+level: intermediate
+tags: [design-patterns, oop, typescript, behavioral]
+tested_with:
+  typescript: "7.0.2"
+status: stable
+updated: "2026-11-26"
+verified: "2026-11-26"
+cards:
+  - q: "What problem does the Observer pattern solve?"
+    a: "It lets a Subject notify a dynamic list of Subscribers about state changes without hardcoding calls to each concrete consumer."
+  - q: "How does Observer differ from Pub/Sub?"
+    a: "In Observer, the Subject directly holds and invokes its Observers in-process; in Pub/Sub, publishers and subscribers are decoupled through an external message broker or event bus."
+  - q: "What is the most common bug when implementing Observer?"
+    a: "Forgetting to unsubscribe listeners when they are no longer needed, which causes memory leaks and stale callbacks."
+  - q: "Why should a subscribe() method return an unsubscribe function or token?"
+    a: "It gives callers a safe, ergonomic way to detach listeners during teardown without needing to keep a separate reference to the original callback."
+related:
+  - design/strategy
+  - design/solid
+  - architecture/dependency-inversion
+sources:
+  - title: "MDN: ResizeObserver"
+    url: https://developer.mozilla.org/en-US/docs/Web/API/ResizeObserver
+  - title: "Refactoring.Guru: Observer Pattern"
+    url: https://refactoring.guru/design-patterns/observer
+  - title: "Dive Into Design Patterns — Behavioral Design Patterns: Observer (Alexander Shvets)"
+    url: https://refactoring.guru/design-patterns/book
+---
+
+## 1. Intent
+
+<Intent>
+Define a one-to-many subscription mechanism so a **Subject** (publisher) can notify an arbitrary, runtime-configurable list of **Observers** (subscribers) whenever an event occurs, without knowing their concrete types.
+</Intent>
+
+## 2. Problem
+
+Imagine you run a CI build pipeline. When a build finishes or fails, you want to write a structured log line, increment Prometheus metrics, and send a Slack alert on failure.
+
+If `BuildPipeline` imports `LogWriter`, `MetricsClient`, and `SlackWebhook` directly and calls each one inside `finishBuild()`, your core runner becomes coupled to every reporting tool. Adding a PagerDuty alert or disabling Slack in local dev requires editing `BuildPipeline` itself.
+
+<Diagram
+  id="observer-problem"
+  layout="tree"
+  ariaLabel="Tightly coupled BuildPipeline calling LogWriter, MetricsClient, and SlackWebhook directly"
+  caption="Without Observer, BuildPipeline hardcodes every downstream consumer."
+  nodes={[
+    { id: 'pipe', label: 'BuildPipeline', subtitle: 'Hardcoded calls', icon: 'ci', category: 'service', rank: 0, order: 0, variant: 'problem' },
+    { id: 'log', label: 'LogWriter', icon: 'service', category: 'external', rank: 1, order: 0, variant: 'problem' },
+    { id: 'met', label: 'MetricsClient', icon: 'db', category: 'external', rank: 1, order: 1, variant: 'problem' },
+    { id: 'slack', label: 'SlackWebhook', icon: 'gateway', category: 'external', rank: 1, order: 2, variant: 'problem' },
+  ]}
+  edges={[
+    { from: 'pipe', to: 'log' },
+    { from: 'pipe', to: 'met' },
+    { from: 'pipe', to: 'slack' },
+  ]}
+/>
+
+## 3. Solution
+
+Give `BuildPipeline` a subscription list (`subscribe`, `unsubscribe`, `notify`) that only knows about a tiny `BuildObserver` interface (`onBuildEvent(event)`).
+
+Each consumer (`LogSubscriber`, `MetricsSink`, `SlackNotifier`) implements `BuildObserver` and registers itself at startup—or detaches when no longer needed. When a stage completes, `BuildPipeline` simply loops over its active subscribers and calls `onBuildEvent(event)`.
+
+### Observer vs Pub/Sub via a broker
+
+People often use "Observer" and "Pub/Sub" interchangeably, but they operate at different boundaries:
+
+| Aspect | Observer pattern | Pub/Sub (via broker) |
+|---|---|---|
+| **Coupling** | Subject holds direct references to Observer interfaces | Publisher and Subscriber never reference each other |
+| **Delivery** | Usually synchronous, in-process method calls | Asynchronous over a broker (Redis, Kafka, RabbitMQ) |
+| **Failure isolation** | A slow or throwing observer can block the subject | Broker buffers retries and dead-letter queues |
+
+## 4. Real-world analogy
+
+<Analogy>
+Think of a CI/CD webhook registry on a Git repository. The repository does not know or care whether the listener is a Slack bot, a deploy trigger, or an audit logger—it just sends the same JSON payload to every registered endpoint when a push happens.
+</Analogy>
+
+## 5. Flow: watch it work
+
+<Flow
+  id="observer"
+  title="Observer Pattern: Subject → Notify → Observers"
+  nodes={[
+    { id: 'ci', label: 'PipelineRunner', subtitle: 'Subject', icon: 'ci', category: 'service', rank: 0, order: 0 },
+    { id: 'sub', label: 'ObserverList', subtitle: 'notify()', icon: 'interface', category: 'abstraction', rank: 1, order: 0 },
+    { id: 'log', label: 'LogSubscriber', subtitle: 'Observer', icon: 'service', category: 'concrete', rank: 2, order: 0 },
+    { id: 'chat', label: 'SlackNotifier', subtitle: 'Observer', icon: 'gateway', category: 'external', rank: 2, order: 1 },
+  ]}
+  steps={[
+    { edge: 'ci->sub', title: 'Emit build event', text: 'PipelineRunner finishes a stage and calls notify(event)' },
+    { edge: 'sub->log', title: 'Notify LogSubscriber', text: 'ObserverList invokes onBuildEvent(event) on LogSubscriber' },
+    { edge: 'log->sub', title: 'Log write complete', text: 'LogSubscriber finishes appending the structured log entry', kind: 'response' },
+    { edge: 'sub->chat', title: 'Notify SlackNotifier', text: 'ObserverList invokes onBuildEvent(event) on SlackNotifier' },
+    { edge: 'chat->sub', title: 'Alert delivered', text: 'SlackNotifier confirms webhook delivery for the build event', kind: 'response' },
+    { edge: 'sub->ci', title: 'Notification pass done', text: 'All registered observers have processed the build event', kind: 'response' },
+  ]}
+/>
+
+## 6. Structure
+
+<Diagram
+  id="observer-structure"
+  ariaLabel="Observer structure: PipelineRunner manages BuildObserver subscribers implemented by LogSubscriber, MetricsSink, and SlackNotifier"
+  caption="Subject depends only on the BuildObserver interface; concrete subscribers register at runtime."
+  nodes={[
+    { id: 'ci', label: 'PipelineRunner', subtitle: '+ subscribe(obs)', icon: 'ci', category: 'service', rank: 0, order: 0 },
+    { id: 'iface', label: 'BuildObserver', subtitle: '«interface»', icon: 'interface', category: 'abstraction', rank: 1, order: 0 },
+    { id: 'log', label: 'LogSubscriber', subtitle: 'Concrete', icon: 'service', category: 'concrete', rank: 2, order: 0 },
+    { id: 'met', label: 'MetricsSink', subtitle: 'Concrete', icon: 'db', category: 'data', rank: 2, order: 1 },
+    { id: 'chat', label: 'SlackNotifier', subtitle: 'Concrete', icon: 'gateway', category: 'external', rank: 2, order: 2 },
+  ]}
+  edges={[
+    { from: 'ci', to: 'iface', label: 'notifies' },
+    { from: 'iface', to: 'log', kind: 'response', dashed: true },
+    { from: 'iface', to: 'met', kind: 'response', dashed: true },
+    { from: 'iface', to: 'chat', kind: 'response', dashed: true },
+  ]}
+/>
+
+## 7. Code
+
+<Tabs items={['TypeScript']}>
+  <Tab value="TypeScript">
+```ts
+type BuildStatus = 'started' | 'succeeded' | 'failed';
+
+interface BuildEvent {
+  pipelineId: string;
+  status: BuildStatus;
+  durationMs: number;
+}
+
+// Observer interface
+interface BuildObserver {
+  onBuildEvent(event: BuildEvent): void;
+}
+
+// Subject (Publisher)
+class PipelineRunner {
+  private readonly observers = new Set<BuildObserver>();
+
+  subscribe(observer: BuildObserver): () => void {
+    this.observers.add(observer);
+    return () => {
+      this.observers.delete(observer);
+    };
+  }
+
+  run(pipelineId: string, shouldFail = false): void {
+    this.notify({ pipelineId, status: 'started', durationMs: 0 });
+    const status: BuildStatus = shouldFail ? 'failed' : 'succeeded';
+    this.notify({ pipelineId, status, durationMs: 1420 });
+  }
+
+  private notify(event: BuildEvent): void {
+    for (const observer of this.observers) {
+      observer.onBuildEvent(event);
+    }
+  }
+}
+
+// Concrete Observers
+class LogSubscriber implements BuildObserver {
+  onBuildEvent(event: BuildEvent): void {
+    console.log(`[log] ${event.pipelineId}: ${event.status} (${event.durationMs}ms)`);
+  }
+}
+
+class MetricsSink implements BuildObserver {
+  onBuildEvent(event: BuildEvent): void {
+    if (event.status !== 'started') {
+      console.log(`[metric] build_duration_ms{status="${event.status}"} ${event.durationMs}`);
+    }
+  }
+}
+
+class SlackNotifier implements BuildObserver {
+  onBuildEvent(event: BuildEvent): void {
+    if (event.status === 'failed') {
+      console.log(`[slack] ALERT: ${event.pipelineId} failed`);
+    }
+  }
+}
+
+// Usage
+const runner = new PipelineRunner();
+runner.subscribe(new LogSubscriber());
+runner.subscribe(new MetricsSink());
+const unsubscribeSlack = runner.subscribe(new SlackNotifier());
+
+runner.run('web-app-main', true);
+unsubscribeSlack(); // clean detach when no longer needed
+```
+  </Tab>
+</Tabs>
+
+## 8. When to use / when to avoid
+
+<Checklist
+  use={[
+    'A state change in one object must trigger updates in an unknown or dynamic set of other objects.',
+    'Subscribers need to attach and detach at runtime (e.g. temporary debug loggers, UI components).',
+    'You want core domain logic to emit facts without importing logging, metrics, or webhook clients.',
+  ]}
+  avoid={[
+    'There is only one fixed consumer—a direct function call or injected callback is simpler and easier to trace.',
+    'Subscriber execution order or transactional rollback is critical—Observer notifies in registration/arbitrary order.',
+    'You need cross-service durability, retries, or backpressure—use a message broker (Pub/Sub) instead.',
+  ]}
+/>
+
+### When NOT to use it
+
+Overengineering happens when you wire an event emitter between two modules that always have a 1:1 relationship. Replacing a direct `metrics.record(duration)` call with an event bus makes stack traces harder to follow and hides which code actually runs when a method is called.
+
+### Real-world example in this stack
+
+In this site's diagram and flow components (`components/flow/` and `components/diagram/`), the browser's `IntersectionObserver` and `ResizeObserver` APIs notify the component when a `<Flow>` scrolls into view (triggering lazy-loading of React Flow) or when its container resizes (re-running `fitView`).
+
+## 9. How to implement
+
+<Steps>
+  <Step>
+    ### Separate core state from side effects
+    Identify the Subject (`PipelineRunner`) whose state changes other modules care about.
+  </Step>
+  <Step>
+    ### Define the Observer interface
+    Declare a minimal notification method (`onBuildEvent(event)`) carrying the event payload.
+  </Step>
+  <Step>
+    ### Add subscription management to the Subject
+    Store observers in a `Set` and return an `unsubscribe()` cleanup closure from `subscribe()`.
+  </Step>
+  <Step>
+    ### Register concrete observers at composition time
+    Wire `LogSubscriber`, `MetricsSink`, and `SlackNotifier` at app startup rather than inside the Subject.
+  </Step>
+</Steps>
+
+## 10. Pros / Cons
+
+<ProsCons
+  pros={[
+    'Open/Closed Principle: add new subscribers without modifying the Subject.',
+    'Establish and tear down relationships dynamically at runtime.',
+    'Keeps core business logic clean of cross-cutting side effects.',
+  ]}
+  cons={[
+    'Notification order is not guaranteed and cascading events can be hard to debug.',
+    'Forgotten unsubscriptions cause memory leaks in long-lived processes.',
+    'A synchronous throwing observer can interrupt remaining subscribers unless isolated.',
+  ]}
+/>
+
+## 11. Relations
+
+<Relations
+  items={[
+    {
+      name: 'Observer vs Mediator',
+      summary: 'Observer distributes notifications one-to-many from a Subject; Mediator centralizes many-to-many coordination between peer components.',
+    },
+    {
+      name: 'Observer vs Chain of Responsibility',
+      summary: 'Observer broadcasts to all subscribers simultaneously; Chain of Responsibility passes a request sequentially until one handler processes or stops it.',
+    },
+    {
+      name: 'Observer vs Strategy',
+      summary: 'Strategy swaps a single algorithm that returns a result; Observer broadcasts state changes to zero or more independent listeners.',
+    },
+  ]}
+/>
+
+## 12. Check yourself
+
+<MyTake>
+Always return an `unsubscribe` function from `subscribe()`, and wrap each observer invocation in a `try/catch` if one failing telemetry sink must never crash a deployment or request path.
+</MyTake>
+
+<Quiz questions={[
+  {
+    question: "How does the classic Observer pattern differ from Pub/Sub with a message broker?",
+    options: [
+      { label: "Observer invokes registered subscribers directly in-process, whereas Pub/Sub decouples them through a broker", description: "In Observer the Subject maintains the subscriber list; in Pub/Sub a broker routes messages asynchronously.", correct: true },
+      { label: "Observer only supports one subscriber at a time", description: "Observer is specifically a one-to-many pattern supporting multiple subscribers." },
+      { label: "Pub/Sub requires inheritance between Publisher and Subscriber", description: "Pub/Sub has even looser coupling than Observer—neither side imports the other." }
+    ]
+  },
+  {
+    question: "Why is returning an unsubscribe function from subscribe() a good practice in TypeScript?",
+    options: [
+      { label: "Callers can detach the listener cleanly during teardown without holding a separate reference to the observer", description: "This prevents memory leaks and stale notifications when components or jobs shut down.", correct: true },
+      { label: "It forces all observers to run asynchronously", description: "Returning a cleanup closure does not change synchronous vs asynchronous execution." },
+      { label: "It guarantees observers run in alphabetical order", description: "Set iteration order follows insertion order, not alphabetical order." }
+    ]
+  }
+]} />
+
+### Sources
+
+- [MDN: ResizeObserver API](https://developer.mozilla.org/en-US/docs/Web/API/ResizeObserver)
+- [Refactoring.Guru: Observer Pattern](https://refactoring.guru/design-patterns/observer)
+- *Dive Into Design Patterns* (Alexander Shvets), chapter "Behavioral Design Patterns: Observer"

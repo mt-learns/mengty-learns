@@ -1,0 +1,165 @@
+---
+title: Dependency Injection in TypeScript
+description: Constructor injection by hand vs DI containers, testing with in-memory fakes, why Service Locator is an anti-pattern, and when DI is overkill.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: note
+type: explanation
+level: intermediate
+tags: [design-patterns, oop, typescript, architecture]
+tested_with:
+  typescript: "7.0.2"
+cards:
+  - q: "What is Dependency Injection (DI)?"
+    a: "Passing a module's collaborators (like a repository, clock, or logger) from the outside—typically via constructor or function parameters—instead of constructing them with new inside the class."
+  - q: "What is Pure DI (constructor injection by hand)?"
+    a: "Wiring objects together explicitly in one composition root at startup using plain TypeScript constructors and functions, with no reflection or DI container library."
+  - q: "Why is the Service Locator pattern often considered an anti-pattern?"
+    a: "It hides a class's real dependencies inside a global container.get() call, turning missing-dependency errors from compile-time type errors into runtime failures."
+  - q: "When is a DI container overkill in TypeScript?"
+    a: "In most small-to-medium TypeScript services where explicit wiring in a single main.ts composition root is type-checked by the compiler and takes under 50 lines."
+related:
+  - design/solid
+  - architecture/dependency-inversion
+  - design/composition-vs-inheritance
+sources:
+  - title: "TypeScript Handbook: Classes"
+    url: https://www.typescriptlang.org/docs/handbook/2/classes.html
+  - title: "Martin Fowler: Inversion of Control Containers and the Dependency Injection Pattern"
+    url: https://martinfowler.com/articles/injection.html
+  - title: "Dive Into Design Patterns — SOLID: Dependency Inversion Principle (Alexander Shvets)"
+    url: https://refactoring.guru/design-patterns/book
+---
+
+## TL;DR
+**Dependency Injection** means passing collaborators in from the outside instead of calling `new PostgresRepo()` inside business logic. In TypeScript, **constructor injection by hand (Pure DI)** gives you compile-time safety and fast tests with in-memory fakes—without needing a reflection-based DI container or a **Service Locator**.
+
+## Why it exists
+If `DeployService` creates its own `new PostgresAuditLog()` and `new Date()` internally, every unit test needs a running database and wall-clock hacks. Worse, you cannot swap implementations per environment without editing `DeployService`.
+
+## Mental model
+Compare the three ways dependencies get resolved:
+
+| Approach | How dependencies are obtained | Compile-time safety | Hidden dependencies? | Best for |
+|---|---|---|---|---|
+| **Pure DI (by hand)** | Passed via constructor or function args from `main.ts` | Full (`tsc` checks every arg) | No—signature lists all deps | Most TypeScript apps & libraries |
+| **DI Container** | Framework resolves graph via decorators/tokens | Partial (runtime token errors possible) | Medium | Huge enterprise apps with 100+ wired services |
+| **Service Locator** | Class calls global `Locator.get(Key)` internally | Weak (fails at runtime) | Yes—hidden from callers & tests | Legacy codebases only (anti-pattern) |
+
+## Do it
+
+### 1. Constructor injection by hand (Pure DI)
+Define small interfaces for external I/O, inject them in the constructor, and wire concrete implementations once at your entry point:
+
+```ts
+interface AuditLog {
+  record(action: string, at: Date): Promise<void>;
+}
+
+interface Clock {
+  now(): Date;
+}
+
+class DeployService {
+  constructor(
+    private readonly audit: AuditLog,
+    private readonly clock: Clock,
+  ) {}
+
+  async promote(version: string): Promise<void> {
+    await this.audit.record(`promote:${version}`, this.clock.now());
+  }
+}
+
+// Production wiring in main.ts (composition root)
+class ConsoleAuditLog implements AuditLog {
+  async record(action: string, at: Date): Promise<void> {
+    console.log(`[audit ${at.toISOString()}] ${action}`);
+  }
+}
+
+const prodService = new DeployService(new ConsoleAuditLog(), { now: () => new Date() });
+```
+
+### 2. Testing with in-memory fakes
+Because `DeployService` depends only on `AuditLog` and `Clock`, tests pass lightweight fakes with zero mocking frameworks:
+
+```ts
+class FakeAuditLog implements AuditLog {
+  readonly entries: Array<{ action: string; at: Date }> = [];
+  async record(action: string, at: Date): Promise<void> {
+    this.entries.push({ action, at });
+  }
+}
+
+const fakeAudit = new FakeAuditLog();
+const fixedClock: Clock = { now: () => new Date('2026-11-26T00:00:00Z') };
+const svc = new DeployService(fakeAudit, fixedClock);
+
+await svc.promote('v2.1.0');
+// Assert fakeAudit.entries has 1 entry at 2026-11-26T00:00:00Z
+```
+
+### 3. The Service Locator anti-pattern (avoid)
+A Service Locator looks convenient at first because constructors stay empty, but it hides dependencies and breaks at runtime:
+
+```ts
+// Anti-pattern: caller has no idea DeployService needs 'auditLog'
+class BadDeployService {
+  async promote(version: string): Promise<void> {
+    const audit = ServiceLocator.get<AuditLog>('auditLog'); // throws if unregistered!
+    await audit.record(`promote:${version}`, new Date());
+  }
+}
+```
+
+### 4. Pure DI vs DI containers
+DI containers (using `reflect-metadata` or token registries) automate wiring when an app has dozens of scoped/transient services. In TypeScript, however, containers add runtime magic, decorator config, and startup errors when a binding is missing—whereas Pure DI in a single `buildApp()` function is 100% type-checked by `tsc`.
+
+### When NOT to use it
+
+Overengineering happens when you inject pure deterministic helpers (like `Math`, `JSON`, or a stateless `formatBytes()` function) through constructor interfaces, or install a heavyweight DI container for a 10-file CLI or API. Only inject **impure boundaries** (databases, HTTP clients, clocks, queues) or behavior that genuinely varies between prod and tests.
+
+### Real-world example in this stack
+
+In [Hexagonal Architecture](/docs/architecture/hexagonal), domain services accept inbound/outbound ports via constructor injection so tests can swap `PostgresOrderRepo` for `InMemoryOrderRepo` without touching a database. Similarly, this site's React components receive data and callbacks as props rather than reading global singletons.
+
+## Gotchas
+- **Constructor bloat (too many parameters):** If a class takes 7+ injected dependencies, it is usually violating the Single Responsibility Principle—split the class instead of reaching for a DI container to hide the smell.
+- **Mocking concrete classes instead of using fakes:** Heavy `jest.fn()`/`vi.fn()` mocks that mirror internal SQL queries make tests brittle; a simple `InMemoryRepo` implementing the interface is faster and more realistic.
+- **Confusing Dependency Injection with Dependency Inversion:** DI is the *technique* of passing dependencies in; DIP (the `D` in [SOLID](/docs/design/solid)) is the *principle* that high-level policy owns the interface.
+
+## Production checklist
+- [ ] Wire concrete implementations in one composition root (`main.ts` / `buildContainer.ts`), never inside domain classes.
+- [ ] Inject impure boundaries (DB, network, clock, filesystem), not pure utility functions.
+- [ ] Prefer Pure DI (explicit TypeScript constructors/functions) until the wiring file genuinely outgrows manual maintenance.
+
+## Check yourself
+
+<MyTake>
+In TypeScript, Pure DI is almost always enough. A 40-line `createApp(config)` function that instantiates repositories and services in plain TypeScript gives you full `tsc` checking, jump-to-definition in your editor, and zero runtime container surprises.
+</MyTake>
+
+<Quiz questions={[
+  {
+    question: "Why is the Service Locator pattern widely considered an anti-pattern compared to constructor injection?",
+    options: [
+      { label: "It hides dependencies inside the class body, turning missing bindings into runtime errors instead of compile-time type errors", description: "With constructor injection, TypeScript refuses to compile if a required collaborator is omitted.", correct: true },
+      { label: "Service Locator cannot return interfaces", description: "It can return interfaces, but it hides which interfaces the class requires." },
+      { label: "Constructor injection requires a third-party DI container library", description: "Constructor injection works natively with plain TypeScript constructors (Pure DI)." }
+    ]
+  },
+  {
+    question: "Which dependencies should you actually inject in TypeScript rather than import directly?",
+    options: [
+      { label: "Impure I/O boundaries and swappable policies (databases, HTTP clients, clocks, queues)", description: "Injecting I/O boundaries lets tests use fast in-memory fakes; pure helper functions can be imported directly.", correct: true },
+      { label: "Every pure utility function and constant in the codebase", description: "Injecting pure stateless helpers creates unnecessary boilerplate." },
+      { label: "Only classes that use inheritance", description: "DI works best with composition and interfaces, not inheritance." }
+    ]
+  }
+]} />
+
+## Sources
+- [TypeScript Handbook: Classes](https://www.typescriptlang.org/docs/handbook/2/classes.html)
+- [Martin Fowler: Inversion of Control Containers and the Dependency Injection Pattern](https://martinfowler.com/articles/injection.html)
+- *Dive Into Design Patterns* (Alexander Shvets), chapter "SOLID Principles: Dependency Inversion Principle"

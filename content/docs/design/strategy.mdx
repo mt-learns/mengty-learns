@@ -1,0 +1,323 @@
+---
+title: Strategy Pattern
+description: Swap interchangeable algorithms behind a shared interface at runtime without rewriting the caller.
+kind: concept
+type: explanation
+level: intermediate
+tags: [design-patterns, oop, typescript, behavioral]
+tested_with:
+  typescript: "7.0.2"
+status: stable
+updated: "2026-11-26"
+verified: "2026-11-26"
+cards:
+  - q: "What problem does the Strategy pattern solve?"
+    a: "It replaces rigid conditional branching (if/else or switch) for selecting an algorithm with interchangeable objects behind a shared interface."
+  - q: "Who chooses which concrete Strategy to use?"
+    a: "The client creates and passes the concrete strategy into the Context, so the Context stays decoupled from concrete implementations."
+  - q: "How do you avoid class bloat when using Strategy in TypeScript?"
+    a: "When strategies hold no internal state, represent the strategy interface as a plain function type and pass arrow functions instead of single-method classes."
+  - q: "How does Strategy differ from Bridge?"
+    a: "Strategy swaps one interchangeable algorithm on a Context, whereas Bridge decouples an entire Abstraction hierarchy from an Implementation hierarchy."
+related:
+  - design/bridge
+  - design/solid
+  - architecture/dependency-inversion
+sources:
+  - title: "TypeScript Handbook: More on Functions"
+    url: https://www.typescriptlang.org/docs/handbook/2/functions.html
+  - title: "Refactoring.Guru: Strategy Pattern"
+    url: https://refactoring.guru/design-patterns/strategy
+  - title: "Dive Into Design Patterns — Behavioral Design Patterns: Strategy (Alexander Shvets)"
+    url: https://refactoring.guru/design-patterns/book
+---
+
+## 1. Intent
+
+<Intent>
+Extract a family of interchangeable algorithms into separate units behind one interface, so a **Context** can swap how it performs a task at runtime without conditional branching.
+</Intent>
+
+## 2. Problem
+
+Suppose you are building a deployment runner for a platform team. At first it only performs rolling updates. Later, product teams ask for blue-green cutovers for zero-downtime databases, and canary rollouts that shift 10% of traffic before full promotion.
+
+If all three rollout algorithms live inside `DeployRunner` behind an `if/else` or `switch` statement, every new rollout mode forces you to edit and retest the core runner. The class grows hard to read, and unrelated deployment logic becomes tightly coupled.
+
+<Diagram
+  id="strategy-problem"
+  layout="tree"
+  ariaLabel="Monolithic DeployRunner branching into rolling, blue-green, and canary logic"
+  caption="Without Strategy, DeployRunner accumulates conditional branches for every rollout mode."
+  nodes={[
+    { id: 'runner', label: 'DeployRunner', subtitle: 'switch (mode)', icon: 'service', category: 'service', rank: 0, order: 0, variant: 'problem' },
+    { id: 'roll', label: 'if rolling', icon: 'pod', category: 'external', rank: 1, order: 0, variant: 'problem' },
+    { id: 'bg', label: 'if blue-green', icon: 'pod', category: 'external', rank: 1, order: 1, variant: 'problem' },
+    { id: 'can', label: 'if canary', icon: 'pod', category: 'external', rank: 1, order: 2, variant: 'problem' },
+  ]}
+  edges={[
+    { from: 'runner', to: 'roll' },
+    { from: 'runner', to: 'bg' },
+    { from: 'runner', to: 'can' },
+  ]}
+/>
+
+## 3. Solution
+
+Define a common `DeployStrategy` interface with a single `execute(release)` method. Move each rollout algorithm into its own class (`RollingStrategy`, `BlueGreenStrategy`, `CanaryStrategy`) implementing that interface.
+
+`DeployRunner` (the **Context**) holds a reference to a `DeployStrategy` and delegates the rollout step to it. The caller decides which strategy to inject or swap at runtime, so `DeployRunner` never needs to know which rollout algorithm is active.
+
+## 4. Real-world analogy
+
+<Analogy>
+Think of a CI/CD pipeline artifact uploader. The pipeline orchestrator knows *when* to publish build artifacts, but *how* they are uploaded depends on the target: S3 multipart upload, container registry push, or local filesystem copy. Swapping the upload driver does not change how the pipeline builds or tests the code.
+</Analogy>
+
+## 5. Flow: watch it work
+
+<Flow
+  id="strategy"
+  title="Strategy Pattern: DeployRunner → DeployStrategy"
+  nodes={[
+    { id: 'caller', label: 'Caller', subtitle: 'CI pipeline', icon: 'ci', category: 'client', rank: 0, order: 0 },
+    { id: 'ctx', label: 'DeployRunner', subtitle: 'Context', icon: 'service', category: 'service', rank: 1, order: 0 },
+    { id: 'iface', label: 'DeployStrategy', subtitle: '«interface»', icon: 'interface', category: 'abstraction', rank: 2, order: 0 },
+    { id: 'rolling', label: 'RollingStrategy', subtitle: 'Concrete', icon: 'pod', category: 'concrete', rank: 3, order: 0 },
+    { id: 'canary', label: 'CanaryStrategy', subtitle: 'Concrete', icon: 'pod', category: 'concrete', rank: 3, order: 1 },
+  ]}
+  steps={[
+    { edge: 'caller->ctx', title: 'Trigger deploy', text: 'CI pipeline calls runner.deploy(release) on DeployRunner' },
+    { edge: 'ctx->iface', title: 'Invoke strategy', text: 'DeployRunner delegates rollout to its active DeployStrategy' },
+    { edge: 'iface->rolling', title: 'Run rolling update', text: 'RollingStrategy replaces pods in batches with health checks' },
+    { edge: 'rolling->iface', title: 'Return rolling status', text: 'RollingStrategy reports all batches healthy', kind: 'response' },
+    { edge: 'iface->ctx', title: 'Pass status to runner', text: 'DeployStrategy returns the rollout result to DeployRunner', kind: 'response' },
+    { edge: 'ctx->caller', title: 'Report deploy result', text: 'DeployRunner returns the completed status to CI pipeline', kind: 'response' },
+    { edge: 'caller->ctx', title: 'Swap to canary', text: 'Caller calls runner.setStrategy(new CanaryStrategy(10))' },
+    { edge: 'ctx->iface', title: 'Run canary rollout', text: 'DeployRunner delegates the next release to CanaryStrategy' },
+  ]}
+/>
+
+## 6. Structure
+
+<Diagram
+  id="strategy-structure"
+  ariaLabel="Strategy structure: DeployRunner composes DeployStrategy interface implemented by RollingStrategy, BlueGreenStrategy, and CanaryStrategy"
+  caption="Context delegates to the Strategy interface; concrete strategies implement the algorithm."
+  nodes={[
+    { id: 'ctx', label: 'DeployRunner', subtitle: '- strategy: DeployStrategy', icon: 'service', category: 'service', rank: 0, order: 0 },
+    { id: 'iface', label: 'DeployStrategy', subtitle: '«interface»', icon: 'interface', category: 'abstraction', rank: 1, order: 0 },
+    { id: 'roll', label: 'RollingStrategy', subtitle: 'Concrete', icon: 'pod', category: 'concrete', rank: 2, order: 0 },
+    { id: 'bg', label: 'Blue-Green', subtitle: 'Concrete', icon: 'pod', category: 'concrete', rank: 2, order: 1 },
+    { id: 'can', label: 'CanaryStrategy', subtitle: 'Concrete', icon: 'pod', category: 'concrete', rank: 2, order: 2 },
+  ]}
+  edges={[
+    { from: 'ctx', to: 'iface', label: 'delegates' },
+    { from: 'iface', to: 'roll', kind: 'response', dashed: true },
+    { from: 'iface', to: 'bg', kind: 'response', dashed: true },
+    { from: 'iface', to: 'can', kind: 'response', dashed: true },
+  ]}
+/>
+
+## 7. Code
+
+<Tabs items={['TypeScript (Classes)', 'TypeScript (Functions)']}>
+  <Tab value="TypeScript (Classes)">
+```ts
+interface Release {
+  service: string;
+  version: string;
+}
+
+interface DeployResult {
+  mode: string;
+  summary: string;
+}
+
+// Strategy interface
+interface DeployStrategy {
+  execute(release: Release): Promise<DeployResult>;
+}
+
+// Concrete strategies
+class RollingStrategy implements DeployStrategy {
+  constructor(private readonly maxUnavailable = 1) {}
+
+  async execute(release: Release): Promise<DeployResult> {
+    return {
+      mode: 'rolling',
+      summary: `Rolled out ${release.service}@${release.version} (maxUnavailable=${this.maxUnavailable})`,
+    };
+  }
+}
+
+class BlueGreenStrategy implements DeployStrategy {
+  async execute(release: Release): Promise<DeployResult> {
+    return {
+      mode: 'blue-green',
+      summary: `Booted green environment for ${release.service}@${release.version} and switched router`,
+    };
+  }
+}
+
+class CanaryStrategy implements DeployStrategy {
+  constructor(private readonly trafficPercent: number) {}
+
+  async execute(release: Release): Promise<DeployResult> {
+    return {
+      mode: 'canary',
+      summary: `Shifted ${this.trafficPercent}% traffic to ${release.service}@${release.version}`,
+    };
+  }
+}
+
+// Context
+class DeployRunner {
+  constructor(private strategy: DeployStrategy) {}
+
+  setStrategy(strategy: DeployStrategy): void {
+    this.strategy = strategy;
+  }
+
+  async deploy(release: Release): Promise<DeployResult> {
+    return this.strategy.execute(release);
+  }
+}
+
+// Usage: swap strategies at runtime
+const runner = new DeployRunner(new RollingStrategy(2));
+await runner.deploy({ service: 'api', version: '1.4.0' });
+
+runner.setStrategy(new CanaryStrategy(10));
+await runner.deploy({ service: 'api', version: '1.5.0-rc1' });
+```
+  </Tab>
+  <Tab value="TypeScript (Functions)">
+```ts
+interface Release {
+  service: string;
+  version: string;
+}
+
+// When strategies are stateless, a function type avoids class boilerplate
+type DeployFn = (release: Release) => Promise<string>;
+
+const rollingDeploy: DeployFn = async (r) => `rolling:${r.service}@${r.version}`;
+const blueGreenDeploy: DeployFn = async (r) => `blue-green:${r.service}@${r.version}`;
+
+async function runDeploy(release: Release, deployFn: DeployFn): Promise<string> {
+  return deployFn(release);
+}
+
+await runDeploy({ service: 'web', version: '2.0.0' }, blueGreenDeploy);
+```
+  </Tab>
+</Tabs>
+
+## 8. When to use / when to avoid
+
+<Checklist
+  use={[
+    'You need to swap how an object performs a task at runtime (e.g. rolling vs canary deploy, compression codec, or retry backoff).',
+    'A class has a growing switch/if-else block selecting between variants of the same operation.',
+    'You want to isolate complex algorithm state (like canary traffic percentages) from the caller.',
+  ]}
+  avoid={[
+    'You only have two simple variants that rarely change—a plain conditional is easier to read.',
+    'Strategies are stateless one-liners; pass a plain callback function instead of creating classes.',
+    'Callers have no reason to know the difference between strategies—hide the choice inside a factory.',
+  ]}
+/>
+
+### When NOT to use it
+
+Overengineering shows up when every single `if` statement gets turned into a `Strategy` interface plus three single-method classes. If you have two branches that are three lines each and have not changed in a year, keep the `if/else`. In TypeScript, if a strategy has no configuration or internal state, a function parameter (`(input) => output`) gives you the exact same decoupling with zero class ceremony.
+
+### Real-world example in this stack
+
+In this site's diagram renderer (`components/diagram/layout.ts`), the layout engine switches between `'flow'` (dagre left-to-right or top-to-bottom) and `'tree'` (hierarchical bus layout) via `FlowLayoutMode` without duplicating the node and edge rendering components.
+
+## 9. How to implement
+
+<Steps>
+  <Step>
+    ### Spot the varying algorithm
+    Find the method or conditional block inside your Context class that changes frequently or supports multiple modes.
+  </Step>
+  <Step>
+    ### Declare the Strategy interface
+    Define a small contract (often one method, or a TypeScript function type) with only the inputs the algorithm needs.
+  </Step>
+  <Step>
+    ### Extract Concrete Strategies
+    Move each branch into its own class or function implementing the Strategy interface.
+  </Step>
+  <Step>
+    ### Inject and delegate from the Context
+    Store the Strategy reference on the Context (via constructor or setter) and delegate execution to it.
+  </Step>
+</Steps>
+
+## 10. Pros / Cons
+
+<ProsCons
+  pros={[
+    'Swap algorithms at runtime without editing the Context.',
+    'Follows Open/Closed Principle: add new strategies without touching existing ones.',
+    'Isolates algorithm-specific config and state (like canary weights) from core orchestration.',
+  ]}
+  cons={[
+    'Adds extra types and files if used for trivial, stable conditionals.',
+    'Clients must understand how strategies differ in order to pick the right one.',
+  ]}
+/>
+
+## 11. Relations
+
+<Relations
+  items={[
+    {
+      name: 'Strategy vs Bridge',
+      summary: 'Both compose an interface, but Strategy swaps one algorithm on a single Context while Bridge separates two independent class hierarchies.',
+    },
+    {
+      name: 'Strategy vs State',
+      summary: 'Same class diagram, different intent: in Strategy the client picks the strategy; in State the state objects transition the Context automatically.',
+    },
+    {
+      name: 'Strategy vs Decorator',
+      summary: 'Strategy replaces the inner algorithm; Decorator wraps an object to layer extra behavior before or after the call.',
+    },
+  ]}
+/>
+
+## 12. Check yourself
+
+<MyTake>
+In TypeScript, I start with a function type `(release: Release) => Promise<DeployResult>` when a strategy is stateless, and only promote it to a class implementing `DeployStrategy` when the strategy needs its own configuration fields (like `trafficPercent` or a metrics client).
+</MyTake>
+
+<Quiz questions={[
+  {
+    question: "Who is responsible for selecting which concrete Strategy a Context uses?",
+    options: [
+      { label: "The client code that configures or calls the Context", description: "The client constructs the concrete strategy and passes it to the Context via constructor or setter.", correct: true },
+      { label: "The Context always hardcodes a switch statement to pick one", description: "Hardcoding a switch inside the Context defeats the decoupling Strategy provides." },
+      { label: "Each concrete strategy picks the next strategy automatically", description: "Automatic transitions between modes describe the State pattern, not Strategy." }
+    ]
+  },
+  {
+    question: "When is a TypeScript function type preferable to a Strategy class hierarchy?",
+    options: [
+      { label: "When the strategies are stateless and only need a single operation", description: "Passing a typed callback gives you runtime swappability without single-method class boilerplate.", correct: true },
+      { label: "When strategies must share a deep inheritance tree", description: "Strategy favors composition over inheritance." },
+      { label: "Never—Strategy always requires classes", description: "Modern languages with first-class functions support functional strategies natively." }
+    ]
+  }
+]} />
+
+### Sources
+
+- [TypeScript Handbook: More on Functions](https://www.typescriptlang.org/docs/handbook/2/functions.html)
+- [Refactoring.Guru: Strategy Pattern](https://refactoring.guru/design-patterns/strategy)
+- *Dive Into Design Patterns* (Alexander Shvets), chapter "Behavioral Design Patterns: Strategy"
