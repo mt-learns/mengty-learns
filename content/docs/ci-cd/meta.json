@@ -2,6 +2,7 @@
   "title": "CI/CD",
   "pages": [
     "github-actions",
+    "pipeline-anatomy",
     "this-site-pipeline"
   ],
   "icon": "ci-cd"
