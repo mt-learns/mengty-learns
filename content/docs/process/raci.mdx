@@ -1,0 +1,114 @@
+---
+title: "RACI Matrix for Small Teams and AI Agents"
+description: Clear R/A/C/I definitions, the one-Accountable rule, a worked RACI table for Mengty Learns (owner, lead agent, worker agents, CI), and common pitfalls.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: cheatsheet
+type: reference
+level: beginner
+tags: [process, raci, ownership, delegation, ai-agents]
+tested_with:
+  repo_workflow: "mengtylearns-wave-v1"
+cards:
+  - q: "In a RACI matrix, what is the difference between Responsible (R) and Accountable (A)?"
+    a: "Responsible (R) does the work; Accountable (A) is the single person who owns the final decision and signs off on the outcome."
+  - q: "How many Accountable (A) owners may a single task have in RACI?"
+    a: "Exactly one. Zero A's means nobody owns the outcome; two A's means split authority and blame-shifting."
+  - q: "Who is Accountable (A) for secrets, Cloudflare tokens, and pushing main in this site's setup?"
+    a: "The Owner (never worker agents), because credential boundaries and production pushes require human authorization."
+  - q: "What happens when too many people are marked Consulted (C) on routine tasks?"
+    a: "Decision gridlock: every small PR waits for synchronous opinions from people who only needed an Informed (I) summary after merge."
+related:
+  - process/idea-to-production
+  - process/dor-dod-quality-gates
+  - process/code-review
+sources:
+  - title: "Atlassian Team Playbook: RACI Chart"
+    url: https://www.atlassian.com/team-playbook/plays/raci
+  - title: "PMI: Responsibility Assignment Matrix (RAM / RACI)"
+    url: https://www.pmi.org/
+---
+
+## TL;DR
+**RACI** maps every task to four roles: **R**esponsible (does the work), **A**ccountable (single final owner), **C**onsulted (two-way input before done), and **I**nformed (one-way update after done). Keep **exactly one `A` per row**—especially when humans, AI agents, and CI share a repo.
+
+## Definitions
+
+| Letter | Role | Meaning | Communication |
+|---|---|---|---|
+| **R** | **Responsible** | Executes the task (can be shared by 1–2 doers or CI) | Active work |
+| **A** | **Accountable** | **Exactly one** final decision-maker and approver | Sign-off / owns risk |
+| **C** | **Consulted** | Subject-matter input *before* the work is finalized | Two-way (PR comment, review) |
+| **I** | **Informed** | Kept up to date *after* a decision or merge | One-way (changelog, report) |
+
+## Worked RACI: Mengty Learns (Owner / Lead / Workers / CI)
+
+This repository splits work across four actors: the **Owner** (human), **Lead Agent** (orchestrator/reviewer), **Worker Agents** (isolated worktrees), and **CI** (`.github/workflows/ci.yml`, `labs.yml`, `quality.yml`).
+
+| Task / Decision | Owner | Lead Agent | Worker Agents | CI |
+|---|---|---|---|---|
+| **Product scope & priorities** | **A / R** | C | I | — |
+| **Wave briefs & worktree setup** | A | **R** | I | — |
+| **Writing MDX pages & `<Flow>`s** | C | A | **R** | I |
+| **Shared code (`lib/`, `components/`)** | A | **R** | C (`BLOCKERS.md`) | I |
+| **Lint, typecheck, test, build, axe** | I | A | C (runs locally) | **R** |
+| **Reviewing & merging PRs to `main`** | A | **R** | I | C (required checks) |
+| **Secrets, Cloudflare tokens, push `main`** | **A / R** | C | — | — |
+
+Notice two boundaries:
+- **Worker Agents never push or merge:** they are `R` in their worktree and log out-of-scope code needs in `BLOCKERS.md` (`C`).
+- **CI is `R` for repeatable verification, never `A`:** a passing CI run does not replace human/lead accountability for content accuracy.
+
+## Common mistakes
+1. **Two `A`s on one row:** "Shared accountability" means neither person feels responsible when something breaks. Pick one `A`.
+2. **Zero `A`s or zero `R`s:** A row with only `C` and `I` never gets done; a row with `A` and no `R` means the owner is doing all the work without knowing it.
+3. **Confusing `A` with `R`:** The Owner can be `A` for a wave while a Worker is `R` for writing the pages.
+4. **Overusing `C`:** Marking 5 people as `C` turns every 20-line PR into a committee. Downgrade non-essential reviewers to `I`.
+
+## Minimum viable version (1–3 person team + AI agents)
+You do not need a spreadsheet for every ticket. Write a **6-row RACI table once** in `AGENTS.md` or `CONTRIBUTING.md` covering:
+1. Priorities & scope
+2. Feature / content implementation
+3. Shared infrastructure / schema changes
+4. Automated checks (CI)
+5. Merge to `main`
+6. Production secrets & deploy
+
+## When it's overkill
+- A **solo project with no agents or collaborators**—you are `A` and `R` for everything.
+- Creating a new 20-column RACI chart for every sprint or minor bug fix.
+
+## Gotchas
+- **Delegating `A` to an AI agent or CI bot:** Automated tools can be `R` (drafting code, running checks), but a human or designated lead must remain `A` for security, production deploys, and factual accuracy.
+- **Hidden `C` dependencies:** If a worker needs `lib/home-data.ts` updated before a feature works, mark that dependency explicitly (`BLOCKERS.md`) instead of letting the PR sit stalled.
+
+## Production checklist
+- [ ] Every row in the team RACI has **exactly one `A`** and **at least one `R`**.
+- [ ] Production secrets, billing, and force-pushes are locked to the human `A`.
+- [ ] `C` is reserved for people whose input can actually change the outcome before merge.
+- [ ] `I` updates happen asynchronously (PR summaries, changelogs), not in extra meetings.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "A deployment task lists both the Lead Developer and the Platform Engineer as Accountable (A). What is the RACI bug?",
+    options: [
+      { label: "A task must have exactly one Accountable (A) owner to avoid split authority", description: "One person can be R and another R, but only one person can hold final A sign-off.", correct: true },
+      { label: "RACI forbids having more than one Responsible (R) person", description: "Multiple people can share R (doing the work), though keeping it small is better." },
+      { label: "Platform Engineers can only be Informed (I)", description: "Any role can be R, A, C, or I depending on the task." }
+    ]
+  },
+  {
+    question: "In Mengty Learns' workflow, why does a Worker Agent write needed lib/home-data.ts changes in BLOCKERS.md instead of editing lib/ directly?",
+    options: [
+      { label: "The Worker is Consulted (C) on shared code, while the Lead/Owner holds A/R for shared app code", description: "Clear RACI boundaries prevent parallel wave workers from conflicting on shared files.", correct: true },
+      { label: "Because TypeScript files cannot be edited in git worktrees", description: "Worktrees can edit any file; the restriction is a deliberate process boundary." },
+      { label: "Because CI automatically edits lib/home-data.ts", description: "CI only verifies builds and tests; it does not author application code." }
+    ]
+  }
+]} />
+
+## Sources
+- [Atlassian Team Playbook: RACI Chart](https://www.atlassian.com/team-playbook/plays/raci)
+- [Project Management Institute (PMI)](https://www.pmi.org/)
