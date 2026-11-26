@@ -4,6 +4,7 @@
     "service-routing",
     "kubectl-apply",
     "pods-deployments",
+    "probes",
     "kubectl-cheatsheet"
   ],
   "icon": "kubernetes"
