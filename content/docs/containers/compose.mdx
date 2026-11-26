@@ -1,0 +1,221 @@
+---
+title: Docker Compose
+description: Run multi-container stacks locally or on a single host with automatic service DNS, health-gated depends_on, isolated networks, env files, secrets, and profiles.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: concept
+type: explanation
+level: beginner
+tags: [docker, compose, dns, healthcheck, networking]
+tested_with:
+  docker: "29.4.3"
+  docker-compose: "5.1.3"
+cards:
+  - q: "How do containers in the same Docker Compose project reach each other by name?"
+    a: "Compose creates a default user-defined bridge network and runs an embedded DNS server at 127.0.0.11 that resolves each service name to its container IP."
+  - q: "What does depends_on with condition: service_healthy wait for?"
+    a: "It waits until the dependency's container healthcheck passes (Status: healthy), rather than merely waiting for the container process to start."
+  - q: "Why is a Compose secrets block safer than env_file for database passwords?"
+    a: "Secrets are mounted as files under /run/secrets/<name> instead of being injected into process environment variables (which leak in docker inspect and child processes)."
+  - q: "What are Compose profiles used for?"
+    a: "Profiles let you mark optional services (such as debug tools or seeders) so they only start when explicitly enabled with --profile."
+related:
+  - containers/docker-basics
+  - containers/dockerfile-best-practices
+  - foundations/networking-basics
+sources:
+  - title: "Docker Docs: Networking in Compose"
+    url: https://docs.docker.com/compose/how-tos/networking/
+  - title: "Docker Docs: Control startup and shutdown order in Compose"
+    url: https://docs.docker.com/compose/how-tos/startup-order/
+  - title: "Docker Docs: Use secrets in Compose"
+    url: https://docs.docker.com/compose/how-tos/use-secrets/
+  - title: "Docker Docs: Using profiles with Compose"
+    url: https://docs.docker.com/compose/how-tos/profiles/
+---
+
+## TL;DR
+Docker Compose wires multi-container apps together on one host using a single `compose.yaml`. Every service gets an entry in Compose's embedded **DNS**, explicit **networks** isolate traffic, **`depends_on` with `condition: service_healthy`** prevents race conditions at startup, and **profiles** keep optional tools out of your default stack.
+
+## Intent
+<Intent>
+Understand how Docker Compose resolves service names over DNS, gates startup on real healthchecks, and separates configuration (`env_file`) from credentials (`secrets`) without needing Kubernetes.
+</Intent>
+
+## Problem
+Running `docker run` by hand for a web server, database, and cache quickly breaks down: container IPs change on every restart, the web app crashes if it connects before Postgres finishes initializing, and passing passwords via `-e` exposes them in `docker inspect`.
+
+## Solution
+Compose reads a declarative `compose.yaml` and sets up three primitives automatically:
+
+1. **Service DNS & networks:** Compose creates a project-scoped bridge network. Every container's `/etc/resolv.conf` points to Docker's embedded DNS server (`127.0.0.11`), which resolves service names (like `db`) to the active container IP. You can also split `frontend` and `backend` networks with `internal: true` so the database has no outbound internet route.
+2. **Startup order with healthchecks:** Plain `depends_on: [db]` only waits for the container to start, not for the process inside to accept connections. Pairing `depends_on` with `condition: service_healthy` and a `healthcheck` ensures `web` starts only after `db` passes its readiness command (e.g., `pg_isready`).
+3. **`env_file` vs `secrets`, plus `profiles`:** Use `env_file` for non-sensitive config (`NODE_ENV`, `PORT`), `secrets` to mount sensitive files at `/run/secrets/<name>`, and `profiles: ["debug"]` so admin UIs or seeders only run when requested (`docker compose --profile debug up`).
+
+## Real-world analogy
+<Analogy>
+Think of Compose as a small office intercom system: you don't memorize anyone's extension IP—you dial "Accounting" (**service DNS**), the operator waits until the accountant unlocks their desk (**`service_healthy`**) before transferring callers, and sensitive keycards (**`secrets`**) stay in a locked folder rather than printed on everyone's name badge (**`env_file`**).
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="compose"
+  title="Service-to-Service Request via Compose DNS"
+  nodes={[
+    { id: 'web', label: 'Web Container', subtitle: 'App :3000', icon: 'pod', category: 'service', rank: 0, order: 0 },
+    { id: 'dns', label: 'Compose DNS', subtitle: '127.0.0.11', icon: 'gateway', category: 'network', rank: 1, order: 0 },
+    { id: 'db', label: 'DB Container', subtitle: 'Postgres :5432', icon: 'db', category: 'data', rank: 2, order: 0 },
+  ]}
+  steps={[
+    { edge: 'web->dns', title: 'Query service name db', text: 'Web app asks Docker embedded DNS (127.0.0.11) for the IP of service "db".', label: 'DNS A' },
+    { edge: 'dns->web', title: 'Return DB container IP', text: 'Embedded DNS replies with the current IP of the db container on the bridge network.', kind: 'response', label: '172.18.0.3' },
+    { edge: 'web->db', title: 'Send SQL query over bridge', text: 'Web opens a TCP connection to db:5432 across the isolated Compose network.', label: 'SQL' },
+    { edge: 'db->web', title: 'DB returns query rows', text: 'Postgres sends the result set directly back to the web container over the same TCP socket.', kind: 'response', label: 'Rows' },
+  ]}
+/>
+
+## Code
+A minimal, production-minded `compose.yaml` using `service_healthy`, isolated networks, `env_file`, `secrets`, and `profiles`:
+
+```yaml
+# compose.yaml (not run)
+services:
+  web:
+    build: .
+    ports:
+      - "3000:3000"
+    env_file:
+      - .env.app
+    secrets:
+      - db_password
+    networks:
+      - frontend
+      - backend
+    depends_on:
+      db:
+        condition: service_healthy
+
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/db_password
+    secrets:
+      - db_password
+    networks:
+      - backend
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+  adminer:
+    image: adminer:4
+    profiles: ["debug"]
+    ports:
+      - "8080:8080"
+    networks:
+      - backend
+
+networks:
+  frontend:
+  backend:
+    internal: true
+
+volumes:
+  pgdata:
+
+secrets:
+  db_password:
+    file: ./secrets/db_password.txt
+```
+
+## When you DON'T need this
+- **Single-container apps or static sites:** If your app is one stateless binary or static assets (like this site), `docker run` or a static host is simpler than maintaining a `compose.yaml`.
+- **Multi-node scheduling or auto-scaling:** Compose targets a single Docker Engine host. Once you need rolling updates across multiple machines, bin-packing, or self-healing across node failures, move to Kubernetes or a managed container platform.
+- **Cost / complexity trade-off:** Compose is free and ships with Docker Desktop / Docker Engine, so its operational overhead is near zero—but single-host simplicity means zero built-in high availability if that host goes down.
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'Local development environments where an app needs a database, cache, or queue with one command.',
+    'Single-VM deployments where simplicity matters more than multi-node orchestration.',
+  ]}
+  avoid={[
+    'Production workloads requiring zero-downtime multi-node failover or horizontal autoscaling.',
+    'Sharing host secrets via plain .env files committed to Git.',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Define isolated networks
+    Put `web` on `frontend` and `backend`, and put `db` only on `backend` with `internal: true`.
+  </Step>
+  <Step>
+    ### Add a real healthcheck on dependencies
+    Gate `web` with `depends_on.db.condition: service_healthy` so startup waits for readiness.
+  </Step>
+  <Step>
+    ### Separate env_file from secrets
+    Keep non-sensitive flags in `.env.app` and mount credentials via `secrets:` at `/run/secrets/`.
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'Zero cluster overhead: one YAML file and docker compose up -d.',
+    'Automatic service discovery via embedded DNS without hardcoding IPs.',
+    'Profiles keep heavy debug or migration containers out of normal runs.',
+  ]}
+  cons={[
+    'Single-host only: no built-in multi-node scheduling or automatic node failover.',
+    'Compose secrets on standalone Engine are plain bind-mounted files, not encrypted-at-rest Swarm/KMS secrets.',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'Dockerfile Best Practices',
+      href: '/docs/containers/dockerfile-best-practices',
+      summary: 'Build the lean, non-root images that your Compose services run.',
+    },
+    {
+      name: 'Networking Basics',
+      href: '/docs/foundations/networking-basics',
+      summary: 'Review how DNS resolution and TCP sockets work underneath Compose.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "Why does depends_on: [db] without a condition still let your web app fail on startup?",
+    options: [
+      { label: "It only waits for the db container to start, not for Postgres to be ready for connections", description: "Use condition: service_healthy with a healthcheck so Compose waits until pg_isready succeeds.", correct: true },
+      { label: "Compose ignores depends_on on bridge networks", description: "Compose honours depends_on on all networks, but the default condition is service_started." },
+      { label: "depends_on only works when profiles are enabled", description: "Profiles control optional services and are unrelated to startup ordering." }
+    ]
+  },
+  {
+    question: "Where does Docker Compose mount a secret named db_password inside a container by default?",
+    options: [
+      { label: "/run/secrets/db_password", description: "Compose mounts secrets as files under /run/secrets/<secret_name>.", correct: true },
+      { label: "As an environment variable $DB_PASSWORD", description: "Environment variables leak via docker inspect and child processes; secrets are files." },
+      { label: "/etc/docker/secrets/db_password", description: "The standard in-container path is /run/secrets/<name>." }
+    ]
+  }
+]} />
+
+## Sources
+- [Docker Docs: Networking in Compose](https://docs.docker.com/compose/how-tos/networking/)
+- [Docker Docs: Control startup and shutdown order in Compose](https://docs.docker.com/compose/how-tos/startup-order/)
+- [Docker Docs: Use secrets in Compose](https://docs.docker.com/compose/how-tos/use-secrets/)
+- [Docker Docs: Using profiles with Compose](https://docs.docker.com/compose/how-tos/profiles/)

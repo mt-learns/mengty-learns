@@ -5,6 +5,7 @@
     "image-layers-cache",
     "multi-stage-nextjs",
     "dockerfile-best-practices",
+    "compose",
     "docker-cheatsheet"
   ],
   "icon": "containers"
