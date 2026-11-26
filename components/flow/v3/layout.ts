@@ -1,15 +1,15 @@
+import { resolveNodeCategory } from '../../diagram/category';
 import {
   computeDiagramLayout,
   type ComputedDiagramLayout,
   type LayoutEdgeInput,
 } from '../../diagram/layout';
-import {
-  resolveNodeCategory,
-  type FlowEdgeKind,
-  type FlowGroup,
-  type FlowLayoutMode,
-  type FlowNode,
-  type ParsedFlowStep,
+import type {
+  FlowEdgeKind,
+  FlowGroup,
+  FlowLayoutMode,
+  FlowNode,
+  ParsedFlowStep,
 } from '../types';
 import type { FlowGroupNode } from './GroupNode';
 import type { IosFlowNode } from './IosNode';

@@ -21,9 +21,9 @@ import {
   computeDiagramLayout,
   getHandleCoords,
 } from './layout';
+import { resolveNodeCategory } from './category';
 import {
   parseDiagramProps,
-  resolveNodeCategory,
   type DiagramProps,
   type FlowEdgeKind,
   type FlowIconName,
