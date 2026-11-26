@@ -1,0 +1,114 @@
+---
+title: "Estimation, Prioritization, WIP Limits, and Tech Debt"
+description: Compare T-shirt sizes, story points, and no estimates; prioritize with RICE, MoSCoW, and Cost of Delay; and manage flow with WIP limits and tech-debt budgets.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: how-to
+level: beginner
+tags: [process, estimation, prioritization, rice, moscow, wip, tech-debt]
+tested_with:
+  kanban_guide: "2025"
+cards:
+  - q: "What is the formula for a RICE prioritization score?"
+    a: "(Reach × Impact × Confidence) / Effort."
+  - q: "Why do WIP limits reduce cycle time according to Little's Law?"
+    a: "Cycle Time = WIP / Throughput; lowering Work-In-Progress (WIP) directly reduces how long each item waits before finishing."
+  - q: "What does MoSCoW stand for in prioritization?"
+    a: "Must have, Should have, Could have, and Won't have (this time)."
+  - q: "What is a practical tech-debt budget for a small product team?"
+    a: "Reserve 15–20% of capacity (e.g., 1 day per week or 1 slot in every 5) for paying down debt that slows active delivery."
+related:
+  - process/scrum-kanban-waterfall
+  - process/prd-and-user-stories
+  - process/idea-to-production
+sources:
+  - title: "Intercom: RICE Simple Prioritization for Product Managers"
+    url: https://www.intercom.com/blog/rice-simple-prioritization-for-product-managers/
+  - title: "Atlassian Agile Coach: Story Points and Estimation"
+    url: https://www.atlassian.com/agile/project-management/estimation
+  - title: "The Kanban Guide"
+    url: https://kanbanguides.org/english/
+---
+
+## TL;DR
+For a small team, use **T-shirt sizes (S/M/L)** or **#NoEstimates** (slice tasks to ≤ 1–2 days and count throughput) instead of story-point math. Prioritize with **MoSCoW** or **RICE**, cap **WIP** so items finish faster, and budget **15–20%** for tech debt that hurts velocity.
+
+## 1. Estimation: T-shirt sizes vs Story points vs No Estimates
+
+| Approach | How it works | Best for | Watch out for |
+|---|---|---|---|
+| **T-shirt sizes** (`S / M / L / XL`) | Rough relative buckets (`S` ≤ half day, `M` 1–2 days, `L` split it!) | 1–5 person teams; fast triage | Letting `XL` tasks enter `In Progress` without splitting |
+| **Story points** (`1, 2, 3, 5, 8, 13`) | Relative complexity/effort/uncertainty scored in planning poker | 4–10 person Scrum teams tracking multi-sprint velocity | Turning points into hours (`1 pt = 4 hrs`) or comparing teams by velocity |
+| **No Estimates** | Slice every task to roughly ≤ 1–2 days and track **items shipped per week** | Kanban teams, solo devs, AI-agent waves | Tasks that are secretly 2-week epics disguised as 1 ticket |
+
+**Rule of thumb:** If a task is `L` or `> 2 days`, don't spend 20 minutes debating whether it's a `5` or an `8`—spend 5 minutes splitting it into two `S`/`M` slices.
+
+## 2. Prioritization: RICE, MoSCoW, and Cost of Delay
+
+- **MoSCoW** (best for scoping an MVP or release):
+  - **Must have:** Non-negotiable for launch (e.g., static build + search).
+  - **Should have:** High value, but launch isn't blocked without it.
+  - **Could have:** Nice polish if time remains.
+  - **Won't have (this time):** Explicitly deferred (prevents scope creep).
+- **RICE** (best for comparing 10+ competing feature ideas):
+  `RICE = (Reach × Impact × Confidence) / Effort`
+  Score Reach (users/quarter), Impact (`0.25`–`3`), Confidence (`50%`–`100%`), and Effort (person-weeks) so loud opinions don't automatically win.
+- **Cost of Delay (CoD):** Ask *"What does waiting one more week cost us?"* A security fix or broken onboarding flow has high urgency/CoD even if its RICE Reach looks small.
+
+## 3. WIP limits (finish more by starting less)
+By Little's Law in queuing theory:
+`Average Cycle Time = WIP / Throughput`
+When 1 developer juggles 6 open branches, nothing ships for two weeks and every branch accumulates merge conflicts. Capping **`In Progress` at WIP ≤ 2** (or `1 per person + 1 buffer for blocked PRs`) forces finishing and merging before starting new work.
+
+## 4. Tech-debt budgeting
+Not all tech debt needs fixing—ignore ugly code in a module you never touch. Pay down debt that **slows active work** or **creates reliability/security risk**:
+- **Continuous (Boy Scout rule):** Leave touched files slightly cleaner (fix a missing test or type while you're already in that file).
+- **Explicit budget (15–20%):** Dedicate every Friday afternoon, or 1 out of every 5 tasks, to upgrades, flaky-test fixes, and refactors.
+
+## Minimum viable version (1–3 person team + AI agents)
+- Size tasks with **S / M / L** (split anything `L` before starting).
+- Prioritize with **P1 / P2 / P3** + **MoSCoW** for the current milestone.
+- Cap **WIP ≤ 2** per developer (or 1 active branch per wave worker).
+- Reserve **1 slot in 5** for tech debt and dependency updates.
+
+## When it's overkill
+- Running 90-minute Fibonacci planning poker for a 2-person team.
+- Building a 40-row weighted RICE spreadsheet when you only have 4 tasks in the backlog.
+
+## Gotchas
+- **Using story points as a performance metric:** The moment management rewards higher velocity, teams inflate `3`-point tasks into `8`s.
+- **Everything marked "Must have":** In MoSCoW, if 90% of the backlog is `Must`, you don't have prioritization—you have a wish list. Aim for ≤ 60% effort in `Must`.
+- **Zero tech-debt budget:** "We'll clean it up after launch" turns into permanent slowdown and brittle deploys.
+
+## Production checklist
+- [ ] Every task entering `In Progress` is sliced to `S` or `M` (≤ 2 days).
+- [ ] `In Progress` has an enforced WIP limit.
+- [ ] Backlog uses explicit priorities (MoSCoW, RICE, or Cost of Delay) with a clear `Won't have` / deferred list.
+- [ ] 15–20% of capacity is budgeted for high-interest tech debt and maintenance.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "Your 2-person team has 7 half-finished PRs open and nothing has shipped in 10 days. What is the fastest process fix?",
+    options: [
+      { label: "Enforce a strict WIP limit (e.g., WIP ≤ 2) and finish/merge open PRs before starting any new work", description: "Lowering WIP directly cuts cycle time and eliminates context-switching and merge conflicts.", correct: true },
+      { label: "Switch from T-shirt sizes to Fibonacci story points", description: "Changing estimation units does not fix having too much work in progress." },
+      { label: "Add more tasks to the Ready column", description: "More queued work does not help finish active work." }
+    ]
+  },
+  {
+    question: "In RICE prioritization, what happens to the score of a feature with high Reach and Impact, but very high Effort (12 person-weeks) and low Confidence (50%)?",
+    options: [
+      { label: "Its score drops sharply because Confidence multiplies the numerator and Effort divides it", description: "RICE = (Reach × Impact × Confidence) / Effort, naturally favoring high-confidence, lower-effort wins.", correct: true },
+      { label: "Its score increases because Effort is multiplied", description: "Effort is the denominator in RICE, so larger effort lowers the score." },
+      { label: "Confidence is ignored unless Effort is under 1 week", description: "Confidence always scales the numerator." }
+    ]
+  }
+]} />
+
+## Sources
+- [Intercom: RICE Simple Prioritization](https://www.intercom.com/blog/rice-simple-prioritization-for-product-managers/)
+- [Atlassian Agile Coach: Estimation](https://www.atlassian.com/agile/project-management/estimation)
+- [The Kanban Guide](https://kanbanguides.org/english/)
