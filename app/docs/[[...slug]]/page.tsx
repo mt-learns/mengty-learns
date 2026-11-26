@@ -41,7 +41,7 @@ export default async function Page({ params }: { params: Promise<{ slug?: string
       </div>
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground my-2">
         {page.data.type && (
-          <span className="inline-flex items-center rounded-full bg-primary/10 text-primary px-2.5 py-0.5 font-medium capitalize">
+          <span className="inline-flex items-center rounded-full bg-primary text-primary-foreground px-2.5 py-0.5 font-medium capitalize">
             {page.data.type}
           </span>
         )}

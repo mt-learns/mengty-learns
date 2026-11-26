@@ -71,6 +71,8 @@
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
   --color-border: var(--border);
   --color-ring: var(--ring);
   --color-separator: var(--separator);
@@ -102,7 +104,8 @@
   --color-fd-ring: var(--ring);
 }
 
-:root {
+:root,
+.light {
   color-scheme: light;
   --radius: 12px;
   --radius-card: 20px;
@@ -130,11 +133,13 @@
   --accent-foreground: #222222;
   --destructive: #cd0014;
   --destructive-foreground: #ffffff;
+  --success: #116630;
+  --success-foreground: #ffffff;
   --border: #ebebeb;
   --ring: #0066CC;
   --separator: #f2f2f2;
   --label-secondary: #6a6a6a;
-  --label-tertiary: #9a9a9a;
+  --label-tertiary: #6e6e6e;
   --field: #ffffff;
 
   --material-thin: color-mix(in oklab, var(--card) 60%, transparent);
@@ -162,13 +167,15 @@
   --muted-foreground: #a3a3a3;
   --accent: #262626;
   --accent-foreground: #f7f7f7;
-  --destructive: #ff453a;
+  --destructive: #ff594f;
   --destructive-foreground: #000000;
+  --success: #34d399;
+  --success-foreground: #000000;
   --border: #2e2e2e;
   --ring: #409CFF;
   --separator: #262626;
   --label-secondary: #a3a3a3;
-  --label-tertiary: #6e6e6e;
+  --label-tertiary: #8e8e93;
   --field: #1e1e1e;
 }
 
