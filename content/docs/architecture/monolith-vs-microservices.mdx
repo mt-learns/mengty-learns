@@ -1,0 +1,90 @@
+---
+title: "Monolith vs Modular Monolith vs Microservices"
+description: Weigh the honest costs of distributed systems, team topology (Conway's Law), and why starting with a modular monolith is the default choice.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: decision
+type: explanation
+level: intermediate
+tags: [architecture, monolith, microservices, modular-monolith, decision]
+tested_with:
+  typescript: "7.0.2"
+cards:
+  - q: "What is Martin Fowler's 'MonolithFirst' recommendation?"
+    a: "Almost all successful microservice architectures started as a monolith that grew too big and was split along clear domain boundaries, rather than starting with microservices on day one."
+  - q: "What hidden costs do microservices introduce that a modular monolith avoids?"
+    a: "Network latency and partial failures, distributed transactions/sagas, eventual consistency, multi-repo CI/CD, service discovery, and distributed tracing."
+  - q: "What is the primary valid reason to split out a microservice?"
+    a: "Independent team autonomy at scale (Conway's Law), radically different scaling/runtime requirements (e.g., GPU ML worker vs web API), or strict security/compliance isolation."
+  - q: "Why do 'distributed monoliths' happen?"
+    a: "When teams split services over the network before finding stable domain boundaries, forcing synchronous chained calls and lockstep deployments."
+related:
+  - architecture/modular-monolith
+  - architecture/compare-styles
+  - architecture/event-driven-outbox
+sources:
+  - title: "Martin Fowler: MonolithFirst"
+    url: https://martinfowler.com/bliki/MonolithFirst.html
+  - title: "Martin Fowler: MicroservicePremium"
+    url: https://martinfowler.com/bliki/MicroservicePremium.html
+---
+
+## TL;DR
+**Start with a Modular Monolith.** Microservices buy **organizational scaling and independent deployment**, not cleaner code—and they charge a steep tax in network failures, distributed tracing, and eventual consistency. Extract a service only when a specific scaling, runtime, or team-autonomy bottleneck proves you need it.
+
+## Context
+Many teams adopt microservices on day one hoping it will keep code modular. In reality, if you can't draw clean module boundaries inside one repository, splitting them across HTTP/gRPC creates a **distributed monolith**—all the coupling of a bad monolith plus network latency and partial failures.
+
+## Comparison
+
+| Dimension | Big-Ball-of-Mud Monolith | Modular Monolith | Microservices |
+|---|---|---|---|
+| **Module boundaries** | Tangled imports & shared tables | Strict public APIs, isolated schemas | Network APIs + separate databases |
+| **Communication** | Direct function calls | Public module interfaces / in-process events | HTTP/gRPC + message brokers |
+| **Consistency** | Single ACID DB transaction | Single ACID DB transaction (or local events) | Eventual consistency (Outbox / Sagas) |
+| **Deployment** | One artifact | One artifact | N independent pipelines & versions |
+| **Ops complexity** | Low | Low | High (service mesh, tracing, retries, DLQs) |
+| **Best team size** | 1–3 devs (short-lived) | 2–30+ devs | Multiple autonomous teams (30+ devs) |
+
+## Decision criteria
+1. **Team topology (Conway's Law):** If 1–2 squads ship the product, one modular monolith lets everyone refactor atomically in one PR. Microservices pay off when 5+ teams step on each other's release trains.
+2. **Independent scaling or runtime:** A video transcoder or Python ML inference service genuinely benefits from being its own deployable worker; your CRUD billing module usually doesn't.
+3. **Domain maturity:** Early-stage domains change boundaries weekly. Moving a function across folders takes 10 seconds; moving an API across two microservices takes weeks.
+
+<MyTake>
+I default to a **Modular Monolith** on every new system. When a module truly hits a scaling wall (say, PDF rendering or high-throughput ingestion), having clean `index.ts` boundaries makes extracting that one worker straightforward.
+</MyTake>
+
+## Gotchas
+- **Microservices for "clean code":** network boundaries don't fix unclear domain modeling—they just make refactoring 10× slower.
+- **Synchronous call chains:** Service A → Service B → Service C → Service D multiplies tail latency and turns a 99.9% SLA per service into cascading outages.
+- **Shared database across microservices:** if two microservices share one Postgres database, you built a distributed monolith with extra steps.
+
+## Production checklist
+- [ ] Default to a **Modular Monolith** unless you have a concrete team, scaling, or compliance driver
+- [ ] Enforce module boundaries with lint rules and separate DB schemas so extraction stays possible
+- [ ] If you extract a service, give it its **own database** and use async events/outbox where possible
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "A 5-person startup splits their new SaaS into 8 microservices so the code stays clean. What is the most likely outcome?",
+    options: [
+      { label: "High operational overhead and slow cross-service refactoring while domain boundaries are still shifting", description: "Small teams pay the full distributed-systems tax without needing multi-team deployment independence.", correct: true },
+      { label: "Zero network latency because services run in Kubernetes", description: "Network serialization and hops still add latency and partial-failure modes." },
+      { label: "Guaranteed ACID transactions across all 8 services", description: "ACID transactions do not span separate service databases." }
+    ]
+  },
+  {
+    question: "What is a 'distributed monolith'?",
+    options: [
+      { label: "Separately deployed services that are so tightly coupled they must be deployed together and call each other synchronously in chains", description: "It combines the coupling of a bad monolith with the operational cost of microservices.", correct: true },
+      { label: "A single Next.js app deployed to a CDN", description: "A single deployable app is a monolith, not a distributed monolith." },
+      { label: "A modular monolith with ESLint boundary rules", description: "A modular monolith is a single deployment with clean internal boundaries." }
+    ]
+  }
+]} />
+
+## Sources
+- [Martin Fowler: MonolithFirst](https://martinfowler.com/bliki/MonolithFirst.html)
+- [Martin Fowler: MicroservicePremium](https://martinfowler.com/bliki/MicroservicePremium.html)
