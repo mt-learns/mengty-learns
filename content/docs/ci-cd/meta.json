@@ -1,4 +1,8 @@
 {
   "title": "Ci Cd",
-  "pages": ["github-actions", "this-site-pipeline"]
+  "pages": [
+    "github-actions",
+    "this-site-pipeline"
+  ],
+  "icon": "ci-cd"
 }

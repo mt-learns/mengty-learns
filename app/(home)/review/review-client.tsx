@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { Flame, PartyPopper } from 'lucide-react';
+import { Illustration } from '@/components/illustrations';
 import { Button } from '@/components/ui/button';
 import { createEmptyCard, Rating, fsrs, generatorParameters } from 'ts-fsrs';
 
@@ -148,6 +149,7 @@ export function ReviewClient({ cards }: { cards: CardItem[] }) {
         </div>
       ) : (
         <div className="rounded-card border bg-card p-12 text-center space-y-4">
+          <Illustration name="review-empty" size={256} className="mx-auto w-56 h-auto" decorative />
           <h2 className="inline-flex items-center justify-center gap-2 text-2xl font-bold font-headline">
             <PartyPopper className="size-6 text-primary" strokeWidth={1.75} aria-hidden="true" />
             <span>All caught up!</span>

@@ -15,6 +15,7 @@ import { getPageImageUrl, gitConfig } from '@/lib/shared';
 import { OutdatedBanner } from '@/components/learn/OutdatedBanner';
 import { PageFooter } from '@/components/learn/PageFooter';
 import { MarkDone } from '@/components/learn/MarkDone';
+import { Illustration } from '@/components/illustrations';
 
 export default async function Page({ params }: { params: Promise<{ slug?: string[] }> }) {
   const resolvedParams = await params;
@@ -72,6 +73,11 @@ export default async function Page({ params }: { params: Promise<{ slug?: string
           githubUrl={`https://github.com/${gitConfig.user}/${gitConfig.repo}/blob/${gitConfig.branch}/content/docs/${encodeURI(page.path)}`}
         />
       </div>
+      {page.data.kind === 'lab' && (
+        <div className="my-6 flex justify-center sm:justify-start">
+          <Illustration name="lab-header" size={256} className="w-52 h-auto" decorative />
+        </div>
+      )}
       <DocsBody>
         <MDX
           components={getMDXComponents({

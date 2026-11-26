@@ -1,4 +1,9 @@
 {
   "title": "Kubernetes",
-  "pages": ["service-routing", "pods-deployments", "kubectl-cheatsheet"]
+  "pages": [
+    "service-routing",
+    "pods-deployments",
+    "kubectl-cheatsheet"
+  ],
+  "icon": "kubernetes"
 }

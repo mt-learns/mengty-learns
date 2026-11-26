@@ -28,7 +28,7 @@ export function MaterialNav({ children }: { children: ReactNode }) {
   );
 }
 
-export function Tile({ title, description, href, icon, badge, large, section }: { title: string; description: string; href: string; icon?: ReactNode; badge?: string; large?: boolean; section?: string }) {
+export function Tile({ title, description, href, icon, badge, large, section, bareIcon }: { title: string; description: string; href: string; icon?: ReactNode; badge?: string; large?: boolean; section?: string; bareIcon?: boolean }) {
   const [progress, setProgress] = useState<string | null>(null);
 
   useEffect(() => {
@@ -46,9 +46,13 @@ export function Tile({ title, description, href, icon, badge, large, section }: 
     <Link href={href} className={`group relative flex flex-col justify-between rounded-card border bg-card text-card-foreground shadow-sm transition-all hover:shadow-md hover:border-primary/50 min-h-tap ${large ? 'p-8 md:min-h-56' : 'p-6'}`}>
       <div>
         <div className="flex items-center justify-between mb-4">
-          <div className={`${large ? 'h-14 w-14 rounded-[18px]' : 'h-12 w-12 rounded-2xl'} bg-primary/10 flex items-center justify-center text-primary group-hover:scale-105 transition-transform`}>
-            {icon || <Sparkles className="size-5" strokeWidth={1.75} aria-hidden="true" />}
-          </div>
+          {bareIcon && icon ? (
+            <div className="group-hover:scale-105 transition-transform">{icon}</div>
+          ) : (
+            <div className={`${large ? 'h-14 w-14 rounded-[18px]' : 'h-12 w-12 rounded-2xl'} bg-primary/10 flex items-center justify-center text-primary group-hover:scale-105 transition-transform`}>
+              {icon || <Sparkles className="size-5" strokeWidth={1.75} aria-hidden="true" />}
+            </div>
+          )}
           <div className="flex gap-2 items-center">
             {progress && <span className="px-2.5 py-0.5 rounded-pill text-xs font-medium bg-primary/10 text-primary">{progress}</span>}
             {badge && <span className="px-2.5 py-0.5 rounded-pill text-xs font-medium bg-secondary text-secondary-foreground">{badge}</span>}

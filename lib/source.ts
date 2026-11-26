@@ -1,8 +1,10 @@
+import { createElement } from 'react';
 import { llms, loader } from 'fumadocs-core/source';
 import { docsRoute } from './shared';
 import { defineCollections, defineDocs } from 'fumadocs-mdx/macro';
 import { metaSchema, pageSchema } from 'fumadocs-core/source/schema';
 import { z } from 'zod';
+import { SectionIcon, SECTION_ICON_NAMES, type SectionIconName } from '@/components/illustrations';
 
 const frontmatterSchema = pageSchema.extend({
   type: z.enum(['tutorial', 'how-to', 'reference', 'explanation']).optional(),
@@ -46,6 +48,15 @@ const filteredDocsSource =
 export const source = loader({
   baseUrl: docsRoute,
   source: filteredDocsSource,
+  icon(icon) {
+    if (icon && (SECTION_ICON_NAMES as readonly string[]).includes(icon)) {
+      return createElement(SectionIcon, {
+        name: icon as SectionIconName,
+        size: 24,
+        decorative: true,
+      });
+    }
+  },
   plugins: [],
 });
 

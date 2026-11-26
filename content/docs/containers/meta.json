@@ -6,5 +6,6 @@
     "multi-stage-nextjs",
     "dockerfile-best-practices",
     "docker-cheatsheet"
-  ]
+  ],
+  "icon": "containers"
 }
