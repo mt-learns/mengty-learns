@@ -1,0 +1,215 @@
+---
+title: "SQL Injection & Parameterized Queries"
+description: How SQL injection happens, why parameterized queries separate code from data, ORM raw-query escape hatches, and least-privilege database users.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: concept
+type: explanation
+level: beginner
+tags: [security, sqli, database, orm, asvs]
+tested_with:
+  asvs: "5.0.0 (V1)"
+  owasp_top_10: "2025 (A05)"
+cards:
+  - q: "Why do parameterized queries (prepared statements) prevent SQL injection?"
+    a: "The database compiles the SQL structure first and binds user parameters strictly as literal data values, so input can never alter the SQL syntax tree."
+  - q: "When can an app using an ORM still be vulnerable to SQL injection?"
+    a: "When developers use raw-query escape hatches with string interpolation (such as $queryRawUnsafe or raw SQL strings) or interpolate dynamic ORDER BY / column names."
+  - q: "How do you safely support user-chosen sorting (ORDER BY) or column names in SQL?"
+    a: "Bind values cannot parameterize identifiers, so map user input through a strict server-side allowlist of permitted column names and sort directions (ASC/DESC)."
+  - q: "Why should the application database user run with least privilege?"
+    a: "Giving the app account only SELECT/INSERT/UPDATE/DELETE on its own tables prevents an attacker from reading other schemas, dropping tables, or calling admin functions."
+related:
+  - security/owasp-top-10
+  - security/asvs-5-overview
+sources:
+  - title: "OWASP SQL Injection Prevention Cheat Sheet"
+    url: https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
+  - title: "OWASP ASVS 5.0: V1 Encoding and Sanitization"
+    url: https://github.com/OWASP/ASVS
+  - title: "OWASP Top 10:2025 A05 Injection"
+    url: https://top10.owasp.org/2025/
+---
+
+## TL;DR
+**SQL injection (SQLi)** happens when untrusted input is concatenated into a SQL string, letting data rewrite the query's logic. Always use **parameterized queries** (prepared statements), use **strict allowlists** for dynamic table/column identifiers, avoid unsafe ORM raw-query escape hatches, and run the app with a **least-privilege DB role**.
+
+## Intent
+<Intent>
+Understand why string-built SQL lets attackers rewrite query ASTs, how bound parameters eliminate that class of bug, and where ORMs still have sharp edges.
+</Intent>
+
+## Problem
+Concatenating user input into a SQL string mixes **code** and **data** in the same channel. Even with an ORM, developers reach for raw SQL for complex reports or dynamic sorting (`ORDER BY ${sortCol}`)—and one unvalidated template literal reopens the entire database to extraction or tampering.
+
+<Diagram
+  id="sqli-code-vs-data"
+  ariaLabel="String concatenation merges SQL syntax and user data, while parameterized queries separate them"
+  caption="Parameterized queries send the SQL template and bound values in separate channels."
+  nodes={[
+    { id: 'input', label: 'User Input', subtitle: "' OR 1=1--", icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'concat', label: 'String Concat', subtitle: 'Code + data mixed', icon: 'service', category: 'service', rank: 1, order: 0, variant: 'problem' },
+    { id: 'param', label: 'Prepared Query', subtitle: 'SQL + $1 separate', icon: 'gateway', category: 'edge', rank: 1, order: 1 },
+    { id: 'db', label: 'Database', subtitle: 'Executes query', icon: 'db', category: 'data', rank: 2, order: 0 },
+  ]}
+  edges={[
+    { from: 'input', to: 'concat', kind: 'error' },
+    { from: 'concat', to: 'db', kind: 'error' },
+    { from: 'input', to: 'param', kind: 'request' },
+    { from: 'param', to: 'db', kind: 'request' },
+  ]}
+/>
+
+## Solution
+Keep SQL structure and untrusted data strictly separated:
+
+1. **Parameterized queries (prepared statements):** Use `$1` / `?` placeholders (or ORM tagged templates like Prisma `$queryRaw\`...\``). The DB parser compiles the query plan before seeing the parameter bytes.
+2. **Allowlist identifiers:** SQL parameters only work for *values*, not column names, table names, or `ASC`/`DESC`. Map those through a fixed `Record<string, string>` allowlist.
+3. **Least-privilege DB credentials:** The web app's DB role should never be `SUPERUSER` or `db_owner`—restrict it to the required schema and DML operations.
+
+## Real-world analogy
+<Analogy>
+String-built SQL is like handing a blank check with a handwritten memo line to someone who can write "and pay $10,000" right after your words. A **parameterized query** is a printed form with a fixed box for "Name": whatever they write inside that box is read strictly as text, never as a new instruction.
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="sql-injection"
+  title="SQL Injection: String Concat vs Parameterized Query"
+  variants={[
+    {
+      id: 'unsafe',
+      label: 'Unsafe (String Concat)',
+      nodes: [
+        { id: 'user', label: 'Attacker', subtitle: "email = ' OR 1=1--", icon: 'user', category: 'client', rank: 0, order: 0 },
+        { id: 'api', label: 'API Handler', subtitle: 'Interpolates SQL', icon: 'service', category: 'service', rank: 1, order: 0, variant: 'problem' },
+        { id: 'db', label: 'Postgres DB', subtitle: 'Parses altered SQL', icon: 'db', category: 'data', rank: 2, order: 0 },
+      ],
+      steps: [
+        { edge: 'user->api', title: '1. Send crafted email input', text: "Attacker sends email = \"' OR 1=1--\" in the login or search request." },
+        { edge: 'api->db', title: '2. Execute concatenated SQL', text: "API builds SELECT * FROM users WHERE email = '' OR 1=1--' and runs it.", kind: 'error' },
+        { edge: 'db->api', title: '3. Return all user rows', text: 'DB evaluates 1=1 as true and returns every row in the users table.', kind: 'error' },
+        { edge: 'api->user', title: '4. Leak unauthorized data', text: 'API returns data from another account to the attacker.', kind: 'error' },
+      ],
+    },
+    {
+      id: 'safe',
+      label: 'Safe (Parameterized)',
+      nodes: [
+        { id: 'user', label: 'User Input', subtitle: "email = ' OR 1=1--", icon: 'user', category: 'client', rank: 0, order: 0 },
+        { id: 'api', label: 'API Handler', subtitle: 'Uses $1 binding', icon: 'service', category: 'service', rank: 1, order: 0 },
+        { id: 'db', label: 'Postgres DB', subtitle: 'Binds as literal', icon: 'db', category: 'data', rank: 2, order: 0 },
+      ],
+      steps: [
+        { edge: 'user->api', title: '1. Send crafted input', text: "Caller sends email = \"' OR 1=1--\" to the endpoint." },
+        { edge: 'api->db', title: '2. Send SQL template + $1', text: 'API sends SELECT * FROM users WHERE email = $1 with the string bound as $1.' },
+        { edge: 'db->api', title: '3. Match literal string only', text: 'DB searches for a literal email equal to "\' OR 1=1--" and finds 0 rows.', kind: 'response' },
+        { edge: 'api->user', title: '4. Return empty / 404', text: 'API returns 0 results safely without leaking any rows.', kind: 'response' },
+      ],
+    },
+  ]}
+/>
+
+## Code
+Compare unsafe string interpolation and dynamic `ORDER BY` against parameterized queries and an explicit allowlist:
+
+```ts
+// UNSAFE: string interpolation in raw SQL and unvalidated ORDER BY column
+const unsafeUsers = await db.query(
+  `SELECT id, email FROM users WHERE email = '${email}' ORDER BY ${sortBy}`,
+);
+
+// SAFE: parameterized value ($1) + strict allowlist for column identifier (ASVS V1)
+const ALLOWED_SORT = {
+  created_at: 'created_at',
+  email: 'email',
+} as const;
+
+const safeSort = ALLOWED_SORT[sortBy as keyof typeof ALLOWED_SORT] ?? 'created_at';
+const safeUsers = await db.query(
+  `SELECT id, email FROM users WHERE email = $1 ORDER BY ${safeSort} ASC`,
+  [email],
+);
+```
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'Use parameterized queries ($1, ?) or ORM query builders for every SQL value.',
+    'Use a strict server-side allowlist map whenever column names, table names, or sort directions are dynamic.',
+    'Run the application with a dedicated DB role that has only the permissions it needs.',
+  ]}
+  avoid={[
+    'Never try to "fix" SQLi by stripping quotes or keywords with regexes—use prepared statements.',
+    'Never pass interpolated strings into ORM escape hatches ($queryRawUnsafe, sequelize.literal, raw()).',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Ban raw string concatenation
+    Enable lint rules or SAST checks flagging template literals inside `db.query` or `$queryRawUnsafe`.
+  </Step>
+  <Step>
+    ### Allowlist dynamic identifiers
+    Map user-supplied sort or filter keys through a `const` object or `Map` before building `ORDER BY`.
+  </Step>
+  <Step>
+    ### Restrict DB role privileges
+    Separate migration credentials (DDL) from runtime app credentials (DML only).
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'Parameterized queries eliminate SQL injection on values completely and let the DB cache query plans.',
+    'Least-privilege DB roles limit blast radius if another vulnerability occurs.',
+  ]}
+  cons={[
+    'Identifiers (table/column names) cannot be bound as parameters and still require allowlists.',
+    'Legacy stored procedures that concatenate dynamic SQL internally are still vulnerable.',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'OWASP Top 10:2025 Summary',
+      href: '/docs/security/owasp-top-10',
+      summary: 'Where A05:2025 Injection sits in the current OWASP Top 10.',
+    },
+    {
+      name: 'XSS & Content Security Policy',
+      href: '/docs/security/xss-csp',
+      summary: 'The browser-side sibling of injection: untrusted input interpreted as HTML/JS.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "You use an ORM for normal CRUD, but write one reporting endpoint with db.$queryRawUnsafe(`SELECT ... ORDER BY ${req.query.sort}`). Is it safe?",
+    options: [
+      { label: "No—raw-query escape hatches with string interpolation are vulnerable to SQL injection", description: "Use a strict allowlist map for sort columns and bound parameters for values.", correct: true },
+      { label: "Yes—ORMs automatically sanitize all template literals", description: "Escape hatches like $queryRawUnsafe execute raw SQL strings directly." },
+      { label: "Yes—ORDER BY clauses cannot be injected", description: "Attackers can inject CASE/subquery payloads into ORDER BY to extract data." }
+    ]
+  },
+  {
+    question: "Why can't you pass a column name as a $1 bound parameter in SELECT * FROM users ORDER BY $1?",
+    options: [
+      { label: "Bound parameters represent literal data values, not SQL identifiers", description: "In Postgres/SQL, ORDER BY $1 sorts by a constant string literal; use an allowlist map instead.", correct: true },
+      { label: "Databases forbid ORDER BY in prepared statements", description: "ORDER BY works in prepared statements; only the column identifier itself cannot be a parameter." },
+      { label: "Prepared statements only support INSERT queries", description: "Prepared statements work for SELECT, INSERT, UPDATE, and DELETE." }
+    ]
+  }
+]} />
+
+## Sources
+- [OWASP SQL Injection Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html)
+- [OWASP ASVS 5.0 (GitHub)](https://github.com/OWASP/ASVS)
+- [OWASP Top 10:2025](https://top10.owasp.org/2025/)
