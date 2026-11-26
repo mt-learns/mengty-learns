@@ -2,7 +2,8 @@
   "title": "Foundations",
   "pages": [
     "git-cheatsheet",
-    "networking-basics"
+    "networking-basics",
+    "linux-processes-signals"
   ],
   "icon": "foundations"
 }

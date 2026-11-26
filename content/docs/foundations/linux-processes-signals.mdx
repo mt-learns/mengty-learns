@@ -1,0 +1,144 @@
+---
+title: Linux Processes, Signals, and Exit Codes
+description: How PID 1, SIGTERM, graceful shutdown, SIGKILL, exit codes 137 and 143, exec in entrypoints, and tini/--init keep container shutdowns clean.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: note
+type: explanation
+level: intermediate
+tags: [linux, signals, containers, kubernetes, shutdown]
+tested_with:
+  docker: "29.4.3"
+  kubernetes: "1.37 (docs)"
+cards:
+  - q: "Why does a shell wrapper (sh -c 'node server.js') as PID 1 break graceful container shutdown?"
+    a: "Most shells do not forward SIGTERM to child processes, so the app never starts draining and gets killed by SIGKILL after the timeout."
+  - q: "What do container exit codes 143 and 137 mean?"
+    a: "143 (128 + 15) means terminated by SIGTERM; 137 (128 + 9) means killed by SIGKILL (either shutdown timeout or Linux OOM killer)."
+  - q: "What does exec in a shell entrypoint script (exec node server.js) do?"
+    a: "exec replaces the shell process with the application binary so the app becomes PID 1 and receives signals directly."
+  - q: "What problem does tini (or docker run --init) solve when running an app as PID 1?"
+    a: "It acts as a minimal init process at PID 1 that forwards signals to the child process and reaps orphaned zombie processes."
+related:
+  - foundations/networking-basics
+  - containers/dockerfile-best-practices
+  - kubernetes/pods-deployments
+sources:
+  - title: "Linux man-pages: signal(7)"
+    url: https://man7.org/linux/man-pages/man7/signal.7.html
+  - title: "Kubernetes Docs: Pod Lifecycle — Termination of Pods"
+    url: https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-termination
+  - title: "Docker Docs: Dockerfile reference — ENTRYPOINT"
+    url: https://docs.docker.com/reference/dockerfile/#entrypoint
+  - title: "Docker Docs: Run containers — Init process"
+    url: https://docs.docker.com/engine/containers/run/#specify-an-init-process
+---
+
+## TL;DR
+Linux sends `SIGTERM` (`15`) to **PID 1** first, giving your app a grace window (30s default in Kubernetes) to drain requests before sending uncatchable `SIGKILL` (`9`, exit `137`). Use JSON-array `CMD`/`ENTRYPOINT` or `exec` so a shell doesn't swallow `SIGTERM`, and add `tini` (`--init`) if your app spawns child processes.
+
+## Why it exists
+During a rolling deploy or scale-down, dropping active HTTP requests causes `502 Bad Gateway` errors for users. Graceful shutdown only works if the Linux kernel's `SIGTERM` actually reaches your application process and your code handles it before `SIGKILL` arrives.
+
+## Mental model
+In Linux, exit codes above `128` encode `128 + signal_number`:
+- **`SIGTERM` (signal `15`) → exit `143`** (`128 + 15`), unless your app catches `SIGTERM` and calls `process.exit(0)` (which exits `0`).
+- **`SIGKILL` (signal `9`) → exit `137`** (`128 + 9`). Cannot be caught or ignored; either the shutdown grace period expired or the kernel OOM killer terminated the process.
+
+PID 1 is special in Linux: the kernel ignores default signal dispositions for PID 1 unless the process explicitly installs a signal handler, and PID 1 is responsible for reaping orphaned child ("zombie") processes.
+
+## ▶ Flow: watch it work
+<Flow
+  id="linux-processes-signals"
+  title="Kubernetes Graceful Shutdown Sequence (terminationGracePeriodSeconds)"
+  nodes={[
+    { id: 'kubelet', label: 'kubelet', subtitle: 'Node agent', icon: 'gateway', category: 'edge', rank: 0, order: 0 },
+    { id: 'pid1', label: 'PID 1 App', subtitle: 'Node / Go binary', icon: 'pod', category: 'service', rank: 1, order: 0 },
+    { id: 'server', label: 'HTTP Server', subtitle: 'In-flight reqs', icon: 'service', category: 'concrete', rank: 2, order: 0 },
+    { id: 'sigkill', label: 'SIGKILL (9)', subtitle: 'Timeout exit 137', icon: 'ci', category: 'external', rank: 1, order: 1 },
+  ]}
+  steps={[
+    { edge: 'kubelet->pid1', title: 'Send SIGTERM (15)', text: 'kubelet sends SIGTERM to PID 1 and starts the 30s terminationGracePeriodSeconds timer.', label: 'SIGTERM' },
+    { edge: 'pid1->server', title: 'Stop accepting new requests', text: 'Signal handler calls server.close() so new connections are refused while active ones finish.' },
+    { edge: 'server->pid1', title: 'In-flight requests drain', text: 'Active HTTP handlers finish and database connection pools close cleanly.', kind: 'response', label: 'Drained' },
+    { edge: 'pid1->kubelet', title: 'Process exits cleanly', text: 'PID 1 exits with code 0 (or 143) before the grace period expires.', kind: 'response', label: 'Exit 0' },
+    { edge: 'kubelet->sigkill', title: 'Grace period expires', text: 'If PID 1 ignored SIGTERM for 30s, kubelet sends uncatchable SIGKILL (exit 137).', kind: 'error', label: 'SIGKILL' },
+  ]}
+/>
+
+## Do it
+
+### 1. Avoid the shell-form `CMD` trap
+Use the **exec form** (`["node", "server.mjs"]`) in your `Dockerfile`, or `exec "$@"` in an entrypoint script, so the shell does not sit at PID 1 and swallow `SIGTERM`:
+
+```dockerfile
+# Good: node runs directly as PID 1
+CMD ["node", "server.mjs"]
+```
+
+```bash
+#!/bin/sh
+# Good: exec replaces the shell with the app binary (not run)
+set -eu
+exec "$@"
+```
+
+### 2. Use `tini` / `--init` when spawning subprocesses
+Node.js or Python apps that fork worker processes do not reap zombie children if they run as PID 1. Wrap them with `tini` (or `docker run --init`):
+
+```bash
+# Run with Docker's built-in tini init at PID 1 (not run)
+docker run --init --rm node:22-alpine3.21 node server.mjs
+```
+
+### 3. Handle `SIGTERM` in application code
+```javascript
+// Minimal graceful shutdown handler in Node.js (not run)
+process.on('SIGTERM', () => {
+  server.close(() => {
+    process.exit(0);
+  });
+});
+```
+
+## When you DON'T need this
+- **Static sites or serverless functions:** Static exports on a CDN or managed isolates (like Cloudflare Workers) handle request draining and process lifecycle in the platform—there is no PID 1 for you to manage.
+- **Short-lived CLI / batch containers:** A one-off build or lint container that exits on completion doesn't need HTTP connection draining (though `exec` still helps `Ctrl+C` work locally).
+- **Cost / complexity trade-off:** Using exec-form `CMD` and a 10-line `SIGTERM` handler is virtually free. Adding `tini` adds ~100 KB to an image and is only necessary if your container spawns child processes or your runtime doesn't handle PID 1 signal semantics.
+
+## Gotchas
+- **Shell-form `CMD node server.mjs`:** Docker wraps it in `/bin/sh -c "node server.mjs"`. `sh` becomes PID 1, ignores `SIGTERM`, and every `kubectl delete pod` hangs for 30 seconds before dying with `137`.
+- **Confusing OOMKilled with slow shutdown:** Both produce exit code `137` (`SIGKILL`). Always check `kubectl describe pod` (`Reason: OOMKilled` vs `Completed`/`Error`) rather than guessing from `137` alone.
+- **Kubernetes removes Pod from EndpointSlice in parallel with `SIGTERM`:** Traffic can still arrive for a few hundred milliseconds while `kube-proxy` updates rules; a short `preStop` sleep (`sleep 2`) prevents dropped requests during rolling updates.
+
+## Production checklist
+- [ ] `Dockerfile` uses JSON-array `CMD`/`ENTRYPOINT` (or `exec "$@"` in entrypoint scripts).
+- [ ] Application registers a `SIGTERM` handler that closes listeners and DB pools.
+- [ ] `terminationGracePeriodSeconds` is longer than your longest expected request or `preStop` hook.
+- [ ] Multi-process containers use `tini` or `--init` to reap zombie processes.
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "Every deploy of your Pod takes 30 seconds per replica to terminate and exits with code 137. What is the most likely cause?",
+    options: [
+      { label: "PID 1 is a shell or app ignoring SIGTERM, so kubelet sends SIGKILL after terminationGracePeriodSeconds", description: "Exit 137 is 128 + 9 (SIGKILL). Fix it by using exec-form CMD or exec \"$@\" and handling SIGTERM.", correct: true },
+      { label: "The container ran out of disk space", description: "Disk exhaustion does not send SIGKILL (signal 9) after 30 seconds." },
+      { label: "Exit code 137 means graceful shutdown succeeded", description: "Graceful shutdown exits with 0 (or 143 for default SIGTERM)." }
+    ]
+  },
+  {
+    question: "Why does exec \"$@\" at the end of a Docker entrypoint script fix signal handling?",
+    options: [
+      { label: "It replaces the shell process with the target command so the app becomes PID 1", description: "With the app at PID 1, SIGTERM goes directly to your process instead of being swallowed by /bin/sh.", correct: true },
+      { label: "It runs the command in the background and keeps the shell alive", description: "exec replaces the current process; it does not fork a background job." },
+      { label: "It increases terminationGracePeriodSeconds automatically", description: "terminationGracePeriodSeconds is a Kubernetes Pod spec setting, not controlled by exec." }
+    ]
+  }
+]} />
+
+## Sources
+- [Linux man-pages: signal(7)](https://man7.org/linux/man-pages/man7/signal.7.html)
+- [Kubernetes Docs: Pod Lifecycle — Termination of Pods](https://kubernetes.io/docs/concepts/workloads/pods/pod-lifecycle/#pod-termination)
+- [Docker Docs: Dockerfile reference — ENTRYPOINT](https://docs.docker.com/reference/dockerfile/#entrypoint)
+- [Docker Docs: Run containers — Init process](https://docs.docker.com/engine/containers/run/#specify-an-init-process)
