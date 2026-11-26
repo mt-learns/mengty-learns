@@ -4,6 +4,7 @@
     "oop-pillars",
     "solid",
     "composition-vs-inheritance",
+    "dependency-injection",
     "factory-method",
     "adapter",
     "bridge",
