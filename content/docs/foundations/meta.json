@@ -5,7 +5,8 @@
     "networking-basics",
     "linux-processes-signals",
     "reverse-proxy-tls",
-    "backups-and-dr"
+    "backups-and-dr",
+    "observability"
   ],
   "icon": "foundations"
 }
