@@ -6,6 +6,21 @@ level: intermediate
 tags: [ci-cd, github-actions]
 status: stable
 updated: 2026-11-26
+verified: 2026-11-26
+kind: note
+cards:
+  - q: "What triggers a GitHub Actions workflow?"
+    a: "Events such as push, pull_request, schedule, or workflow_dispatch."
+  - q: "Why should you pin action versions to a full SHA?"
+    a: "To prevent supply chain attacks if a tag is maliciously overwritten."
+  - q: "How do you cache dependencies in GitHub Actions?"
+    a: "Using the official actions/cache action or language-specific setup actions with caching enabled."
+related:
+  - containers/docker-basics
+  - kubernetes/kubectl-cheatsheet
+sources:
+  - title: GitHub Actions Documentation
+    url: https://docs.github.com/en/actions
 ---
 
 # GitHub Actions Workflow

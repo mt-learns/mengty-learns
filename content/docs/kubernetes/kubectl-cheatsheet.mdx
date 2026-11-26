@@ -6,6 +6,21 @@ level: intermediate
 tags: [kubernetes, kubectl]
 status: stable
 updated: 2026-11-26
+verified: 2026-11-26
+kind: cheatsheet
+cards:
+  - q: "How do you view logs of a running pod in Kubernetes?"
+    a: "kubectl logs <pod-name>"
+  - q: "How do you open an interactive shell inside a running container?"
+    a: "kubectl exec -it <pod-name> -- /bin/bash"
+  - q: "How do you get built-in documentation for a resource field?"
+    a: "kubectl explain <resource>.<field>"
+related:
+  - containers/docker-basics
+  - ci-cd/github-actions
+sources:
+  - title: Kubectl Reference Documentation
+    url: https://kubernetes.io/docs/reference/generated/kubectl/kubectl-commands
 ---
 
 # Kubectl Cheatsheet
