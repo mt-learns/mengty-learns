@@ -57,13 +57,11 @@ export function RadarFilter({ entries }: { entries: RadarEntryItem[] }) {
 
   return (
     <div className="flex flex-col gap-8">
-      <div className="overflow-x-auto pb-1">
-        <SegmentedControl
-          items={[...QUADRANTS]}
-          active={quadrant}
-          onChange={setQuadrant}
-        />
-      </div>
+      <SegmentedControl
+        items={[...QUADRANTS]}
+        active={quadrant}
+        onChange={setQuadrant}
+      />
 
       {!hasAny ? (
         <div className="rounded-card border border-border bg-card p-8 text-center text-subheadline text-muted-foreground">
@@ -116,7 +114,7 @@ export function RadarFilter({ entries }: { entries: RadarEntryItem[] }) {
                             className="inline-flex items-center gap-1 min-h-tap sm:min-h-0 text-footnote font-medium text-primary hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring rounded-control"
                           >
                             <span>Note: {rel.title}</span>
-                            <ArrowUpRight className="size-3.5" aria-hidden="true" />
+                            <ArrowUpRight className="size-4" strokeWidth={1.75} aria-hidden="true" />
                           </Link>
                         ))}
                         {item.sources.map((src) => (
@@ -128,7 +126,7 @@ export function RadarFilter({ entries }: { entries: RadarEntryItem[] }) {
                             className="inline-flex items-center gap-1 min-h-tap sm:min-h-0 text-footnote text-muted-foreground hover:text-foreground hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring rounded-control"
                           >
                             <span>{src.title}</span>
-                            <ExternalLink className="size-3" aria-hidden="true" />
+                            <ExternalLink className="size-4" strokeWidth={1.75} aria-hidden="true" />
                           </a>
                         ))}
                       </div>

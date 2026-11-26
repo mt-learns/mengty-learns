@@ -16,7 +16,7 @@ export function LabLink({ name, href, description, command }: LabLinkProps) {
     <div className="my-6 flex flex-col justify-between gap-3 rounded-panel border border-border bg-card p-4 sm:flex-row sm:items-center">
       <div className="flex items-start gap-3">
         <span className="inline-flex size-9 shrink-0 items-center justify-center rounded-control bg-primary/10 text-primary">
-          <FlaskConical className="size-4" aria-hidden="true" />
+          <FlaskConical className="size-4" strokeWidth={1.75} aria-hidden="true" />
         </span>
         <div className="min-w-0">
           <div className="text-subheadline font-headline text-foreground">
@@ -36,10 +36,10 @@ export function LabLink({ name, href, description, command }: LabLinkProps) {
       {href && (
         <Link
           href={href}
-          className="inline-flex min-h-tap shrink-0 items-center justify-center gap-1.5 rounded-control bg-primary px-4 py-2 text-footnote font-headline text-primary-foreground no-underline transition-opacity hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          className="inline-flex min-h-tap shrink-0 items-center justify-center gap-1.5 rounded-control bg-primary px-4 py-2 text-footnote font-headline text-primary-foreground no-underline transition-opacity motion-reduce:transition-none hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
         >
           <span>Open lab</span>
-          <ExternalLink className="size-3.5" aria-hidden="true" />
+          <ExternalLink className="size-4" strokeWidth={1.75} aria-hidden="true" />
         </Link>
       )}
     </div>

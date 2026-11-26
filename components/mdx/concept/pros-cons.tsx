@@ -13,7 +13,7 @@ export function ProsCons({ pros, cons }: ProsConsProps) {
     <div className="my-6 grid grid-cols-1 gap-4 sm:grid-cols-2">
       <div className="rounded-panel border border-border bg-card p-5">
         <div className="mb-3 flex items-center gap-2 text-subheadline font-headline text-primary">
-          <CheckCircle2 className="size-4 shrink-0" aria-hidden="true" />
+          <CheckCircle2 className="size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
           <span>Pros</span>
         </div>
         <ul className="m-0 list-none space-y-2 p-0 text-subheadline text-card-foreground">
@@ -28,7 +28,7 @@ export function ProsCons({ pros, cons }: ProsConsProps) {
 
       <div className="rounded-panel border border-border bg-card p-5">
         <div className="mb-3 flex items-center gap-2 text-subheadline font-headline text-destructive">
-          <AlertCircle className="size-4 shrink-0" aria-hidden="true" />
+          <AlertCircle className="size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
           <span>Cons</span>
         </div>
         <ul className="m-0 list-none space-y-2 p-0 text-subheadline text-card-foreground">

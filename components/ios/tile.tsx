@@ -6,7 +6,7 @@ import { Sparkles } from 'lucide-react';
 import { source } from '@/lib/source';
 
 export function SectionIcon({ name, className = 'h-6 w-6' }: { name: string; className?: string }) {
-  const common = { className, fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
+  const common = { className, fill: 'none', stroke: 'currentColor', strokeWidth: 1.75, strokeLinecap: 'round' as const, strokeLinejoin: 'round' as const };
   const icons: Record<string, ReactNode> = {
     learn: <svg viewBox="0 0 24 24" {...common}><path d="M12 3l8 4-8 4-8-4 8-4z" /><path d="M4 11l8 4 8-4" /><path d="M4 15l8 4 8-4" /></svg>,
     containers: <svg viewBox="0 0 24 24" {...common}><rect x="3" y="5" width="18" height="14" rx="3" /><path d="M7 9h2v6H7zM11 9h2v6h-2zM15 9h2v6h-2z" /></svg>,
@@ -43,13 +43,13 @@ export function Tile({ title, description, href, icon, badge, large, section, ba
   }, [section]);
 
   return (
-    <Link href={href} className={`group relative flex flex-col justify-between rounded-card border bg-card text-card-foreground shadow-sm transition-all hover:shadow-md hover:border-primary/50 min-h-tap ${large ? 'p-8 md:min-h-56' : 'p-6'}`}>
+    <Link href={href} className={`group relative flex flex-col justify-between rounded-card border bg-card text-card-foreground shadow-sm transition-all motion-reduce:transition-none hover:shadow-md hover:border-primary/50 min-h-tap ${large ? 'p-8 md:min-h-56' : 'p-6'}`}>
       <div>
         <div className="flex items-center justify-between mb-4">
           {bareIcon && icon ? (
-            <div className="group-hover:scale-105 transition-transform">{icon}</div>
+            <div className="group-hover:scale-105 transition-transform motion-reduce:transition-none motion-reduce:transform-none">{icon}</div>
           ) : (
-            <div className={`${large ? 'h-14 w-14 rounded-[18px]' : 'h-12 w-12 rounded-2xl'} bg-primary/10 flex items-center justify-center text-primary group-hover:scale-105 transition-transform`}>
+            <div className={`${large ? 'h-14 w-14 rounded-[18px]' : 'h-12 w-12 rounded-2xl'} bg-primary/10 flex items-center justify-center text-primary group-hover:scale-105 transition-transform motion-reduce:transition-none motion-reduce:transform-none`}>
               {icon || <Sparkles className="size-5" strokeWidth={1.75} aria-hidden="true" />}
             </div>
           )}

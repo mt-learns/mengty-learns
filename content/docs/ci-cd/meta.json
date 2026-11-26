@@ -1,5 +1,5 @@
 {
-  "title": "Ci Cd",
+  "title": "CI/CD",
   "pages": [
     "github-actions",
     "this-site-pipeline"
