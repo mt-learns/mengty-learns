@@ -1,0 +1,102 @@
+---
+title: "Retrospectives That Actually Change Things"
+description: Pick a retro format (Start/Stop/Continue, 4Ls, Sailboat), turn insights into 1–3 owned actions, and run a 15-minute solo-developer weekly retro.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: cheatsheet
+type: reference
+level: beginner
+tags: [process, retrospectives, continuous-improvement, solo-dev]
+tested_with:
+  cadence: "biweekly-or-weekly"
+cards:
+  - q: "What is the biggest reason engineering retrospectives fail?"
+    a: "Generating a long list of complaints with zero concrete, owned action items—so the exact same problems repeat every two weeks."
+  - q: "How many action items should a team commit to from a single retrospective?"
+    a: "1 to 3 concrete items, each with one owner and a due date. More than 3 almost never get finished."
+  - q: "What are the four quadrants of the 4Ls retrospective format?"
+    a: "Liked, Learned, Lacked, and Longed for."
+  - q: "In the Sailboat retrospective metaphor, what do Wind, Anchor, Rocks, and Island represent?"
+    a: "Wind = what pushes us forward; Anchor = what slows us down; Rocks = upcoming risks; Island = the team's goal."
+related:
+  - process/scrum-kanban-waterfall
+  - process/incident-management
+  - process/idea-to-production
+sources:
+  - title: "Atlassian Team Playbook: Retrospective"
+    url: https://www.atlassian.com/team-playbook/plays/retrospective
+  - title: "Agile Manifesto: Principles (Principle 12)"
+    url: https://agilemanifesto.org/principles.html
+---
+
+## TL;DR
+A retrospective is only useful if it changes next week's behavior. Pick a simple prompt (**Start/Stop/Continue**, **4Ls**, or **Sailboat**), review last retro's actions first, and leave with **1–3 owned, tracked changes**—not a wish list.
+
+## 1. Three lightweight formats
+
+| Format | Prompts | Best when |
+|---|---|---|
+| **Start / Stop / Continue** | What should we **start** doing? **Stop** doing? **Continue** doing? | Default choice; fast and action-oriented (15–30 min) |
+| **4Ls** | **Liked**, **Learned**, **Lacked**, **Longed for** | After a major launch or learning wave (surfaces missing tools/knowledge) |
+| **Sailboat** | **Wind** (helps), **Anchor** (drags), **Rocks** (risks), **Island** (goal) | Re-aligning on a shared goal and spotting upcoming risks |
+
+## 2. Turning talk into tracked actions
+Follow a 4-step agenda so the retro doesn't drift into venting:
+1. **Check last retro's actions (3 min):** Did we finish them? If not, drop or re-commit—don't silently carry 10 stale items.
+2. **Silent brainstorm (5 min):** Everyone writes notes silently first so quiet voices aren't drowned out.
+3. **Dot-vote top 2 themes (5 min):** Discuss *why* the top 2 happened, not every minor annoyance.
+4. **Assign 1–3 actions (5 min):** Every action needs **What** + **1 Owner** + **Where it's tracked** (GitHub Issue or backlog card).
+
+## 3. Solo-developer weekly retro (15 minutes, Friday)
+Working alone (or with AI agents) still benefits from a 15-minute weekly pause:
+```markdown
+## Weekly Retro — YYYY-MM-DD
+- **Shipped:** (2–3 bullets: what actually reached main/prod?)
+- **Friction:** (What wasted > 30 min? e.g., flaky test, unclear prompt, missing script)
+- **One change for next week:** (1 concrete fix—e.g., "Add AGENTS.md rule for PowerShell `;`")
+```
+Notice how updating `AGENTS.md`, templates, or CI scripts turns a solo retro insight into permanent leverage for every future AI agent session.
+
+## Minimum viable version (1–3 person team + AI agents)
+- **15–25 minutes every 2 weeks** using **Start / Stop / Continue** in a shared markdown file.
+- Cap actions at **2 items max**, both added to the active board so they compete fairly with feature work.
+
+## When it's overkill
+- Running a 90-minute facilitated workshop with icebreakers for a **2-person team** that pairs every day.
+- Tracking 12 "action items" in a separate Confluence page nobody opens until the next retro.
+
+## Gotchas
+- **Zero follow-through:** Nothing kills morale faster than raising the same CI pain 4 retros in a row with no fix.
+- **Turning retros into blame sessions:** Focus on *systems, scripts, and clarity*, not who broke the build.
+- **Skipping the check-in on old actions:** Always open the retro by marking last week's actions Done or Dropped.
+
+## Production checklist
+- [ ] Retro cadence is on the calendar (weekly 15 min solo, or biweekly 25 min for 2–3 people).
+- [ ] Last retro's action items are reviewed at the start of every session.
+- [ ] Output is capped at **1–3 concrete actions**, each with **one owner** and a **ticket/issue**.
+- [ ] Process fixes (CI tweaks, template updates, `AGENTS.md` rules) are committed to the repo.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "Why should a retrospective cap its output at 1 to 3 action items?",
+    options: [
+      { label: "Small, owned action lists actually get completed alongside feature work instead of becoming an ignored wish list", description: "Focus beats a 12-item backlog of good intentions that nobody has time to finish.", correct: true },
+      { label: "Because Agile Manifesto Principle 12 forbids more than 3 items", description: "Principle 12 only says teams should regularly reflect and adjust; 1–3 is a practical cap." },
+      { label: "So the team can skip reviewing previous actions", description: "You should always review previous actions at the start of the next retro." }
+    ]
+  },
+  {
+    question: "In the Sailboat retrospective format, what does the 'Anchor' represent?",
+    options: [
+      { label: "Things slowing the team down (manual steps, flaky CI, unclear specs)", description: "Anchors drag the boat back; Rocks are future risks, Wind is what helps, and the Island is the goal.", correct: true },
+      { label: "The team's long-term product vision", description: "The vision/goal is represented by the Island." },
+      { label: "Upcoming external security risks", description: "Future risks and hazards are represented by the Rocks." }
+    ]
+  }
+]} />
+
+## Sources
+- [Atlassian Team Playbook: Retrospective](https://www.atlassian.com/team-playbook/plays/retrospective)
+- [Agile Manifesto: Principles](https://agilemanifesto.org/principles.html)
