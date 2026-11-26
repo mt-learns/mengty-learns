@@ -59,6 +59,8 @@
 | 5.5 | Edges must not pass through nodes or group labels (dagre routing plus the §9 test). |
 | 5.6 | **Stroke:** idle 1.5px in `--border-strong` (≥ 3:1 against the canvas, per WCAG 1.4.11). Visited 2px accent at 55%. Active 2.5px accent. Response is dashed (6 4). Error uses `--destructive`. |
 | 5.7 | The arrowhead is 10px and stops **4px before** the node border. One arrowhead per edge. |
+| 5.8 | **Every edge attaches to a node handle at both ends.** No free-floating ends and no arrows that stop in empty space. |
+| 5.9 | **Skip-rank edges** (an edge connecting nodes more than one rank apart) are allowed only when the content really skips the middle node. They're routed in a dedicated lane **≥ 24px clear** of the nodes they pass, enter the target from its side handle, and never run along or under another node's border. If the hop doesn't really skip the middle node, model it as separate edges. |
 
 ## 6. Step badges and labels
 
@@ -102,4 +104,5 @@
 - [ ] `rank`/`order` hints only, no pixel coordinates
 - [ ] Every step has a `title` (≤ 6 words) and `text` (≤ 2 lines)
 - [ ] Response steps marked `kind: 'response'` and errors `kind: 'error'`
+- [ ] **Responses retrace the real path:** if the request went Browser → Gateway → API, the response goes API → Gateway → Browser (2 steps), not API → Browser directly. Draw a direct skip edge (§5.9) only when the system really bypasses the middle hop (e.g. a CDN, or direct server return).
 - [ ] `pnpm qa:diagrams` screenshots reviewed at 360 and 1280, light and dark
