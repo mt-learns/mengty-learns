@@ -4,7 +4,8 @@
     "github-actions",
     "pipeline-anatomy",
     "this-site-pipeline",
-    "deploy-and-rollback"
+    "deploy-and-rollback",
+    "oidc-not-keys"
   ],
   "icon": "ci-cd"
 }
