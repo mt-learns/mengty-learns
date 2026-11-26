@@ -3,7 +3,8 @@
   "pages": [
     "github-actions",
     "pipeline-anatomy",
-    "this-site-pipeline"
+    "this-site-pipeline",
+    "deploy-and-rollback"
   ],
   "icon": "ci-cd"
 }
