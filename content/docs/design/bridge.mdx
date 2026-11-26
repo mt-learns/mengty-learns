@@ -94,16 +94,16 @@ Think of a universal remote and a TV. The remote's buttons (Power, Volume Up, Mu
   caption="Composition over inheritance: Abstraction delegates to the Implementor interface."
   nodes={[
     { id: 'remote', label: 'RemoteControl', subtitle: '- device: Device', icon: 'class', category: 'service', rank: 0, order: 0 },
-    { id: 'adv', label: 'AdvancedRemote', subtitle: 'Refined Abstraction', icon: 'class', category: 'service', rank: 0, order: 1 },
-    { id: 'device', label: 'Device', subtitle: '«interface»', icon: 'interface', category: 'edge', rank: 1, order: 0 },
+    { id: 'adv', label: 'AdvancedRemote', subtitle: 'Refined Abstraction', icon: 'class', category: 'service', rank: 1, order: 0 },
+    { id: 'device', label: 'Device', subtitle: '«interface»', icon: 'interface', category: 'edge', rank: 1, order: 1 },
     { id: 'tv', label: 'TV', subtitle: 'Concrete', icon: 'service', category: 'external', rank: 2, order: 0 },
     { id: 'radio', label: 'Radio', subtitle: 'Concrete', icon: 'service', category: 'external', rank: 2, order: 1 },
   ]}
   edges={[
     { from: 'remote', to: 'device', label: 'bridge' },
-    { from: 'adv', to: 'remote' },
-    { from: 'tv', to: 'device', kind: 'response', dashed: true },
-    { from: 'radio', to: 'device', kind: 'response', dashed: true },
+    { from: 'remote', to: 'adv' },
+    { from: 'device', to: 'tv', kind: 'response', dashed: true },
+    { from: 'device', to: 'radio', kind: 'response', dashed: true },
   ]}
 />
 

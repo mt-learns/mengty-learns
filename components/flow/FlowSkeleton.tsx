@@ -80,13 +80,13 @@ export function FlowSkeleton({
 
   return (
     <div
+      role="img"
       className="flex h-full w-full items-center justify-center p-4"
       aria-label={title ? `${title} diagram preview` : 'Flow diagram preview'}
     >
       <svg
         viewBox={`0 0 ${width} ${height}`}
         className="h-auto max-h-full w-full max-w-full"
-        role="img"
         aria-hidden="true"
       >
         {edgeLines.map((e) => (

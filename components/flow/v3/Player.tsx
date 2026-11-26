@@ -482,7 +482,7 @@ export function Player({
                   onClick={() => goToStep(idx)}
                   aria-label={`Go to step ${idx + 1}: ${getStepHeadline(step, idx)}`}
                   aria-current={isCurrent ? 'step' : undefined}
-                  className="inline-flex min-h-tap items-center justify-center px-1"
+                  className="inline-flex min-h-tap min-w-[24px] items-center justify-center px-1"
                 >
                   <span
                     className={cn(

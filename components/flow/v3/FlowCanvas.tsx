@@ -153,12 +153,18 @@ function FlowCanvasInner({
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
       if (panMode) {
-        const yOffset = Math.max(
-          16,
-          Math.round((canvasHeight - bounds.height * MIN_READABLE_ZOOM) / 2),
-        );
+        const scaledW = bounds.width * MIN_READABLE_ZOOM;
+        const xOffset =
+          scaledW < containerWidth
+            ? Math.round((containerWidth - scaledW) / 2)
+            : 16;
+        const scaledH = bounds.height * MIN_READABLE_ZOOM;
+        const yOffset =
+          scaledH < canvasHeight
+            ? Math.round((canvasHeight - scaledH) / 2)
+            : 16;
         reactFlow.setViewport(
-          { x: 16, y: yOffset, zoom: MIN_READABLE_ZOOM },
+          { x: xOffset, y: yOffset, zoom: MIN_READABLE_ZOOM },
           { duration: 0 },
         );
       } else {
@@ -170,7 +176,16 @@ function FlowCanvasInner({
       }
     });
     return () => cancelAnimationFrame(frame);
-  }, [reactFlow, flowKey, containerWidth, direction, panMode, canvasHeight, bounds.height]);
+  }, [
+    reactFlow,
+    flowKey,
+    containerWidth,
+    direction,
+    panMode,
+    canvasHeight,
+    bounds.width,
+    bounds.height,
+  ]);
 
   return (
     <div

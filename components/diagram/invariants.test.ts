@@ -1,0 +1,360 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { describe, expect, it } from 'vitest';
+import {
+  buildSkipRankPath,
+  buildSmoothStepSvgPath,
+  buildTreeBusPath,
+  computeDiagramLayout,
+  getHandleCoords,
+  type NodeBox,
+} from './layout';
+import {
+  parseDiagramProps,
+  parseFlowProps,
+  type DiagramProps,
+  type FlowProps,
+} from './types';
+
+const DOCS_DIR = path.resolve(process.cwd(), 'content/docs');
+const OWNED_MDX_FILES = [
+  'design/bridge.mdx',
+  'kubernetes/service-routing.mdx',
+  'architecture/layered.mdx',
+  'architecture/hexagonal.mdx',
+  'architecture/dependency-inversion.mdx',
+  'architecture/compare-styles.mdx',
+  'kitchen-sink.mdx',
+];
+
+const TEST_WIDTHS = [320, 360, 720, 1024] as const;
+
+/**
+ * Extracts JSX prop objects from <Flow ... /> and <Diagram ... /> tags in MDX.
+ */
+function extractTagProps(source: string, tagName: 'Flow' | 'Diagram'): Record<string, unknown>[] {
+  const results: Record<string, unknown>[] = [];
+  const openToken = `<${tagName}`;
+  let idx = 0;
+
+  while (idx < source.length) {
+    const start = source.indexOf(openToken, idx);
+    if (start === -1) break;
+    const afterName = source[start + openToken.length];
+    if (afterName && !/\s/.test(afterName)) {
+      idx = start + openToken.length;
+      continue;
+    }
+
+    // Walk until self-closing '/>' outside braces and strings
+    let braceDepth = 0;
+    let inSingle = false;
+    let inDouble = false;
+    let pos = start + openToken.length;
+    let tagEnd = -1;
+
+    while (pos < source.length) {
+      const ch = source[pos];
+      const prev = source[pos - 1];
+      if (ch === "'" && !inDouble && prev !== '\\') {
+        inSingle = !inSingle;
+      } else if (ch === '"' && !inSingle && prev !== '\\') {
+        inDouble = !inDouble;
+      } else if (!inSingle && !inDouble) {
+        if (ch === '{') braceDepth++;
+        else if (ch === '}') braceDepth--;
+        else if (braceDepth === 0 && ch === '/' && source[pos + 1] === '>') {
+          tagEnd = pos + 2;
+          break;
+        }
+      }
+      pos++;
+    }
+
+    if (tagEnd === -1) break;
+    const body = source.slice(start + openToken.length, tagEnd - 2);
+    results.push(parseJsxAttributes(body));
+    idx = tagEnd;
+  }
+
+  return results;
+}
+
+function parseJsxAttributes(attrSource: string): Record<string, unknown> {
+  const obj: Record<string, unknown> = {};
+  let i = 0;
+
+  while (i < attrSource.length) {
+    while (i < attrSource.length && /\s/.test(attrSource[i])) i++;
+    if (i >= attrSource.length) break;
+
+    const nameMatch = /^[a-zA-Z_][a-zA-Z0-9_]*/.exec(attrSource.slice(i));
+    if (!nameMatch) {
+      i++;
+      continue;
+    }
+    const key = nameMatch[0];
+    i += key.length;
+
+    while (i < attrSource.length && /\s/.test(attrSource[i])) i++;
+    if (attrSource[i] !== '=') {
+      obj[key] = true;
+      continue;
+    }
+    i++; // skip '='
+    while (i < attrSource.length && /\s/.test(attrSource[i])) i++;
+
+    if (attrSource[i] === '"' || attrSource[i] === "'") {
+      const quote = attrSource[i];
+      i++;
+      const start = i;
+      while (i < attrSource.length && attrSource[i] !== quote) i++;
+      obj[key] = attrSource.slice(start, i);
+      i++;
+    } else if (attrSource[i] === '{') {
+      let depth = 0;
+      let inSingle = false;
+      let inDouble = false;
+      const start = i + 1;
+      while (i < attrSource.length) {
+        const ch = attrSource[i];
+        const prev = attrSource[i - 1];
+        if (ch === "'" && !inDouble && prev !== '\\') inSingle = !inSingle;
+        else if (ch === '"' && !inSingle && prev !== '\\') inDouble = !inDouble;
+        else if (!inSingle && !inDouble) {
+          if (ch === '{') depth++;
+          else if (ch === '}') {
+            depth--;
+            if (depth === 0) {
+              const expr = attrSource.slice(start, i);
+              obj[key] = new Function(`return (${expr})`)();
+              i++;
+              break;
+            }
+          }
+        }
+        i++;
+      }
+    }
+  }
+
+  return obj;
+}
+
+function rectsOverlap(
+  a: { x: number; y: number; width: number; height: number },
+  b: { x: number; y: number; width: number; height: number },
+  margin = 0,
+): boolean {
+  return (
+    a.x < b.x + b.width - margin &&
+    a.x + a.width > b.x + margin &&
+    a.y < b.y + b.height - margin &&
+    a.y + a.height > b.y + margin
+  );
+}
+
+function assertLayoutInvariants(
+  label: string,
+  layoutResult: ReturnType<typeof computeDiagramLayout>,
+  rawNodes: { id: string; rank?: number }[],
+) {
+  const boxes = [...layoutResult.nodes.values()];
+
+  // 1. All nodes inside bounds
+  for (const box of boxes) {
+    expect(box.x, `${label} ${box.id} x >= 0`).toBeGreaterThanOrEqual(0);
+    expect(box.y, `${label} ${box.id} y >= 0`).toBeGreaterThanOrEqual(0);
+    expect(
+      box.x + box.width,
+      `${label} ${box.id} right <= bounds.width`,
+    ).toBeLessThanOrEqual(layoutResult.bounds.width + 0.5);
+    expect(
+      box.y + box.height,
+      `${label} ${box.id} bottom <= bounds.height`,
+    ).toBeLessThanOrEqual(layoutResult.bounds.height + 0.5);
+  }
+
+  // 2. No node-node overlaps
+  for (let i = 0; i < boxes.length; i++) {
+    for (let j = i + 1; j < boxes.length; j++) {
+      expect(
+        rectsOverlap(boxes[i], boxes[j], 0.5),
+        `${label} nodes ${boxes[i].id} and ${boxes[j].id} must not overlap`,
+      ).toBe(false);
+    }
+  }
+
+  // 3. No node-group-label overlaps (top 28px of group box is reserved for label)
+  for (const group of layoutResult.groups) {
+    const labelRect = {
+      x: group.x,
+      y: group.y,
+      width: group.width,
+      height: 28,
+    };
+    for (const box of boxes) {
+      expect(
+        rectsOverlap(box, labelRect, 0.5),
+        `${label} node ${box.id} must not overlap group label ${group.id}`,
+      ).toBe(false);
+    }
+  }
+
+  // 4. No node-badge overlaps
+  for (const route of layoutResult.edges) {
+    const fromBox = layoutResult.nodes.get(route.from)!;
+    const toBox = layoutResult.nodes.get(route.to)!;
+    const start = getHandleCoords(
+      fromBox,
+      route.sourceHandle,
+      route.offsetX,
+      route.offsetY,
+    );
+    const end = getHandleCoords(
+      toBox,
+      route.targetHandle,
+      route.offsetX,
+      route.offsetY,
+    );
+    const geom = route.isTreeEdge
+      ? buildTreeBusPath(start.x, start.y, end.x, end.y)
+      : route.skipLaneCoord !== undefined
+        ? buildSkipRankPath(
+            start.x,
+            start.y,
+            end.x,
+            end.y,
+            layoutResult.direction,
+            route.skipLaneCoord,
+          )
+        : buildSmoothStepSvgPath(
+            start.x,
+            start.y,
+            end.x,
+            end.y,
+            route.sourceHandle,
+            route.targetHandle,
+          );
+
+    const badgeX =
+      geom.labelX + (layoutResult.direction === 'LR' ? 0 : 14);
+    const badgeY =
+      geom.labelY + (layoutResult.direction === 'LR' ? -14 : 0);
+    const badgeRect = {
+      x: badgeX - 11,
+      y: badgeY - 11,
+      width: 22,
+      height: 22,
+    };
+
+    for (const box of boxes) {
+      expect(
+        rectsOverlap(box, badgeRect, 1),
+        `${label} badge on ${route.key} must not overlap node ${box.id}`,
+      ).toBe(false);
+    }
+  }
+
+  // 5. Same-rank centres equal (±0.5px)
+  const byRank = new Map<number, NodeBox[]>();
+  for (const raw of rawNodes) {
+    if (raw.rank === undefined) continue;
+    const box = layoutResult.nodes.get(raw.id);
+    if (!box) continue;
+    const list = byRank.get(raw.rank) ?? [];
+    list.push(box);
+    byRank.set(raw.rank, list);
+  }
+  for (const [rank, rankBoxes] of byRank.entries()) {
+    if (rankBoxes.length < 2) continue;
+    const ref = layoutResult.direction === 'LR' ? rankBoxes[0].cx : rankBoxes[0].cy;
+    for (const b of rankBoxes) {
+      const val = layoutResult.direction === 'LR' ? b.cx : b.cy;
+      expect(
+        Math.abs(val - ref),
+        `${label} rank ${rank} node ${b.id} centre alignment`,
+      ).toBeLessThanOrEqual(0.5);
+    }
+  }
+
+  // 6. Rendered label size >= 13px
+  expect(
+    15 * layoutResult.zoom,
+    `${label} rendered label size >= 13px`,
+  ).toBeGreaterThanOrEqual(13);
+}
+
+describe('DIAGRAM-RULES §9.1 layout invariants across all MDX flows and diagrams', () => {
+  for (const relPath of OWNED_MDX_FILES) {
+    const fullPath = path.join(DOCS_DIR, relPath);
+    const content = fs.readFileSync(fullPath, 'utf8');
+    const flows = extractTagProps(content, 'Flow');
+    const diagrams = extractTagProps(content, 'Diagram');
+
+    for (const rawFlow of flows) {
+      const parsed = parseFlowProps(rawFlow as unknown as FlowProps);
+      const variants = parsed.variants ?? [
+        {
+          id: 'default',
+          label: 'default',
+          layout: parsed.layout,
+          nodes: parsed.nodes!,
+          steps: parsed.steps!,
+          groups: parsed.groups,
+        },
+      ];
+
+      for (const variant of variants) {
+        for (const width of TEST_WIDTHS) {
+          it(`${relPath} <Flow id="${parsed.id}" variant="${variant.id}"> @ ${width}px`, () => {
+            const edges = variant.steps.map((s) => {
+              const [from, to] = s.edge.split('->').map((p) => p.trim());
+              return { from, to, kind: s.kind ?? 'request', label: s.label };
+            });
+
+            const layoutResult = computeDiagramLayout({
+              nodes: variant.nodes,
+              edges,
+              groups: variant.groups ?? [],
+              layout: variant.layout ?? parsed.layout,
+              containerWidth: width,
+            });
+
+            assertLayoutInvariants(
+              `${parsed.id}:${variant.id}@${width}`,
+              layoutResult,
+              variant.nodes,
+            );
+          });
+        }
+      }
+    }
+
+    for (const rawDiagram of diagrams) {
+      const parsed = parseDiagramProps(rawDiagram as unknown as DiagramProps);
+      for (const width of TEST_WIDTHS) {
+        it(`${relPath} <Diagram id="${parsed.id}"> @ ${width}px`, () => {
+          const layoutResult = computeDiagramLayout({
+            nodes: parsed.nodes,
+            edges: parsed.edges.map((e) => ({
+              from: e.from,
+              to: e.to,
+              kind: e.kind ?? 'request',
+              label: e.label,
+            })),
+            groups: parsed.groups ?? [],
+            layout: parsed.layout,
+            containerWidth: width,
+          });
+
+          assertLayoutInvariants(
+            `${parsed.id}@${width}`,
+            layoutResult,
+            parsed.nodes,
+          );
+        });
+      }
+    }
+  }
+});

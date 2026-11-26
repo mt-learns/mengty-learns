@@ -153,10 +153,15 @@ function runDagrePass(
   groupBoxes: GroupBox[];
   bounds: { width: number; height: number };
 } {
+  const hasDisjointGroups = groups.length > 1;
+  const effectiveNodesep = hasDisjointGroups
+    ? Math.max(NODE_GAP, GROUP_PAD + GROUP_PAD_TOP + 16)
+    : NODE_GAP;
+
   const g = new dagre.graphlib.Graph({ multigraph: false, compound: false });
   g.setGraph({
     rankdir: direction,
-    nodesep: NODE_GAP,
+    nodesep: effectiveNodesep,
     ranksep: RANK_GAP,
     marginx: 0,
     marginy: 0,
@@ -554,10 +559,13 @@ export function computeDiagramLayout({
   );
 
   const padFactor = 1 + FIT_PADDING * 2;
-  let fitZoom =
-    pass.bounds.width > 0
-      ? Math.min(1, safeWidth / (pass.bounds.width * padFactor))
-      : 1;
+  const computeFitZoom = (b: { width: number; height: number }) => {
+    const xZoom = b.width > 0 ? safeWidth / (b.width * padFactor) : 1;
+    const yZoom = b.height > 0 ? MAX_CANVAS_HEIGHT / (b.height * padFactor) : 1;
+    return Math.min(1, xZoom, yZoom);
+  };
+
+  let fitZoom = computeFitZoom(pass.bounds);
 
   // §3.3: If LR would shrink labels below 13px (zoom < 0.87), switch to TB first
   if (direction === 'LR' && fitZoom < MIN_READABLE_ZOOM && layout !== 'tree') {
@@ -571,10 +579,7 @@ export function computeDiagramLayout({
       nodeWidth,
       nodeLines,
     );
-    fitZoom =
-      pass.bounds.width > 0
-        ? Math.min(1, safeWidth / (pass.bounds.width * padFactor))
-        : 1;
+    fitZoom = computeFitZoom(pass.bounds);
   }
 
   const panMode = fitZoom < MIN_READABLE_ZOOM;

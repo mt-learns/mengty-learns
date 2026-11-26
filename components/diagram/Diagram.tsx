@@ -81,20 +81,29 @@ function DiagramStage({
   const pad = 20;
   const stageWidth = computed.bounds.width + pad * 2;
   const stageHeight = computed.bounds.height + pad * 2;
+  const scaledWidth = Math.round(stageWidth * computed.zoom);
+  const scaledHeight = Math.round(stageHeight * computed.zoom);
   const edgeMetaMap = new Map(
     data.edges.map((e) => [`${e.from}->${e.to}:${e.kind ?? 'request'}`, e]),
   );
 
   return (
-    <div className="w-full overflow-x-auto">
+    <div className="relative w-full overflow-x-auto">
       <div
         className="relative mx-auto"
         style={{
-          width: stageWidth,
-          height: stageHeight,
-          minHeight: Math.max(computed.canvasHeight, stageHeight),
+          width: scaledWidth,
+          height: scaledHeight,
         }}
       >
+        <div
+          className="relative origin-top-left"
+          style={{
+            width: stageWidth,
+            height: stageHeight,
+            transform: computed.zoom < 1 ? `scale(${computed.zoom})` : undefined,
+          }}
+        >
         <svg
           viewBox={`0 0 ${stageWidth} ${stageHeight}`}
           width={stageWidth}
@@ -291,7 +300,15 @@ function DiagramStage({
             </div>
           );
         })}
+        </div>
       </div>
+      {computed.panMode && (
+        <div className="pointer-events-none mt-2 flex justify-end">
+          <span className="rounded-pill border border-border bg-card px-2.5 py-1 text-caption-1 font-medium text-muted-foreground shadow-xs">
+            Drag to see more →
+          </span>
+        </div>
+      )}
     </div>
   );
 }
