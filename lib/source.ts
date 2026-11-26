@@ -1,6 +1,6 @@
 import { llms, loader } from 'fumadocs-core/source';
 import { docsRoute } from './shared';
-import { defineDocs } from 'fumadocs-mdx/macro';
+import { defineCollections, defineDocs } from 'fumadocs-mdx/macro';
 import { metaSchema, pageSchema } from 'fumadocs-core/source/schema';
 import { z } from 'zod';
 
@@ -45,3 +45,59 @@ ${await page.data.getText('processed')}`,
   // link to the files under `/llms.mdx`
   renderUrl: (item) => (/^\/.*\.(md|txt)$/.test(item.url) ? `/llms.mdx${item.url}` : item.url),
 });
+
+const radarSchema = pageSchema.extend({
+  ring: z.enum(['adopt', 'trial', 'assess', 'hold']),
+  quadrant: z.enum(['tools', 'platforms', 'techniques', 'languages']),
+  what: z.string().min(1),
+  why: z.string().min(1),
+  action: z.string().min(1),
+  updated: z.string().min(1),
+  sources: z.array(z.object({ title: z.string().min(1), url: z.string().url() })).default([]),
+  related: z.array(z.string()).default([]),
+});
+
+const radar = defineCollections({
+  type: 'doc',
+  dir: 'content/radar',
+  schema: radarSchema,
+});
+
+export const radarSource = loader({
+  baseUrl: '/radar',
+  source: radar.toFumadocsSource(),
+});
+
+const digestSchema = pageSchema.extend({
+  date: z.string().min(1),
+  summary: z.string().min(1),
+  status: z.enum(['draft', 'stable']).default('stable'),
+  items: z
+    .array(
+      z.object({
+        title: z.string().min(1),
+        url: z.string().url(),
+        why: z.string().min(1),
+        action: z.string().min(1),
+      })
+    )
+    .default([]),
+});
+
+const digest = defineCollections({
+  type: 'doc',
+  dir: 'content/digest',
+  schema: digestSchema,
+});
+
+export const digestSource = loader({
+  baseUrl: '/digest',
+  source: digest.toFumadocsSource(),
+});
+
+export function getPublishedDigests() {
+  return digestSource
+    .getPages()
+    .filter((entry) => process.env.NODE_ENV !== 'production' || entry.data.status !== 'draft')
+    .sort((a, b) => new Date(b.data.date).getTime() - new Date(a.data.date).getTime());
+}

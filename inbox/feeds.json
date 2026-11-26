@@ -1,0 +1,64 @@
+{
+  "feeds": [
+    {
+      "name": "Kubernetes Blog",
+      "url": "https://kubernetes.io/feed.xml",
+      "type": "xml",
+      "verified": true
+    },
+    {
+      "name": "CNCF Blog",
+      "url": "https://www.cncf.io/blog/feed/",
+      "type": "xml",
+      "verified": true
+    },
+    {
+      "name": "GitHub Changelog",
+      "url": "https://github.blog/changelog/feed/",
+      "type": "xml",
+      "verified": true
+    },
+    {
+      "name": "AWS What's New",
+      "url": "https://aws.amazon.com/about-aws/whats-new/recent/feed/",
+      "type": "xml",
+      "verified": true
+    },
+    {
+      "name": "OpenTofu Releases",
+      "url": "https://github.com/opentofu/opentofu/releases.atom",
+      "type": "xml",
+      "verified": true
+    },
+    {
+      "name": "HashiCorp Blog",
+      "url": "https://www.hashicorp.com/blog/feed.xml",
+      "type": "xml",
+      "verified": true
+    },
+    {
+      "name": "OWASP News",
+      "url": "https://owasp.org/feed.xml",
+      "type": "xml",
+      "verified": false
+    },
+    {
+      "name": "CISA KEV",
+      "url": "https://www.cisa.gov/sites/default/files/feeds/known_exploited_vulnerabilities.json",
+      "type": "json",
+      "verified": true
+    },
+    {
+      "name": "Node.js Releases",
+      "url": "https://nodejs.org/en/feed/releases.xml",
+      "type": "xml",
+      "verified": true
+    },
+    {
+      "name": "Next.js Blog",
+      "url": "https://nextjs.org/feed.xml",
+      "type": "xml",
+      "verified": true
+    }
+  ]
+}

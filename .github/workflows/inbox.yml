@@ -1,0 +1,40 @@
+name: Weekly RSS Inbox
+
+on:
+  schedule:
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+
+permissions:
+  issues: write
+
+jobs:
+  inbox:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Fetch feeds
+        run: node scripts/inbox.mjs --out inbox-report.md
+
+      - name: Create or update weekly inbox issue
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          WEEK=$(date +%V)
+          TITLE="Inbox week $WEEK"
+          EXISTING=$(gh issue list --state open --search "\"$TITLE\" in:title" --json number,title --jq ".[0].number // empty")
+          if [ -n "$EXISTING" ]; then
+            gh issue edit "$EXISTING" --body-file inbox-report.md
+          else
+            gh issue create --title "$TITLE" --body-file inbox-report.md
+          fi

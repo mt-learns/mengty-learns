@@ -1,0 +1,14 @@
+---
+title: Docker multi-stage builds
+ring: adopt
+quadrant: techniques
+what: Separate build-time toolchains from minimal runtime images in a single Dockerfile.
+why: Cuts final image size and attack surface by shipping only compiled artifacts and runtime dependencies.
+action: Adopt as the default pattern for all container images, starting with Next.js and Node services.
+updated: "2026-11-26"
+sources:
+  - title: Docker Docs — Multi-stage builds
+    url: https://docs.docker.com/build/building/multi-stage/
+related:
+  - containers/docker-basics
+---
