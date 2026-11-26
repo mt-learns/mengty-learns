@@ -1,3 +1,4 @@
 {
-    "title":  "Security"
+  "title": "Security",
+  "pages": ["owasp-top-10"]
 }

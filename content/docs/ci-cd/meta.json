@@ -1,3 +1,4 @@
 {
-    "title":  "Ci Cd"
+  "title": "Ci Cd",
+  "pages": ["github-actions", "this-site-pipeline"]
 }

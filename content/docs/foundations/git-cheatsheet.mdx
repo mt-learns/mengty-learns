@@ -1,0 +1,107 @@
+---
+title: Git Cheatsheet
+description: Daily Git commands for branching, staging, rebasing, inspecting history, and recovering from mistakes.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: cheatsheet
+type: reference
+level: beginner
+tags: [git, version-control, foundations]
+tested_with:
+  git: "2.54.0"
+cards:
+  - q: "What is the difference between git switch and git checkout?"
+    a: "git switch only switches or creates branches, whereas git checkout also restores files and can leave you in a detached HEAD state."
+  - q: "How do you undo the last commit while keeping its changes staged?"
+    a: "git reset --soft HEAD~1"
+  - q: "When should you use git revert instead of git reset?"
+    a: "Use git revert on shared branches because it creates a new inverse commit instead of rewriting published history."
+  - q: "How do you safely force-push after an interactive rebase on a feature branch?"
+    a: "git push --force-with-lease, which refuses to overwrite remote commits you have not fetched."
+related:
+  - ci-cd/github-actions
+  - kubernetes/kubectl-cheatsheet
+sources:
+  - title: "Git Reference Manual"
+    url: https://git-scm.com/docs
+  - title: "Pro Git Book"
+    url: https://git-scm.com/book/en/v2
+---
+
+### TL;DR
+A quick reference for everyday Git workflows: creating branches with `switch`, staging partial changes, keeping history clean with `rebase`, and safely undoing mistakes with `restore` or `revert`.
+
+## Status and staging
+
+```bash
+git status --short               # compact working-tree and index status
+git diff                         # unstaged changes
+git diff --staged                # staged changes ready for the next commit
+git add -p                       # interactively stage hunks
+git restore <file>               # discard unstaged edits in a tracked file
+git restore --staged <file>      # unstage without losing working-tree edits
+```
+
+## Branches and worktrees
+
+```bash
+git switch -c feat/login         # create and switch to a new branch
+git switch main                  # switch back to main
+git branch -d feat/login         # delete a merged branch (-D to force)
+git worktree add ../wt-hotfix main  # check out another branch in a separate directory
+git worktree remove ../wt-hotfix    # remove the extra worktree when done
+```
+
+<Tip>
+  Prefer `git switch` and `git restore` over `git checkout` — they separate branch switching from file restoration and prevent accidental detached-HEAD edits.
+</Tip>
+
+## Commits, rebase, and history
+
+```bash
+git commit -m "feat: add login"
+git commit --amend --no-edit     # fold staged changes into the last commit
+git log --oneline --graph -n 15  # compact branch graph of recent commits
+git fetch origin
+git rebase origin/main           # replay local commits on top of updated main
+git push --force-with-lease      # safe force-push after rebasing a private branch
+```
+
+<Gotcha>
+  Never rebase or `reset --hard` commits that others have already pulled onto a shared branch. Use `git revert <sha>` to record an undo commit instead.
+</Gotcha>
+
+## Undoing and recovering
+
+| Goal | Command | Rewrites history? |
+|---|---|---|
+| Undo last commit, keep changes staged | `git reset --soft HEAD~1` | Yes (local) |
+| Undo last commit, keep changes unstaged | `git reset HEAD~1` | Yes (local) |
+| Undo a pushed commit safely | `git revert <sha>` | No |
+| Temporarily shelve uncommitted work | `git stash push -u -m "wip"` | No |
+| Find a lost commit after a bad reset | `git reflog` | No |
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "You committed to a feature branch, pushed it, and someone else pulled it. How should you undo that commit?",
+    options: [
+      { label: "Run git revert <sha> and push", description: "Creates a new commit that reverses the changes without rewriting shared history.", correct: true },
+      { label: "Run git reset --hard HEAD~1 and git push --force", description: "Rewriting pushed history breaks teammates' local branches." },
+      { label: "Run git restore --staged .", description: "restore --staged only affects the index, not existing commits." }
+    ]
+  },
+  {
+    question: "Which command lets you inspect commits that are no longer reachable from any branch after an accidental reset?",
+    options: [
+      { label: "git reflog", description: "The reflog records where HEAD and branch tips pointed locally.", correct: true },
+      { label: "git status --short", description: "status only shows working tree and staging area differences." },
+      { label: "git diff --staged", description: "diff --staged only compares the index against HEAD." }
+    ]
+  }
+]} />
+
+## Sources
+- [Git Reference Manual](https://git-scm.com/docs)
+- [Pro Git Book](https://git-scm.com/book/en/v2)

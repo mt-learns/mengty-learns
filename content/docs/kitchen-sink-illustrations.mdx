@@ -1,0 +1,85 @@
+---
+title: Illustration System Gallery
+description: All 9 section icons and 5 spot illustrations rendered at 24, 48, 96, and 256px in light and dark themes.
+type: reference
+level: beginner
+status: draft
+updated: "2026-11-26"
+---
+
+import {
+  SectionIcon,
+  Illustration,
+  SECTION_ICON_NAMES,
+  ILLUSTRATION_NAMES,
+} from '@/components/illustrations';
+
+## Section Icons (Soft 3D Clay App Icons)
+
+Each section icon renders at `24px`, `48px`, `96px`, and `256px` using theme-aware CSS variables.
+
+### Light & Dark Comparison (96px)
+
+<div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 my-6">
+  {SECTION_ICON_NAMES.map((name) => (
+    <div key={name} className="rounded-card border border-border bg-card p-4 space-y-3">
+      <div className="text-subheadline font-headline capitalize">{name}</div>
+      <div className="grid grid-cols-2 gap-3">
+        <div className="light flex flex-col items-center justify-center rounded-panel bg-background p-3 border border-border">
+          <SectionIcon name={name} size={96} />
+          <span className="mt-1 text-caption-1 text-muted-foreground">Light</span>
+        </div>
+        <div className="dark flex flex-col items-center justify-center rounded-panel bg-background p-3 border border-border">
+          <SectionIcon name={name} size={96} />
+          <span className="mt-1 text-caption-1 text-muted-foreground">Dark</span>
+        </div>
+      </div>
+    </div>
+  ))}
+</div>
+
+### All Sizes (24 / 48 / 96 / 256)
+
+<div className="space-y-6 my-6">
+  {SECTION_ICON_NAMES.map((name) => (
+    <div key={name} className="rounded-card border border-border bg-card p-5 space-y-3">
+      <div className="text-subheadline font-headline capitalize">{name}</div>
+      <div className="flex flex-wrap items-end gap-6">
+        {[24, 48, 96, 256].map((size) => (
+          <div key={size} className="flex flex-col items-center gap-1">
+            <SectionIcon name={name} size={size} decorative />
+            <span className="text-caption-1 text-muted-foreground">{size}px</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  ))}
+</div>
+
+## Spot Illustrations
+
+<div className="space-y-6 my-6">
+  {ILLUSTRATION_NAMES.map((name) => (
+    <div key={name} className="rounded-card border border-border bg-card p-5 space-y-4">
+      <div className="text-subheadline font-headline">{name}</div>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="light flex flex-col items-center justify-center rounded-panel bg-background p-4 border border-border">
+          <Illustration name={name} size={256} />
+          <span className="mt-2 text-caption-1 text-muted-foreground">Light (256px)</span>
+        </div>
+        <div className="dark flex flex-col items-center justify-center rounded-panel bg-background p-4 border border-border">
+          <Illustration name={name} size={256} />
+          <span className="mt-2 text-caption-1 text-muted-foreground">Dark (256px)</span>
+        </div>
+      </div>
+      <div className="flex flex-wrap items-end gap-6 pt-2">
+        {[24, 48, 96, 256].map((size) => (
+          <div key={size} className="flex flex-col items-center gap-1">
+            <Illustration name={name} size={size} decorative />
+            <span className="text-caption-1 text-muted-foreground">{size}px</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  ))}
+</div>

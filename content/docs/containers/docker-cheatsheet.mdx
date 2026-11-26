@@ -1,0 +1,98 @@
+---
+title: Docker Cheatsheet
+description: Everyday Docker CLI commands for images, containers, logs, volumes, networks, and cleanup.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: cheatsheet
+type: reference
+level: beginner
+tags: [docker, containers, cli]
+tested_with:
+  docker: "29.4.3"
+cards:
+  - q: "How do you run a container in the background, publish port 3000, and auto-remove it on stop?"
+    a: "docker run --rm -d -p 3000:3000 <image>"
+  - q: "How do you open a shell inside a running container?"
+    a: "docker exec -it <container> sh"
+  - q: "How do you remove all unused images, stopped containers, and networks?"
+    a: "docker system prune (add --volumes to include unused volumes)"
+  - q: "How do you inspect the layer history and sizes of an image?"
+    a: "docker history <image>"
+related:
+  - containers/docker-basics
+  - containers/image-layers-cache
+  - containers/multi-stage-nextjs
+sources:
+  - title: "Docker CLI Reference"
+    url: https://docs.docker.com/reference/cli/docker/
+  - title: "Docker Compose CLI Reference"
+    url: https://docs.docker.com/reference/cli/docker/compose/
+---
+
+### TL;DR
+A quick reference for the Docker commands you reach for daily: building images, running and inspecting containers, tailing logs, managing Compose stacks, and reclaiming disk space.
+
+## Images and builds
+
+```bash
+docker build -t myapp:1.0.0 .         # build from Dockerfile in current directory
+docker build --no-cache -t myapp:ci . # force a clean build without layer cache
+docker images                         # list local images
+docker history myapp:1.0.0            # show each layer's command and size
+docker rmi myapp:1.0.0                # remove an image
+```
+
+## Containers and debugging
+
+```bash
+docker ps                             # list running containers
+docker ps -a                          # include stopped containers
+docker run --rm -d --name api -p 8080:8080 myapp:1.0.0
+docker logs -f --tail 100 api         # follow the last 100 log lines
+docker exec -it api sh                # open an interactive shell in a running container
+docker inspect api                    # dump low-level JSON config and network state
+docker rm -f api                      # force-stop and remove a container
+```
+
+<Tip>
+  Use `--rm` on one-off `docker run` commands so exited containers do not pile up on disk.
+</Tip>
+
+## Compose and cleanup
+
+```bash
+docker compose up -d --build          # rebuild and start services in the background
+docker compose logs -f                # stream logs for all services
+docker compose down                   # stop and remove containers and default network
+docker system df                      # check disk usage by images, containers, and cache
+docker system prune                   # remove stopped containers, dangling images, unused networks
+```
+
+<Gotcha>
+  `docker compose down -v` and `docker system prune --volumes` delete anonymous and named volumes — double-check before running them near a local database you want to keep.
+</Gotcha>
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "Which command shows the individual layers that make up a Docker image and how much space each adds?",
+    options: [
+      { label: "docker history <image>", description: "Lists each image layer, instruction, and size.", correct: true },
+      { label: "docker ps -a", description: "Lists containers, not image layers." },
+      { label: "docker system df", description: "Shows aggregate disk usage across images, containers, and volumes." }
+    ]
+  },
+  {
+    question: "What does the --rm flag do on docker run?",
+    options: [
+      { label: "Automatically deletes the container when it exits", description: "Keeps one-off runs from leaving stopped containers behind.", correct: true },
+      { label: "Removes the image after the container starts", description: "Images are not removed by docker run --rm." },
+      { label: "Deletes all named volumes attached to the container", description: "--rm only removes the container filesystem, not named volumes." }
+    ]
+  }
+]} />
+
+## Sources
+- [Docker CLI Reference](https://docs.docker.com/reference/cli/docker/)
+- [Docker Compose CLI Reference](https://docs.docker.com/reference/cli/docker/compose/)
