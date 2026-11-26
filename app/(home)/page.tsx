@@ -34,7 +34,7 @@ export default function HomePage() {
         <Illustration
           name="hero-desk"
           size={256}
-          className="w-full max-w-[300px] md:max-w-[340px] h-auto shrink-0"
+          className="w-full max-w-[340px] md:max-w-[420px] h-auto shrink-0"
           decorative
         />
       </section>
