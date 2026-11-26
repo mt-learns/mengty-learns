@@ -1,13 +1,13 @@
 import { createGetUrl } from 'fumadocs-core/source';
 
-export const appName = 'My App';
+export const appName = 'Mengty Learns';
+export const siteUrl = 'https://mengtylearns.com';
 export const docsRoute = '/docs';
 export const docsImageRoute = '/og/docs';
 
-// fill this with your actual GitHub info, for example:
 export const gitConfig = {
-  user: 'fuma-nama',
-  repo: 'fumadocs',
+  user: 'mengty',
+  repo: 'mengtylearns',
   branch: 'main',
 };
 
