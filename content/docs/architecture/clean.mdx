@@ -1,0 +1,239 @@
+---
+title: Clean Architecture
+description: How Robert C. Martin's Clean Architecture separates Entities, Use Cases, Interface Adapters, and Frameworks using the Dependency Rule.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: concept
+type: explanation
+level: intermediate
+tags: [architecture, clean-architecture, dependency-rule, solid, typescript]
+tested_with:
+  typescript: "7.0.2"
+cards:
+  - q: "What is the Dependency Rule in Clean Architecture?"
+    a: "Source code dependencies can only point inwards; nothing in an inner circle can know anything at all about something in an outer circle."
+  - q: "What are the four classic circles of Clean Architecture from inside out?"
+    a: "Entities (enterprise business rules), Use Cases (application business rules), Interface Adapters (controllers, presenters, gateways), and Frameworks & Drivers (web, DB, UI)."
+  - q: "How does a Use Case Interactor return data to a Presenter without depending on the outer UI ring?"
+    a: "The Interactor calls an Output Port interface defined in the Use Case ring, which the outer Presenter implements (Dependency Inversion)."
+  - q: "What kind of data should cross Clean Architecture boundaries?"
+    a: "Simple, isolated data structures (DTOs / RequestModel / ResponseModel), never database row objects or framework request objects."
+related:
+  - architecture/onion
+  - architecture/hexagonal
+  - architecture/compare-styles
+sources:
+  - title: "Robert C. Martin: The Clean Architecture"
+    url: https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html
+---
+
+## TL;DR
+**Clean Architecture** divides software into four concentric circles—**Entities**, **Use Cases**, **Interface Adapters**, and **Frameworks & Drivers**—governed by one strict **Dependency Rule**: source-code dependencies point only inward, and outer-ring calls cross boundaries via Input/Output Port interfaces.
+
+## Intent
+<Intent>
+Make your system independent of frameworks, UI, and databases by isolating enterprise rules (Entities) and application workflows (Use Cases) behind explicit Input/Output boundaries.
+</Intent>
+
+## Problem
+When controllers pass framework `Request` objects straight into business logic, or business logic returns ORM entities straight to HTTP responses, every layer becomes coupled to the web framework and database schema. Testing a single use case requires mocking HTTP and SQL.
+
+<Diagram
+  id="clean-dependency-rule"
+  ariaLabel="Four concentric circles of Clean Architecture with inward-only dependencies"
+  caption="The Dependency Rule: Frameworks and Interface Adapters depend inward on Use Cases and Entities."
+  layout="tree"
+  nodes={[
+    { id: 'fw', label: 'Frameworks & DB', subtitle: 'Express, Postgres', icon: 'db', category: 'data', rank: 0, order: 0 },
+    { id: 'adapters', label: 'Interface Adapters', subtitle: 'Controller, Presenter', icon: 'gateway', category: 'external', rank: 1, order: 0 },
+    { id: 'uc', label: 'Use Cases', subtitle: 'Interactors & Ports', icon: 'service', category: 'service', rank: 2, order: 0 },
+    { id: 'ent', label: 'Entities', subtitle: 'Enterprise rules', icon: 'class', category: 'concrete', rank: 3, order: 0 },
+  ]}
+  edges={[
+    { from: 'fw', to: 'adapters', kind: 'request' },
+    { from: 'adapters', to: 'uc', kind: 'request' },
+    { from: 'uc', to: 'ent', kind: 'request' },
+  ]}
+/>
+
+## Solution
+Clean Architecture organizes components into four rings and solves the "crossing boundaries" problem with Dependency Inversion:
+
+1. **Entities:** Enterprise-wide business objects and rules (`Order.create(...)`).
+2. **Use Cases (Interactors):** Application-specific workflows (`PlaceOrderInteractor`) that orchestrate Entities and declare **Input/Output Ports** (`PlaceOrderInputPort`, `OrderGateway`, `OrderPresenter`).
+3. **Interface Adapters:** Convert data between Use Case models and external formats—**Controllers** call Input Ports, **Presenters** implement Output Ports to format ViewModels, and **Gateways** implement persistence ports.
+4. **Frameworks & Drivers:** Web servers, SQL databases, and CLI runners—treated as replaceable plugins at the edge.
+
+## Real-world analogy
+<Analogy>
+Think of a hospital surgery team: the **Use Case Interactor** is the lead surgeon following a strict protocol, **Entities** are the patient's vital rules, **Gateways/Presenters** are the standardized instrument trays and monitors, and **Frameworks & Drivers** are the specific brand of hospital bed or lighting—swappable without rewriting the surgical procedure.
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="clean-order"
+  title="Clean Architecture: Crossing Boundaries for an Order"
+  nodes={[
+    { id: 'http', label: 'HTTP Client', subtitle: 'POST /orders', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'ctrl', label: 'Ctrl & Presenter', subtitle: 'Input & ViewModel', icon: 'gateway', category: 'external', rank: 1, order: 0 },
+    { id: 'uc', label: 'Use Case', subtitle: 'Interactor + Entity', icon: 'service', category: 'service', rank: 2, order: 0 },
+    { id: 'gw', label: 'Gateway Port', subtitle: 'OrderGateway iface', icon: 'interface', category: 'abstraction', rank: 3, order: 0 },
+    { id: 'db', label: 'Postgres DB', subtitle: 'Outer framework', icon: 'db', category: 'data', rank: 4, order: 0 },
+  ]}
+  steps={[
+    { edge: 'http->ctrl', title: 'HTTP POST /orders', text: 'Caller sends request to the Interface Adapters Controller.' },
+    { edge: 'ctrl->uc', title: 'Call Use Case Input Port', text: 'Controller passes RequestModel to PlaceOrderInteractor.' },
+    { edge: 'uc->gw', title: 'Validate Entity & call Gateway', text: 'Interactor validates Order Entity and calls OrderGateway interface.', label: 'DIP' },
+    { edge: 'gw->db', title: 'Execute SQL INSERT', text: 'Outer PostgresOrderGateway implements the port and writes to SQL.' },
+    { edge: 'db->gw', title: 'Return persisted row', text: 'Database returns the saved record to the Gateway implementation.', kind: 'response' },
+    { edge: 'gw->uc', title: 'Return Order to Interactor', text: 'Gateway maps the row back to an Order for the Interactor.', kind: 'response' },
+    { edge: 'uc->ctrl', title: 'Presenter builds ViewModel', text: 'Interactor calls Presenter Output Port to format the ViewModel.', kind: 'response' },
+    { edge: 'ctrl->http', title: 'Return 201 Created', text: 'Controller sends the ViewModel as HTTP 201 Created to the caller.', kind: 'response' },
+  ]}
+/>
+
+## Code
+Using the shared **Order** service in TypeScript with explicit Interactor, Gateway, and Presenter boundaries:
+
+<Tabs items={['TypeScript']}>
+  <Tab value="TypeScript">
+```ts
+// --- Entities (src/entities/order.ts) ---
+export interface OrderItem {
+  sku: string;
+  priceCents: number;
+  qty: number;
+}
+
+export class Order {
+  constructor(
+    public readonly id: string,
+    public readonly customerId: string,
+    public readonly totalCents: number,
+  ) {}
+
+  static create(customerId: string, items: OrderItem[]): Order {
+    if (items.length === 0) throw new Error('Empty order');
+    const totalCents = items.reduce((sum, i) => sum + i.priceCents * i.qty, 0);
+    return new Order(crypto.randomUUID(), customerId, totalCents);
+  }
+}
+
+// --- Use Cases & Ports (src/use-cases/place-order.ts) ---
+export interface PlaceOrderRequest {
+  customerId: string;
+  items: OrderItem[];
+}
+
+export interface PlaceOrderResponse {
+  orderId: string;
+  totalCents: number;
+}
+
+export interface OrderGateway {
+  save(order: Order): Promise<Order>;
+}
+
+export interface OrderPresenter {
+  present(res: PlaceOrderResponse): void;
+}
+
+export class PlaceOrderInteractor {
+  constructor(
+    private readonly gateway: OrderGateway,
+    private readonly presenter: OrderPresenter,
+  ) {}
+
+  async execute(req: PlaceOrderRequest): Promise<void> {
+    const order = Order.create(req.customerId, req.items);
+    const saved = await this.gateway.save(order);
+    this.presenter.present({ orderId: saved.id, totalCents: saved.totalCents });
+  }
+}
+```
+  </Tab>
+</Tabs>
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'You are building a long-lived product with complex use cases that must remain testable without web or DB frameworks.',
+    'Multiple delivery mechanisms (REST API, CLI, background jobs) share the same Use Case Interactors.',
+  ]}
+  avoid={[
+    'Simple CRUD microservices where Presenter + Input/Output Port interfaces just add ceremony.',
+    'Early-stage prototypes where speed of iteration matters more than strict boundary isolation.',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Write Entities and Use Case Interactors first
+    Keep `Order` and `PlaceOrderInteractor` free of framework or database imports.
+  </Step>
+  <Step>
+    ### Define Gateway and Presenter interfaces in Use Cases
+    Let the Interactor own the contracts it needs; outer rings implement them.
+  </Step>
+  <Step>
+    ### Pass plain DTOs across boundaries
+    Map HTTP payloads to `PlaceOrderRequest` in the Controller and `PlaceOrderResponse` to HTTP JSON in the Presenter.
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'Framework, UI, and database become replaceable plugins.',
+    'Use Cases are trivially unit-tested with in-memory Gateways and spy Presenters.',
+  ]}
+  cons={[
+    'Highest boilerplate of the four styles (RequestModel, ResponseModel, ViewModel, Ports).',
+    'Over-abstracting trivial reads can slow teams down.',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'Onion Architecture',
+      href: '/docs/architecture/onion',
+      summary: 'Closely related concentric-ring model focused on Domain Model and Domain/Application Services.',
+    },
+    {
+      name: 'Hexagonal Architecture',
+      href: '/docs/architecture/hexagonal',
+      summary: 'Uses Ports & Adapters instead of concentric circles, with the same inward dependency rule.',
+    },
+    {
+      name: 'Compare Architecture Styles',
+      href: '/docs/architecture/compare-styles',
+      summary: 'Compare Layered, Hexagonal, Onion, and Clean side by side.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "How does PlaceOrderInteractor send output to a Presenter without violating the Dependency Rule?",
+    options: [
+      { label: "It calls an Output Port interface defined in the Use Case circle that the outer Presenter implements", description: "Dependency Inversion flips the compile-time dependency inward while control flows outward.", correct: true },
+      { label: "It imports the Express Response object directly", description: "Importing Express inside a Use Case violates the Dependency Rule." },
+      { label: "It writes directly to stdout", description: "Writing to a specific I/O channel couples the Use Case to a delivery mechanism." }
+    ]
+  },
+  {
+    question: "What should cross the boundary between a Gateway and a Use Case Interactor?",
+    options: [
+      { label: "Simple, isolated data structures (DTOs or domain entities), not ORM row objects", description: "Passing raw ORM models leaks database framework types into the inner circle.", correct: true },
+      { label: "Raw SQL query builders", description: "SQL belongs strictly in the outer Infrastructure/Gateway implementation." },
+      { label: "HTTP headers and cookies", description: "HTTP details stop at the Controller in Interface Adapters." }
+    ]
+  }
+]} />
+
+## Sources
+- [Robert C. Martin: The Clean Architecture](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html)

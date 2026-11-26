@@ -1,0 +1,194 @@
+---
+title: "What Happens on kubectl apply"
+description: Trace how kubectl apply flows through the Kubernetes API Server, etcd, controllers, kube-scheduler, kubelet, and the container runtime.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: concept
+type: explanation
+level: intermediate
+tags: [kubernetes, kubectl, control-plane, scheduler, kubelet]
+tested_with:
+  kubectl: "1.34.1"
+  kubernetes: "1.36 (docs)"
+cards:
+  - q: "Which Kubernetes component is the only one that reads and writes directly to etcd?"
+    a: "kube-apiserver. All other control-plane components and node agents watch and update state through the API Server."
+  - q: "What three checks does kube-apiserver run before persisting an object to etcd?"
+    a: "Authentication (who you are), Authorization (RBAC: what you can do), and Admission control (mutating/validating webhooks and policies)."
+  - q: "What does kube-scheduler actually do when a new Pod is created?"
+    a: "It filters and scores candidate Nodes and writes the chosen nodeName back to the Pod via the API Server; it does not start containers itself."
+  - q: "How does a container actually start on a worker node?"
+    a: "kubelet watches Pod bindings for its node and calls the Container Runtime Interface (CRI) runtime (such as containerd) to pull the image and start the container."
+related:
+  - kubernetes/pods-deployments
+  - kubernetes/service-routing
+sources:
+  - title: "Kubernetes Docs: Kubernetes Components"
+    url: https://kubernetes.io/docs/concepts/overview/components/
+  - title: "Kubernetes Docs: Declarative Management of Kubernetes Objects Using Configuration Files"
+    url: https://kubernetes.io/docs/tasks/manage-kubernetes-objects/declarative-config/
+  - title: "Kubernetes Docs: Kubernetes Scheduler"
+    url: https://kubernetes.io/docs/concepts/scheduling-eviction/kube-scheduler/
+  - title: "Kubernetes Docs: Container Runtime Interface (CRI)"
+    url: https://kubernetes.io/docs/concepts/architecture/cri/
+---
+
+## TL;DR
+`kubectl apply` does not talk to nodes or containers directly. It sends your YAML to **kube-apiserver**, which authenticates, authorizes, admits, and writes the desired state to **etcd**; controllers, **kube-scheduler**, **kubelet**, and the **CRI runtime** then asynchronously reconcile reality to match.
+
+## Intent
+<Intent>
+Understand the asynchronous watch-and-reconcile loop behind `kubectl apply`, so you know where to look when a Deployment is stuck at `Pending`, `ImagePullBackOff`, or `0/1 Ready`.
+</Intent>
+
+## Problem
+Many engineers assume `kubectl apply` is an imperative RPC that immediately starts containers and waits. When a Pod stays `Pending` or fails admission, guessing blindly wastes time because each stage—API validation, controller creation, scheduling, and node execution—is owned by a separate component.
+
+<Diagram
+  id="kubectl-apply-separation"
+  ariaLabel="Control plane components communicate only through kube-apiserver, never directly with etcd"
+  caption="Every component watches and updates state through kube-apiserver; only the API Server talks to etcd."
+  layout="tree"
+  nodes={[
+    { id: 'etcd', label: 'etcd', subtitle: 'Cluster store', icon: 'db', category: 'data', rank: 0, order: 0 },
+    { id: 'api', label: 'API Server', subtitle: 'Central hub', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+    { id: 'ctrl', label: 'Controllers', subtitle: 'Deploy → RS → Pod', icon: 'service', category: 'service', rank: 2, order: 0 },
+    { id: 'sched', label: 'Scheduler', subtitle: 'Binds Pod to Node', icon: 'service', category: 'service', rank: 2, order: 1 },
+    { id: 'kub', label: 'kubelet', subtitle: 'Node agent', icon: 'pod', category: 'concrete', rank: 2, order: 2 },
+  ]}
+  edges={[
+    { from: 'etcd', to: 'api', kind: 'request' },
+    { from: 'api', to: 'ctrl', kind: 'request' },
+    { from: 'api', to: 'sched', kind: 'request' },
+    { from: 'api', to: 'kub', kind: 'request' },
+  ]}
+/>
+
+## Solution
+Kubernetes uses a **level-triggered reconciliation loop** centered on `kube-apiserver`:
+
+1. **`kubectl` → API Server:** `kubectl apply` sends the manifest (or server-side apply patch) over HTTPS. The API Server runs **Authentication**, **Authorization (RBAC)**, and **Admission** (mutating then validating).
+2. **API Server → `etcd`:** Once valid, the Deployment object is persisted in `etcd`.
+3. **Controllers (`kube-controller-manager`):** Watching Deployments, the Deployment controller creates or updates a **ReplicaSet**, whose controller creates **Pod** objects (still unscheduled, `nodeName: ""`).
+4. **Scheduler (`kube-scheduler`):** Watches unscheduled Pods, filters out nodes that lack CPU/memory or fail taints/affinities, scores the remaining nodes, and writes `spec.nodeName` via the API Server.
+5. **`kubelet` → CRI Runtime:** Watching Pods bound to its node, `kubelet` calls the **Container Runtime Interface (CRI)** (e.g., `containerd`) to pull the image, start the container, and report `Ready` status back to the API Server.
+
+## Real-world analogy
+<Analogy>
+Think of a restaurant kitchen with a central order board (**API Server** + **etcd**). The waiter (**kubectl**) posts a ticket on the board. The kitchen lead (**Controller**) breaks a combo meal into individual dish tickets (**ReplicaSet → Pods**), the expediter (**Scheduler**) assigns each dish to a station (**Node**), and the station chef (**kubelet + CRI**) cooks it and marks it ready on the board.
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="kubectl-apply"
+  title="Control-Plane & Node Loop on kubectl apply"
+  nodes={[
+    { id: 'kubectl', label: 'kubectl CLI', subtitle: 'Sends manifest', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'apiserver', label: 'API Server + etcd', subtitle: 'AuthN/Z & persist', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+    { id: 'ctrl', label: 'Controller & Sched', subtitle: 'Deploy→RS→Node', icon: 'service', category: 'service', rank: 2, order: 0 },
+    { id: 'kubelet', label: 'kubelet', subtitle: 'Node agent', icon: 'pod', category: 'concrete', rank: 3, order: 0 },
+    { id: 'cri', label: 'Runtime (CRI)', subtitle: 'Pulls & starts', icon: 'pod', category: 'data', rank: 4, order: 0 },
+  ]}
+  steps={[
+    { edge: 'kubectl->apiserver', title: 'Send manifest & persist', text: 'kubectl sends YAML; API Server runs AuthN, AuthZ, Admission, and writes etcd.' },
+    { edge: 'apiserver->ctrl', title: 'Controller & Scheduler bind', text: 'Deployment controller creates ReplicaSet/Pod; kube-scheduler binds a Node.' },
+    { edge: 'ctrl->kubelet', title: 'kubelet sees bound Pod', text: 'kubelet watches Pods assigned to its node via the API Server.' },
+    { edge: 'kubelet->cri', title: 'CRI pulls image and starts', text: 'kubelet calls the CRI runtime to pull the container image and start it.' },
+    { edge: 'cri->kubelet', title: 'Container reports running', text: 'CRI reports the container started and passing readiness probes.', kind: 'response' },
+    { edge: 'kubelet->apiserver', title: 'Report Pod status Ready', text: 'kubelet updates Pod status to Ready in the API Server.', kind: 'response' },
+  ]}
+/>
+
+## Code
+You can validate a Deployment manifest locally with `kubectl apply --dry-run=client` before sending it to a cluster:
+
+```bash
+# Client-side validation without mutating a cluster (not run against a live cluster)
+kubectl apply -f deployment.yaml --dry-run=client -o yaml
+
+# Apply and watch the reconciliation stages
+kubectl apply -f deployment.yaml
+kubectl get deployment,rs,pods -w
+```
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'You want declarative, idempotent updates where Kubernetes converges cluster state to your YAML.',
+    'You are debugging why a Pod is stuck in Pending (scheduler), ContainerCreating (kubelet/CRI), or rejected at apply time (API Server).',
+  ]}
+  avoid={[
+    'You need imperative one-off debugging commands (use kubectl exec, logs, or port-forward instead of apply).',
+    'You want Git to be the single source of truth instead of running kubectl apply from laptops (use GitOps).',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Author declarative manifests
+    Define `Deployment` manifests with resource requests/limits and readiness probes.
+  </Step>
+  <Step>
+    ### Validate before applying
+    Run `kubectl apply --dry-run=client` or `kubeconform` in CI to catch schema errors early.
+  </Step>
+  <Step>
+    ### Apply and inspect events
+    Run `kubectl apply -f ...` and check `kubectl describe pod <name>` if scheduling or image pull stalls.
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'Resilient by design: if a node or controller restarts, watch loops resume reconciling from etcd.',
+    'Single security boundary: RBAC and admission webhooks enforce policy in one place (kube-apiserver).',
+  ]}
+  cons={[
+    'kubectl apply returning 0 only means etcd accepted the desired state, not that Pods are Ready.',
+    'Debugging requires checking multiple layers (API events, ReplicaSet conditions, Pod events, kubelet logs).',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'Pods, Deployments, ReplicaSets',
+      href: '/docs/kubernetes/pods-deployments',
+      summary: 'Deep dive into the workload hierarchy created by the Deployment controller.',
+    },
+    {
+      name: 'Kubernetes Service Routing',
+      href: '/docs/kubernetes/service-routing',
+      summary: 'What happens once the Pod is Ready and added to an EndpointSlice.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "A Pod is stuck in Pending with an event saying '0/3 nodes are available: Insufficient memory'. Which component emitted that?",
+    options: [
+      { label: "kube-scheduler", description: "kube-scheduler filters nodes by resource requests and reports why no node fits.", correct: true },
+      { label: "kubelet", description: "kubelet only acts after a Pod has been bound to a specific node." },
+      { label: "etcd", description: "etcd is a key-value store and does not evaluate scheduling constraints." }
+    ]
+  },
+  {
+    question: "When kubectl apply succeeds immediately, what has actually completed?",
+    options: [
+      { label: "kube-apiserver validated the manifest and persisted desired state in etcd", description: "Controllers, scheduler, and kubelet reconcile the actual containers asynchronously.", correct: true },
+      { label: "All container images have been pulled and health checks passed", description: "Image pulls and container startup happen asynchronously on the nodes." },
+      { label: "kube-proxy has updated all iptables rules", description: "Service endpoints update only after Pods are scheduled, started, and Ready." }
+    ]
+  }
+]} />
+
+## Sources
+- [Kubernetes Docs: Kubernetes Components](https://kubernetes.io/docs/concepts/overview/components/)
+- [Kubernetes Docs: Declarative Management of Kubernetes Objects](https://kubernetes.io/docs/tasks/manage-kubernetes-objects/declarative-config/)
+- [Kubernetes Docs: Kubernetes Scheduler](https://kubernetes.io/docs/concepts/scheduling-eviction/kube-scheduler/)
+- [Kubernetes Docs: Container Runtime Interface (CRI)](https://kubernetes.io/docs/concepts/architecture/cri/)

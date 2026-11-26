@@ -1,7 +1,8 @@
 {
   "title": "Foundations",
   "pages": [
-    "git-cheatsheet"
+    "git-cheatsheet",
+    "networking-basics"
   ],
   "icon": "foundations"
 }

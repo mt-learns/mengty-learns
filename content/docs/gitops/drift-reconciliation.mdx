@@ -1,0 +1,192 @@
+---
+title: Drift and Reconciliation
+description: What configuration drift is, how GitOps agents detect OutOfSync resources, and how automated reconciliation heals the cluster.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: concept
+type: explanation
+level: intermediate
+tags: [gitops, drift, reconciliation, argocd, flux]
+tested_with:
+  argocd: "3.6 (docs)"
+  flux: "2.10 (docs)"
+cards:
+  - q: "What is configuration drift in a Kubernetes cluster?"
+    a: "A mismatch between the desired state declared in Git and the live state running in the cluster (often caused by manual kubectl edit or imperative scripts)."
+  - q: "What does OutOfSync mean in Argo CD?"
+    a: "The live Kubernetes resources in the cluster differ from the target manifests at the tracked Git revision."
+  - q: "What does selfHeal: true do in Argo CD (or continuous reconciliation in Flux)?"
+    a: "When drift is detected, the GitOps agent automatically reapplies the Git manifests to overwrite the manual cluster change."
+  - q: "Why can manual kubectl edit during an incident backfire in a self-healing GitOps cluster?"
+    a: "The GitOps agent will revert the manual hotfix back to Git's state on the next reconciliation cycle unless you commit the fix to Git (or temporarily pause auto-sync)."
+related:
+  - gitops/what-is-gitops
+  - kubernetes/kubectl-apply
+sources:
+  - title: "Argo CD Docs: Automated Sync Policy & Self-Heal"
+    url: https://argo-cd.readthedocs.io/en/latest/user-guide/auto_sync/
+  - title: "Flux Docs: Kustomization Reconciliation"
+    url: https://fluxcd.io/flux/components/kustomize/kustomizations/
+  - title: "OpenGitOps: Principles of GitOps"
+    url: https://opengitops.dev/
+---
+
+## TL;DR
+**Drift** happens when live cluster state diverges from Git—usually from a manual `kubectl edit`. A GitOps agent continuously compares live objects against Git, flags **OutOfSync**, and with **self-heal** enabled automatically **reconciles** the cluster back to Git.
+
+## Intent
+<Intent>
+Understand how GitOps agents detect configuration drift and reconcile live clusters back to Git—and why manual hotfixes get overwritten unless they go through Git.
+</Intent>
+
+## Problem
+During an outage, someone runs `kubectl edit deployment web` to bump replicas or change an environment variable, fixes the fire, and forgets to update Git. Weeks later, the next deployment silently wipes out that hotfix—or worse, nobody knows why production behaves differently from staging.
+
+<Diagram
+  id="drift-detection-loop"
+  ariaLabel="GitOps agent compares Git desired state with live cluster state to detect drift"
+  caption="Reconciliation compares two snapshots: Git (desired) vs. live Kubernetes API objects (actual)."
+  layout="tree"
+  nodes={[
+    { id: 'agent', label: 'GitOps Agent', subtitle: 'Diffs desired vs live', icon: 'service', category: 'service', rank: 0, order: 0 },
+    { id: 'git', label: 'Git (Desired)', subtitle: 'replicas: 3', icon: 'git', category: 'external', rank: 1, order: 0 },
+    { id: 'live', label: 'Cluster (Live)', subtitle: 'replicas: 5 (drift)', icon: 'pod', category: 'data', rank: 1, order: 1, variant: 'problem' },
+  ]}
+  edges={[
+    { from: 'agent', to: 'git', kind: 'request' },
+    { from: 'agent', to: 'live', kind: 'error', dashed: true },
+  ]}
+/>
+
+## Solution
+GitOps treats reconciliation as a continuous control loop rather than a one-time deploy script:
+
+1. **Observe:** The GitOps agent (Argo CD or Flux) watches live Kubernetes resources via the API Server and compares them against the rendered manifests from Git.
+2. **Detect Drift:** Any difference in tracked fields (replicas, image tag, env vars) marks the application **OutOfSync**.
+3. **Reconcile (Self-Heal):** With automated reconciliation enabled (`selfHeal: true` in Argo CD, or default periodic interval in Flux), the agent reapplies the Git manifests to `kube-apiserver`, overwriting the manual edit.
+4. **Prune (optional):** If `prune: true` is set, resources deleted from Git are also deleted from the cluster.
+
+## Real-world analogy
+<Analogy>
+Think of a hotel room inspector with a checklist photo (**Git**). If a guest moves the lamp and hangs a poster (**manual `kubectl edit`**), the inspector notices the room is **OutOfSync** and resets it to match the photo (**reconciliation**) before the next check-in.
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="drift-reconciliation"
+  title="Drift & Reconciliation: Manual Edit → OutOfSync → Self-Heal"
+  nodes={[
+    { id: 'human', label: 'Manual Edit', subtitle: 'kubectl edit', icon: 'user', category: 'client', rank: 0, order: 0, variant: 'problem' },
+    { id: 'cluster', label: 'Live Cluster', subtitle: 'K8s API & Pods', icon: 'pod', category: 'data', rank: 1, order: 0 },
+    { id: 'agent', label: 'GitOps Agent', subtitle: 'Detects & heals', icon: 'service', category: 'service', rank: 2, order: 0 },
+    { id: 'git', label: 'Git Desired', subtitle: 'Source of truth', icon: 'git', category: 'external', rank: 3, order: 0 },
+  ]}
+  steps={[
+    { edge: 'human->cluster', title: 'Manual kubectl edit', text: 'An operator edits a live Deployment directly on the cluster, bypassing Git.', kind: 'error' },
+    { edge: 'cluster->agent', title: 'Agent detects OutOfSync drift', text: 'GitOps controller compares live cluster state against Git and flags drift.', kind: 'error' },
+    { edge: 'agent->git', title: 'Fetch authoritative Git state', text: 'Controller reads the target manifests from the tracked Git revision.' },
+    { edge: 'git->agent', title: 'Return desired manifests', text: 'Git provides the declarative target state for the application.', kind: 'response' },
+    { edge: 'agent->cluster', title: 'Self-heal & overwrite drift', text: 'Agent reapplies Git manifests to kube-apiserver, reverting the manual edit.' },
+    { edge: 'cluster->agent', title: 'Confirm Synced state', text: 'Controller verifies zero diff remains and marks the application Synced.', kind: 'response' },
+  ]}
+/>
+
+## Code
+Comparing Flux (`Kustomization`) and Argo CD (`syncPolicy`) reconciliation settings:
+
+```yaml
+# Flux Kustomization reconciles drift automatically on its interval (not run)
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: web-app
+  namespace: flux-system
+spec:
+  interval: 5m
+  path: ./apps/web
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: k8s-config
+```
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'You want production clusters to stay strictly aligned with Git and reject undocumented manual edits.',
+    'You need alerts when a cluster goes OutOfSync even if auto-heal is turned off.',
+  ]}
+  avoid={[
+    'Do not enable automated prune: true on stateful databases or namespaces until you test deletion protection.',
+    'Do not fight the agent during an incident—pause auto-sync explicitly if you must hotfix live, then commit the fix to Git.',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Start with drift detection only
+    Enable GitOps sync notifications so you see `OutOfSync` diffs before turning on `selfHeal`.
+  </Step>
+  <Step>
+    ### Enable self-heal for stateless workloads
+    Turn on `selfHeal: true` (Argo CD) or rely on Flux's reconciliation interval so drift heals automatically.
+  </Step>
+  <Step>
+    ### Handle HPA and mutated fields cleanly
+    Configure `ignoreDifferences` for fields mutated at runtime (such as `spec.replicas` when using a HorizontalPodAutoscaler).
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'Eliminates "snowflake" clusters where production silently diverges from staging.',
+    'Makes cluster rebuilds repeatable because everything live is already in Git.',
+  ]}
+  cons={[
+    'Runtime-mutated fields (like HPA replica counts) can cause false OutOfSync noise if not ignored.',
+    'Enabling prune: true without care can delete resources removed from Git.',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'What Is GitOps?',
+      href: '/docs/gitops/what-is-gitops',
+      summary: 'The pull-based GitOps model and OpenGitOps principles behind reconciliation.',
+    },
+    {
+      name: 'What Happens on kubectl apply',
+      href: '/docs/kubernetes/kubectl-apply',
+      summary: 'How kube-apiserver and Kubernetes controllers converge once manifests are applied.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "An operator runs kubectl scale deployment/web --replicas=5 on a cluster where Git specifies replicas: 3 and Argo CD has selfHeal: true. What happens?",
+    options: [
+      { label: "Argo CD detects OutOfSync drift and scales the Deployment back to 3 replicas", description: "With selfHeal enabled, the GitOps agent overwrites manual cluster changes with Git's state.", correct: true },
+      { label: "Argo CD opens a pull request updating Git to 5 replicas", description: "GitOps agents treat Git as the source of truth and reconcile the cluster to Git, not the reverse." },
+      { label: "Kubernetes deletes the Deployment", description: "Self-heal reconciles the drifted field back to 3; it does not delete the resource." }
+    ]
+  },
+  {
+    question: "Why might an application show OutOfSync even when no human ran kubectl edit?",
+    options: [
+      { label: "A cluster controller such as HorizontalPodAutoscaler or an admission webhook mutated a field at runtime", description: "Configure ignoreDifferences for fields intentionally managed by in-cluster controllers.", correct: true },
+      { label: "Git automatically deleted the branch", description: "Git branches are not deleted by cluster controllers." },
+      { label: "The container image ran out of memory", description: "OOMKilled affects Pod health, not manifest diff against Git." }
+    ]
+  }
+]} />
+
+## Sources
+- [Argo CD Docs: Automated Sync Policy & Self-Heal](https://argo-cd.readthedocs.io/en/latest/user-guide/auto_sync/)
+- [Flux Docs: Kustomization Reconciliation](https://fluxcd.io/flux/components/kustomize/kustomizations/)
+- [OpenGitOps: Principles of GitOps](https://opengitops.dev/)

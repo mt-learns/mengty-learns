@@ -3,6 +3,8 @@
   "pages": [
     "layered",
     "hexagonal",
+    "onion",
+    "clean",
     "compare-styles",
     "dependency-inversion"
   ],

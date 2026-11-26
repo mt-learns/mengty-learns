@@ -1,0 +1,200 @@
+---
+title: "What Is GitOps? (Pull vs Push)"
+description: How GitOps uses a declarative Git repository as the single source of truth and an in-cluster pull agent to converge cluster state.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: concept
+type: explanation
+level: beginner
+tags: [gitops, argocd, flux, kubernetes, cd]
+tested_with:
+  argocd: "3.6 (docs)"
+  flux: "2.10 (docs)"
+cards:
+  - q: "What are the four OpenGitOps principles?"
+    a: "The system is managed declaratively, desired state is versioned and immutable, desired state is pulled automatically, and software agents continuously reconcile actual state."
+  - q: "What is the key difference between push-based CI deployment and pull-based GitOps?"
+    a: "In push CI, an external runner holds cluster credentials and runs kubectl apply; in pull GitOps, an in-cluster agent (Argo CD or Flux) pulls from Git and applies locally."
+  - q: "Why does pull-based GitOps improve cluster security?"
+    a: "External CI runners do not need long-lived kubeconfig or cluster-admin credentials; the agent only needs read access to the Git repository."
+  - q: "What happens when you want to roll back a bad deployment in GitOps?"
+    a: "You run git revert on the config repository and push; the GitOps agent detects the reverted commit and reconciles the cluster back."
+related:
+  - kubernetes/kubectl-apply
+  - ci-cd/pipeline-anatomy
+sources:
+  - title: "OpenGitOps: Principles of GitOps"
+    url: https://opengitops.dev/
+  - title: "Argo CD Docs: Overview"
+    url: https://argo-cd.readthedocs.io/en/latest/
+  - title: "Flux Docs: Core Concepts"
+    url: https://fluxcd.io/flux/concepts/
+---
+
+## TL;DR
+**GitOps** makes a declarative **Git repository** the single source of truth for infrastructure and apps. Instead of CI pushing `kubectl apply` with cluster-admin keys, an in-cluster **pull agent** (Argo CD or Flux) watches Git and continuously converges the cluster to match.
+
+## Intent
+<Intent>
+Understand the four OpenGitOps principles and why pull-based reconciliation beats ad-hoc `kubectl apply` scripts from CI runners.
+</Intent>
+
+## Problem
+In traditional **push-based CD**, your CI pipeline builds an image, logs into the cluster with a `kubeconfig` secret, and runs `kubectl apply` or `helm upgrade`. That creates two risks: CI holds powerful cluster credentials, and once the CI job finishes, nobody notices if someone manually edits the cluster later.
+
+<Diagram
+  id="gitops-push-vs-pull"
+  ariaLabel="Push CI pushes credentials into the cluster whereas Pull GitOps runs an agent inside the cluster"
+  caption="Push CI requires external cluster credentials; Pull GitOps keeps cluster credentials inside the cluster."
+  layout="tree"
+  nodes={[
+    { id: 'git', label: 'Git Repo', subtitle: 'Desired state', icon: 'git', category: 'external', rank: 0, order: 0 },
+    { id: 'agent', label: 'GitOps Agent', subtitle: 'Argo CD / Flux', icon: 'service', category: 'service', rank: 1, order: 0 },
+    { id: 'k8s', label: 'K8s Cluster', subtitle: 'Reconciled state', icon: 'pod', category: 'data', rank: 2, order: 0 },
+  ]}
+  edges={[
+    { from: 'agent', to: 'git', kind: 'request', label: 'Pulls' },
+    { from: 'agent', to: 'k8s', kind: 'request', label: 'Applies' },
+  ]}
+/>
+
+## Solution
+The **OpenGitOps** standard defines four principles:
+
+1. **Declarative:** The desired state of the system is expressed declaratively (Kubernetes YAML, Helm values, Kustomize).
+2. **Versioned and Immutable:** Desired state is stored in Git with full commit history, PR reviews, and `git revert` rollbacks.
+3. **Pulled Automatically:** Software agents inside the cluster (Argo CD or Flux) automatically pull desired state declarations from Git.
+4. **Continuously Reconciled:** Agents observe actual cluster state and continuously apply changes whenever actual state diverges from Git.
+
+## Real-world analogy
+<Analogy>
+Think of a thermostat (**GitOps agent**) mounted inside your living room (**cluster**). You set the target temperature on the wall dial (**Git commit**). The thermostat continuously measures the room and turns the heater on or off until the room matches the dial—even if someone briefly opens a window.
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="what-is-gitops"
+  title="GitOps Pull Loop: Commit → Detect → Sync → Cluster == Git"
+  nodes={[
+    { id: 'dev', label: 'Developer', subtitle: 'Merges PR', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'git', label: 'Git Repository', subtitle: 'Desired state', icon: 'git', category: 'external', rank: 1, order: 0 },
+    { id: 'agent', label: 'GitOps Agent', subtitle: 'Argo CD / Flux', icon: 'service', category: 'service', rank: 2, order: 0 },
+    { id: 'api', label: 'K8s API Server', subtitle: 'Applies manifests', icon: 'gateway', category: 'edge', rank: 3, order: 0 },
+    { id: 'cluster', label: 'Cluster State', subtitle: 'Live == Git', icon: 'pod', category: 'data', rank: 4, order: 0 },
+  ]}
+  steps={[
+    { edge: 'dev->git', title: 'Merge manifest change to Git', text: 'Developer merges a declarative YAML update into the tracked Git branch.' },
+    { edge: 'git->agent', title: 'GitOps agent pulls commit', text: 'Argo CD or Flux detects the new Git SHA and pulls the desired manifests.' },
+    { edge: 'agent->api', title: 'Agent syncs to API Server', text: 'In-cluster controller applies the updated manifests to kube-apiserver.' },
+    { edge: 'api->cluster', title: 'Cluster converges to Git', text: 'Kubernetes controllers roll out Pods until live state matches Git.' },
+    { edge: 'cluster->api', title: 'Report Pod Ready status', text: 'Nodes update Pod status to Ready in the Kubernetes API Server.', kind: 'response' },
+    { edge: 'api->agent', title: 'Agent observes Healthy', text: 'GitOps agent confirms the live resources match the target Git revision.', kind: 'response' },
+    { edge: 'agent->git', title: 'Update commit sync status', text: 'Agent posts Synced/Healthy status back to the Git commit or PR.', kind: 'response' },
+  ]}
+/>
+
+## Code
+An Argo CD `Application` manifest declaring which Git repo and path to reconcile into the cluster:
+
+```yaml
+# Declarative Argo CD Application (not run — requires Argo CD installed in cluster)
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: web-app
+  namespace: argocd
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/example/k8s-config.git
+    targetRevision: main
+    path: apps/web
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: production
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+```
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'You run Kubernetes clusters and want auditable, PR-reviewed deployments with easy git revert rollbacks.',
+    'You want to remove cluster-admin kubeconfig secrets from external CI runners.',
+  ]}
+  avoid={[
+    'You are deploying a single static site to a managed host (a simple CI deploy step is lighter than running Argo CD or Flux).',
+    'Your team still relies on imperative hotfixes via kubectl edit without committing back to Git.',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Separate app code and config (or use a dedicated config path)
+    Keep declarative Kubernetes manifests in a tracked Git branch.
+  </Step>
+  <Step>
+    ### Install Argo CD or Flux in the cluster
+    Grant the in-cluster controller read-only access (deploy key or GitHub App) to your config repo.
+  </Step>
+  <Step>
+    ### Point an Application or Kustomization at the repo
+    Enable automated sync and `selfHeal` once your manifests are tested in CI.
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'Least privilege: CI never needs direct write credentials to production Kubernetes.',
+    'Audit trail and instant rollback via Git history and PR reviews.',
+  ]}
+  cons={[
+    'Adds an in-cluster controller to operate, monitor, and upgrade.',
+    'Secrets cannot be committed in plaintext—requires Sealed Secrets, SOPS, or External Secrets Operator.',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'What Happens on kubectl apply',
+      href: '/docs/kubernetes/kubectl-apply',
+      summary: 'What the Kubernetes control plane does once the GitOps agent submits manifests to kube-apiserver.',
+    },
+    {
+      name: 'Pipeline Anatomy',
+      href: '/docs/ci-cd/pipeline-anatomy',
+      summary: 'CI still builds, tests, and pushes container images before GitOps updates the cluster.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "How does pull-based GitOps reduce the blast radius of a compromised CI runner?",
+    options: [
+      { label: "CI runners do not hold cluster-admin kubeconfig credentials; the in-cluster agent pulls from Git", description: "Pull-based deployment keeps Kubernetes write credentials inside the cluster.", correct: true },
+      { label: "GitOps disables Kubernetes RBAC", description: "Kubernetes RBAC remains active; only external push credentials are removed." },
+      { label: "GitOps skips container image builds", description: "CI still builds and tests images; GitOps handles cluster state synchronization." }
+    ]
+  },
+  {
+    question: "In GitOps, how should you roll back a broken Kubernetes config change?",
+    options: [
+      { label: "Revert the commit in Git and let the GitOps agent reconcile the cluster", description: "Reverting in Git preserves the audit trail and prevents the agent from overwriting a manual rollback.", correct: true },
+      { label: "SSH into a node and restart containerd", description: "Restarting containerd does not change desired state in etcd or Git." },
+      { label: "Run kubectl edit on the live Deployment", description: "Manual edits cause drift and will be overwritten if self-heal is enabled." }
+    ]
+  }
+]} />
+
+## Sources
+- [OpenGitOps: Principles of GitOps](https://opengitops.dev/)
+- [Argo CD Docs: Overview](https://argo-cd.readthedocs.io/en/latest/)
+- [Flux Docs: Core Concepts](https://fluxcd.io/flux/concepts/)

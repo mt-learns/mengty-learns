@@ -1,0 +1,194 @@
+---
+title: "Networking Basics: DNS, TCP, TLS, HTTP"
+description: How a browser resolves a hostname, opens a TCP connection, negotiates TLS 1.3, and exchanges HTTP requests and responses.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: concept
+type: explanation
+level: beginner
+tags: [networking, dns, tcp, tls, http]
+tested_with:
+  curl: "8.22.0"
+cards:
+  - q: "What is the purpose of DNS before a browser can open a TCP connection?"
+    a: "DNS translates a human-readable hostname (such as example.com) into an IP address (A or AAAA record) that IP routing can reach."
+  - q: "What are the three segments of a TCP 3-way handshake?"
+    a: "SYN (client proposes initial sequence number), SYN-ACK (server acknowledges and sends its own), and ACK (client confirms)."
+  - q: "How many round trips does a standard TLS 1.3 handshake add before sending application data?"
+    a: "One round trip (1-RTT), because the client sends its key share in ClientHello and the server replies with ServerHello, certificate, and Finished."
+  - q: "Why does HTTP/1.1 or HTTP/2 run inside TLS rather than replacing TCP?"
+    a: "TCP provides reliable, ordered byte delivery, TLS adds confidentiality, integrity, and server authentication, and HTTP defines request/response semantics on top."
+related:
+  - foundations/git-cheatsheet
+  - kubernetes/service-routing
+sources:
+  - title: "RFC 9293: Transmission Control Protocol (TCP)"
+    url: https://www.rfc-editor.org/rfc/rfc9293
+  - title: "RFC 8446: The Transport Layer Security (TLS) Protocol Version 1.3"
+    url: https://www.rfc-editor.org/rfc/rfc8446
+  - title: "RFC 9110: HTTP Semantics"
+    url: https://www.rfc-editor.org/rfc/rfc9110
+  - title: "MDN: How the Web works"
+    url: https://developer.mozilla.org/en-US/docs/Learn_web_development/Getting_started/Web_standards/How_the_web_works
+---
+
+## TL;DR
+Loading an `https://` URL is a layered handoff: **DNS** resolves the hostname to an IP, **TCP** establishes a reliable byte stream with a 3-way handshake, **TLS 1.3** authenticates the server and encrypts the channel in 1-RTT, and **HTTP** exchanges requests and responses inside that tunnel.
+
+## Intent
+<Intent>
+Trace every network layer between typing a URL in a browser and receiving an HTTP `200 OK` response, so you can pinpoint whether a failure is DNS, TCP, TLS, or HTTP.
+</Intent>
+
+## Problem
+When a web request fails or feels slow, "the network is down" is rarely actionable. Without knowing which layer runs first—name resolution, transport connection, encryption handshake, or application framing—it is hard to tell a `NXDOMAIN` lookup failure apart from a blocked TCP port, an expired TLS certificate, or a `502` HTTP gateway error.
+
+<Diagram
+  id="networking-layers-problem"
+  ariaLabel="Four stacked protocol layers: DNS, TCP, TLS 1.3, and HTTP"
+  caption="Each layer depends on the one below it; a failure at DNS or TCP prevents TLS and HTTP from ever starting."
+  layout="tree"
+  nodes={[
+    { id: 'http', label: 'HTTP Semantics', subtitle: 'GET / 200 OK', icon: 'pod', category: 'service', rank: 0, order: 0 },
+    { id: 'tls', label: 'TLS 1.3', subtitle: 'Auth & encryption', icon: 'interface', category: 'edge', rank: 1, order: 0 },
+    { id: 'tcp', label: 'TCP', subtitle: 'Reliable stream', icon: 'gateway', category: 'network', rank: 2, order: 0 },
+    { id: 'dns', label: 'DNS', subtitle: 'Name to IP', icon: 'service', category: 'external', rank: 3, order: 0 },
+  ]}
+  edges={[
+    { from: 'http', to: 'tls', kind: 'request' },
+    { from: 'tls', to: 'tcp', kind: 'request' },
+    { from: 'tcp', to: 'dns', kind: 'request' },
+  ]}
+/>
+
+## Solution
+Each protocol solves one narrow job and hands off to the next:
+
+1. **DNS (Domain Name System):** The client asks a recursive resolver for the `A` (IPv4) or `AAAA` (IPv6) record of the hostname. Cached results are reused until their TTL expires.
+2. **TCP (RFC 9293):** The client opens a socket to the resolved IP on port `443` using the 3-way handshake (`SYN` → `SYN-ACK` → `ACK`), establishing sequence numbers for ordered, retransmitted byte delivery.
+3. **TLS 1.3 (RFC 8446):** Inside the TCP stream, `ClientHello` and `ServerHello` negotiate a cipher suite and Diffie-Hellman key share in **1-RTT**, verify the server's X.509 certificate chain, and derive symmetric session keys.
+4. **HTTP (RFC 9110):** Once the TLS record layer is open, the browser sends an HTTP request (`GET / HTTP/1.1` or HTTP/2 `HEADERS` frame) and the server returns status code, headers, and body back down the same TLS and TCP stack.
+
+## Real-world analogy
+<Analogy>
+Think of calling a business: **DNS** is looking up their phone number in a directory; **TCP** is dialing and hearing "Hello, can you hear me?" / "Yes, I hear you"; **TLS** is switching to a shared code language after checking their ID badge; and **HTTP** is the actual conversation ("Send me invoice #42" / "Here it is").
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="networking-basics"
+  title="HTTPS Request Lifecycle: DNS → TCP → TLS 1.3 → HTTP"
+  nodes={[
+    { id: 'browser', label: 'Browser', subtitle: 'Client app', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'dns', label: 'DNS Resolver', subtitle: 'IP lookup', icon: 'service', category: 'network', rank: 1, order: 0 },
+    { id: 'tcp', label: 'TCP Socket', subtitle: '3-way handshake', icon: 'gateway', category: 'network', rank: 2, order: 0 },
+    { id: 'tls', label: 'TLS 1.3 Layer', subtitle: '1-RTT session', icon: 'interface', category: 'edge', rank: 3, order: 0 },
+    { id: 'http', label: 'HTTP Server', subtitle: 'Origin :443', icon: 'pod', category: 'service', rank: 4, order: 0 },
+  ]}
+  steps={[
+    { edge: 'browser->dns', title: 'Resolve hostname via DNS', text: 'Browser queries the DNS resolver for the A/AAAA IP record of example.com.', label: 'DNS Query' },
+    { edge: 'dns->browser', title: 'DNS returns IP address', text: 'Resolver replies with the server IP address and cache TTL.', kind: 'response', label: 'A/AAAA' },
+    { edge: 'browser->tcp', title: 'TCP SYN → SYN-ACK → ACK', text: 'Client and server complete the 3-way handshake to open a reliable byte stream.', label: '3-way' },
+    { edge: 'tcp->tls', title: 'TLS 1.3 1-RTT handshake', text: 'ClientHello and ServerHello exchange keys, verify the cert, and encrypt the channel.', label: 'TLS 1.3' },
+    { edge: 'tls->http', title: 'Encrypted HTTP request', text: 'Browser sends GET / over the authenticated TLS tunnel to the origin.', label: 'GET /' },
+    { edge: 'http->tls', title: 'Origin returns 200 OK', text: 'HTTP server writes status 200, headers, and body into the TLS record layer.', kind: 'response', label: '200 OK' },
+    { edge: 'tls->tcp', title: 'TLS encrypts response bytes', text: 'TLS frames and authenticates the HTTP response before handing it to TCP.', kind: 'response' },
+    { edge: 'tcp->browser', title: 'Browser receives response', text: 'TCP delivers ordered bytes to the browser, which parses and renders the page.', kind: 'response' },
+  ]}
+/>
+
+## Code
+You can observe each stage directly with `curl -v` (verbose output prints DNS resolution, TCP connect, TLS handshake, and HTTP headers):
+
+```bash
+# Inspect DNS, TCP connect, TLS 1.3 negotiation, and HTTP response headers (not run)
+curl -vI --tlsv1.3 https://example.com
+```
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'You are debugging latency or connection failures and need to isolate DNS, TCP, TLS, or HTTP.',
+    'You want to understand why connection reuse (HTTP keep-alive, HTTP/2 multiplexing) saves multiple round trips.',
+    'You are configuring load balancers, reverse proxies, or Kubernetes Ingress TLS termination.',
+  ]}
+  avoid={[
+    'You only need to check application-level JSON payloads; browser DevTools Network tab or curl -s is enough.',
+    'You are working inside a local Unix domain socket where DNS and TCP do not apply.',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Check DNS resolution first
+    Verify the hostname resolves to the expected IP (`dig +short example.com` or `nslookup example.com`).
+  </Step>
+  <Step>
+    ### Verify TCP reachability
+    Confirm the target IP and port (`443`) accept connections without firewall drops.
+  </Step>
+  <Step>
+    ### Inspect TLS certificate and version
+    Check that the server presents a valid certificate chain and negotiates TLS 1.2 or TLS 1.3.
+  </Step>
+  <Step>
+    ### Read the HTTP status and headers
+    Inspect the HTTP status code, `Cache-Control`, and `Content-Type` returned by the origin.
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'Clean separation of concerns: DNS, TCP, TLS, and HTTP evolve independently.',
+    'TLS 1.3 cuts handshake latency to 1-RTT (and 0-RTT for resumed sessions with replay caveats).',
+    'Standardized RFCs mean any compliant browser, CLI, or proxy interoperates.',
+  ]}
+  cons={[
+    'Cold connections pay sequential round trips (DNS + TCP + TLS) before the first HTTP byte.',
+    'Head-of-line blocking in TCP delays all multiplexed HTTP/2 streams if one packet drops (why HTTP/3 uses QUIC over UDP).',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'Kubernetes Service Routing',
+      href: '/docs/kubernetes/service-routing',
+      summary: 'See how Ingress terminates TLS and forwards HTTP traffic to Services and Pods.',
+    },
+    {
+      name: 'Git Cheatsheet',
+      href: '/docs/foundations/git-cheatsheet',
+      summary: 'Git remotes over HTTPS rely on this exact DNS → TCP → TLS → HTTP stack.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "Which stage runs first when a browser has an empty cache and visits https://example.com?",
+    options: [
+      { label: "DNS resolution", description: "The browser needs the server's IP address before it can send a TCP SYN packet.", correct: true },
+      { label: "TLS 1.3 ClientHello", description: "TLS runs inside an already-established TCP connection." },
+      { label: "HTTP GET /", description: "HTTP requests are sent only after TCP and TLS complete." }
+    ]
+  },
+  {
+    question: "How does TLS 1.3 improve handshake latency compared to TLS 1.2?",
+    options: [
+      { label: "It completes key exchange and authentication in 1-RTT instead of 2-RTT", description: "RFC 8446 sends the client's key share in ClientHello, cutting a full round trip.", correct: true },
+      { label: "It skips server certificate verification", description: "TLS 1.3 still authenticates the server with its certificate chain." },
+      { label: "It replaces TCP with DNS", description: "TLS 1.3 runs on top of a reliable transport such as TCP." }
+    ]
+  }
+]} />
+
+## Sources
+- [RFC 9293: Transmission Control Protocol (TCP)](https://www.rfc-editor.org/rfc/rfc9293)
+- [RFC 8446: The Transport Layer Security (TLS) Protocol Version 1.3](https://www.rfc-editor.org/rfc/rfc8446)
+- [RFC 9110: HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110)
+- [MDN: How the Web works](https://developer.mozilla.org/en-US/docs/Learn_web_development/Getting_started/Web_standards/How_the_web_works)

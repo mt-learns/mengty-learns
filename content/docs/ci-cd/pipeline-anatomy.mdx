@@ -1,0 +1,206 @@
+---
+title: "Pipeline Anatomy: Triggers, Jobs, Cache, Artifacts"
+description: How a CI/CD pipeline turns a git push into parallel jobs, cached dependencies, build artifacts, and a deployment gate.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: concept
+type: explanation
+level: beginner
+tags: [ci-cd, github-actions, pipeline, caching, artifacts]
+tested_with:
+  pnpm: "11.6.0"
+  node: "22.22.3"
+cards:
+  - q: "In GitHub Actions, do separate jobs in the same workflow share a filesystem by default?"
+    a: "No. Each job runs on a fresh runner VM/container, so files must be passed via artifacts or caches."
+  - q: "What is the difference between a CI cache and a CI artifact?"
+    a: "A cache speeds up future runs by reusing dependencies (like the pnpm store), whereas an artifact preserves build outputs or test reports from a specific run."
+  - q: "Why should a deploy job sit behind a gate (needs + environment protection)?"
+    a: "It ensures lint, typecheck, tests, and build all pass before any artifact is promoted to production."
+  - q: "What does actions/setup-node with cache: pnpm do in .github/workflows/ci.yml?"
+    a: "It restores the pnpm store keyed by pnpm-lock.yaml before install and saves new entries after the job finishes."
+related:
+  - ci-cd/github-actions
+  - ci-cd/this-site-pipeline
+sources:
+  - title: "GitHub Docs: Understanding GitHub Actions"
+    url: https://docs.github.com/en/actions/get-started/understand-github-actions
+  - title: "GitHub Docs: Workflow syntax for GitHub Actions"
+    url: https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax
+  - title: "GitHub Docs: Caching dependencies to speed up workflows"
+    url: https://docs.github.com/en/actions/using-workflows/caching-dependencies-to-speed-up-workflows
+  - title: "GitHub Docs: Storing and sharing data from a workflow"
+    url: https://docs.github.com/en/actions/tutorials/store-and-share-data
+---
+
+## TL;DR
+A CI/CD pipeline is an event-driven DAG: a **trigger** (`push`, `pull_request`) spawns **jobs** on clean runners, **caches** restore unchanged dependencies, **artifacts** carry build outputs across stages, and a **deploy gate** promotes only verified builds.
+
+## Intent
+<Intent>
+Understand the five building blocks of every modern CI/CD pipeline—triggers, parallel jobs, caching, artifacts, and deploy gates—using this repository's own `.github/workflows/ci.yml` as a concrete reference.
+</Intent>
+
+## Problem
+Treating CI as one opaque bash script makes builds slow and brittle. Installing packages from scratch on every commit wastes minutes, running lint/test/build sequentially delays feedback, and deploying without a gate lets broken commits reach users.
+
+<Diagram
+  id="pipeline-cache-vs-artifact"
+  ariaLabel="Caches flow across workflow runs while artifacts flow between jobs in the same run"
+  caption="Caches speed up future runs; artifacts pass outputs (such as out/ or test reports) between jobs in one run."
+  layout="tree"
+  nodes={[
+    { id: 'job', label: 'Build Job', subtitle: 'Install & build', icon: 'ci', category: 'service', rank: 0, order: 0 },
+    { id: 'cache', label: 'Cache Store', subtitle: 'Across runs', icon: 'db', category: 'data', rank: 1, order: 0 },
+    { id: 'art', label: 'Artifact Store', subtitle: 'Within one run', icon: 'pod', category: 'concrete', rank: 1, order: 1 },
+  ]}
+  edges={[
+    { from: 'job', to: 'cache', kind: 'request' },
+    { from: 'job', to: 'art', kind: 'request' },
+  ]}
+/>
+
+## Solution
+Every healthy pipeline separates five responsibilities:
+
+1. **Trigger (`on:`):** Declarative rules (`push` to `main`, `pull_request`) decide when the workflow starts.
+2. **Parallel Jobs (`jobs:`):** Independent checks (lint, typecheck, unit tests, build) run concurrently on separate runners unless linked by `needs:`.
+3. **Cache Restore / Save:** Package stores (like `pnpm` store keyed by `pnpm-lock.yaml`) are restored before `pnpm install --frozen-lockfile` and saved afterward.
+4. **Artifacts:** Build outputs (`out/`), Playwright traces, or coverage reports are uploaded so downstream jobs or reviewers can inspect or deploy them.
+5. **Deploy Gate:** Branch protection and environment rules require all check jobs to succeed before the deploy step runs.
+
+## Real-world analogy
+<Analogy>
+Think of an airport security and boarding line: your ticket scan (**trigger**) starts the process; baggage screening and passport check (**parallel jobs**) happen at separate lanes; TSA PreCheck (**cache**) lets frequent flyers skip unpacking; your boarding pass (**artifact**) is handed to the **deploy gate** agent before you step onto the plane.
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="pipeline-anatomy"
+  title="CI/CD Pipeline: Trigger → Cache → Jobs → Artifacts → Gate"
+  nodes={[
+    { id: 'trigger', label: 'Push / PR Trigger', subtitle: 'Matches on: rules', icon: 'git', category: 'external', rank: 0, order: 0 },
+    { id: 'cache', label: 'Cache Store', subtitle: 'Restore/save pnpm', icon: 'db', category: 'data', rank: 1, order: 0 },
+    { id: 'jobs', label: 'Parallel Jobs', subtitle: 'Lint / Test / Build', icon: 'ci', category: 'service', rank: 2, order: 0 },
+    { id: 'artifacts', label: 'Artifacts', subtitle: 'Save out/ & logs', icon: 'pod', category: 'concrete', rank: 3, order: 0 },
+    { id: 'deploy', label: 'Deploy Gate', subtitle: 'Checks pass → prod', icon: 'gateway', category: 'edge', rank: 4, order: 0 },
+  ]}
+  steps={[
+    { edge: 'trigger->cache', title: 'Trigger restores pnpm cache', text: 'A push or pull_request event starts the workflow and restores the pnpm store.' },
+    { edge: 'cache->jobs', title: 'Run lint, typecheck, build', text: 'Parallel jobs run pnpm install --frozen-lockfile, lint, typecheck, and build.' },
+    { edge: 'jobs->cache', title: 'Save updated cache', text: 'New packages from a changed lockfile are saved back to the cache.', kind: 'response' },
+    { edge: 'jobs->artifacts', title: 'Upload build artifacts', text: 'The build job packages out/ or test reports as workflow artifacts.' },
+    { edge: 'artifacts->deploy', title: 'Pass deploy gate & promote', text: 'Branch protection verifies all required checks passed before deploying.' },
+  ]}
+/>
+
+## Code
+Here is the real `.github/workflows/ci.yml` from this repository:
+
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [main, mengtylearns-mvp]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.6.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm lint
+      - run: pnpm typecheck
+      - run: pnpm build
+```
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'You want fast feedback by running independent checks (lint, unit tests, build) in parallel.',
+    'You need reproducible builds using --frozen-lockfile and cached dependency stores.',
+  ]}
+  avoid={[
+    'Splitting a 20-second workflow into 6 tiny jobs where runner boot + checkout overhead exceeds the work saved.',
+    'Storing secrets inside caches or artifacts—both are accessible to workflow runs and should never hold credentials.',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Define narrow triggers
+    Trigger on `pull_request` and pushes to `main` so every merge candidate is checked.
+  </Step>
+  <Step>
+    ### Cache dependencies by lockfile hash
+    Use `actions/setup-node` with `cache: pnpm` and `pnpm install --frozen-lockfile`.
+  </Step>
+  <Step>
+    ### Gate deployment on check jobs
+    Require `lint`, `typecheck`, `test`, and `build` to pass before deploying artifacts.
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'Parallel jobs cut wall-clock feedback time for developers.',
+    'Immutable artifacts guarantee you deploy the exact bits that passed tests.',
+  ]}
+  cons={[
+    'Cache misses or oversized artifacts can still slow runners down if not scoped carefully.',
+    'Runner startup overhead means very small scripts can be faster in one combined job.',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'This Site Pipeline',
+      href: '/docs/ci-cd/this-site-pipeline',
+      summary: 'Walkthrough of all workflows in this repository (ci.yml, labs.yml, inbox.yml).',
+    },
+    {
+      name: 'Write a GitHub Actions Workflow',
+      href: '/docs/ci-cd/github-actions',
+      summary: 'Hands-on guide to writing and linting GitHub Actions YAML.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "Why does .github/workflows/ci.yml pass --frozen-lockfile to pnpm install?",
+    options: [
+      { label: "To fail the build if pnpm-lock.yaml is out of sync with package.json, ensuring reproducible installs", description: "CI should never silently mutate the lockfile during a check run.", correct: true },
+      { label: "To skip downloading any packages", description: "Packages are still installed from cache or registry." },
+      { label: "To upload node_modules as an artifact", description: "--frozen-lockfile only controls lockfile verification during install." }
+    ]
+  },
+  {
+    question: "When should you use a GitHub Actions artifact instead of a cache?",
+    options: [
+      { label: "When passing build outputs (like out/ or test reports) from a build job to a deploy job or reviewer", description: "Artifacts preserve outputs from a specific run; caches speed up future runs.", correct: true },
+      { label: "When storing the pnpm dependency store across unrelated PRs", description: "Cross-run dependency reuse is what caches are designed for." },
+      { label: "When storing production API keys", description: "Secrets belong in encrypted repository/environment secrets, never artifacts." }
+    ]
+  }
+]} />
+
+## Sources
+- [GitHub Docs: Understanding GitHub Actions](https://docs.github.com/en/actions/get-started/understand-github-actions)
+- [GitHub Docs: Workflow syntax for GitHub Actions](https://docs.github.com/en/actions/reference/workflows-and-actions/workflow-syntax)
+- [GitHub Docs: Caching dependencies to speed up workflows](https://docs.github.com/en/actions/using-workflows/caching-dependencies-to-speed-up-workflows)
+- [GitHub Docs: Storing and sharing data from a workflow](https://docs.github.com/en/actions/tutorials/store-and-share-data)

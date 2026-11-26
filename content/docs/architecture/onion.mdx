@@ -1,0 +1,233 @@
+---
+title: Onion Architecture
+description: How Onion Architecture organizes code into concentric rings around the Domain Model so all dependencies point inward.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: concept
+type: explanation
+level: intermediate
+tags: [architecture, onion, ddd, dependency-inversion, typescript]
+tested_with:
+  typescript: "7.0.2"
+cards:
+  - q: "Which layer sits at the very center of Onion Architecture?"
+    a: "The Domain Model (entities, value objects, and invariants), which has zero dependencies on any outer ring."
+  - q: "Which direction do source-code dependencies point in Onion Architecture?"
+    a: "Strictly inward toward the Domain Model; outer rings (UI, Infrastructure, Tests) depend on inner rings, never the reverse."
+  - q: "Where do repository interfaces live in Onion Architecture?"
+    a: "Inside the core (Domain Services ring), while their concrete SQL or HTTP implementations live in the outer Infrastructure ring."
+  - q: "How does Onion Architecture differ from classic Layered (n-tier) architecture?"
+    a: "In classic Layered architecture, Business depends on Data/DB; in Onion, Infrastructure/DB depends on core Domain interfaces via Dependency Inversion."
+related:
+  - architecture/hexagonal
+  - architecture/compare-styles
+  - architecture/dependency-inversion
+sources:
+  - title: "Jeffrey Palermo: The Onion Architecture (Part 1)"
+    url: https://jeffreypalermo.com/2008/07/the-onion-architecture-part-1/
+  - title: "Jeffrey Palermo: The Onion Architecture (Part 2)"
+    url: https://jeffreypalermo.com/2008/07/the-onion-architecture-part-2/
+---
+
+## TL;DR
+**Onion Architecture** places the **Domain Model** at the center, surrounded by **Domain Services**, **Application Services**, and an outer ring of **Infrastructure and UI**. Source-code dependencies point strictly inward, so database drivers and HTTP frameworks depend on your core—never the other way around.
+
+## Intent
+<Intent>
+Keep business rules and domain state independent of databases, ORMs, and web frameworks by wrapping the core in concentric rings with an inward-only dependency rule.
+</Intent>
+
+## Problem
+In a traditional database-centric layered architecture, the domain and business logic depend directly on the data-access layer. Changing an ORM, upgrading a database driver, or testing order validation without a live database becomes slow and fragile because infrastructure concerns leak into core business rules.
+
+<Diagram
+  id="onion-dependency-rule"
+  ariaLabel="Onion Architecture rings with dependencies pointing inward toward the Domain Model"
+  caption="The Dependency Rule: outer rings depend on inner rings; the Domain Model at the center depends on nothing."
+  layout="tree"
+  nodes={[
+    { id: 'infra', label: 'UI & Infra', subtitle: 'HTTP, SQL, Tests', icon: 'gateway', category: 'external', rank: 0, order: 0 },
+    { id: 'appsvc', label: 'Application Svc', subtitle: 'Use-case orchestration', icon: 'service', category: 'service', rank: 1, order: 0 },
+    { id: 'domsvc', label: 'Domain Services', subtitle: 'Domain interfaces', icon: 'interface', category: 'abstraction', rank: 2, order: 0 },
+    { id: 'domain', label: 'Domain Model', subtitle: 'Entities & rules', icon: 'class', category: 'concrete', rank: 3, order: 0 },
+  ]}
+  edges={[
+    { from: 'infra', to: 'appsvc', kind: 'request' },
+    { from: 'appsvc', to: 'domsvc', kind: 'request' },
+    { from: 'domsvc', to: 'domain', kind: 'request' },
+  ]}
+/>
+
+## Solution
+Jeffrey Palermo introduced Onion Architecture around four key tenets:
+
+1. **Domain Model (center):** Entities (`Order`), value objects (`OrderItem`), and invariants live here with zero external imports.
+2. **Domain Services:** Interfaces such as `OrderRepository` and domain-level coordination that operate on domain objects.
+3. **Application Services:** Use-case orchestration (`PlaceOrderAppService`) that coordinates domain objects and calls repository interfaces.
+4. **Infrastructure / UI (outermost ring):** HTTP controllers, PostgreSQL repositories, message brokers, and test harnesses implement the inner interfaces and wire everything at startup.
+
+## Real-world analogy
+<Analogy>
+Think of an onion or a medieval fortress: the **Domain Model** is the inner keep holding the crown jewels (business rules). **Application Services** are the inner courtyard, and **Infrastructure/UI** are the outer walls and gates. Outer walls can see and protect the keep, but the keep never depends on what material the outer gate is made of.
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="onion-order"
+  title="Onion Architecture: Placing an Order"
+  nodes={[
+    { id: 'http', label: 'HTTP Client', subtitle: 'POST /orders', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'ui', label: 'UI / Infra', subtitle: 'Controller & DB', icon: 'gateway', category: 'external', rank: 1, order: 0 },
+    { id: 'appsvc', label: 'Application Svc', subtitle: 'PlaceOrderAppSvc', icon: 'service', category: 'service', rank: 2, order: 0 },
+    { id: 'domsvc', label: 'Domain Services', subtitle: 'OrderRepo iface', icon: 'interface', category: 'abstraction', rank: 3, order: 0 },
+    { id: 'domain', label: 'Domain Model', subtitle: 'Order invariants', icon: 'class', category: 'concrete', rank: 4, order: 0 },
+  ]}
+  steps={[
+    { edge: 'http->ui', title: 'HTTP POST /orders', text: 'Caller sends an order payload to the outer UI/HTTP controller.' },
+    { edge: 'ui->appsvc', title: 'Invoke Application Service', text: 'Controller validates input DTOs and calls PlaceOrderAppService.' },
+    { edge: 'appsvc->domain', title: 'Enforce Domain invariants', text: 'Application Service creates an Order and validates non-empty items.' },
+    { edge: 'appsvc->domsvc', title: 'Persist via Domain interface', text: 'Application Service calls OrderRepository defined in the core.' },
+    { edge: 'domsvc->ui', title: 'Infrastructure executes SQL', text: 'PostgresOrderRepository (outer ring) implements the interface and saves.', label: 'DIP' },
+    { edge: 'ui->appsvc', title: 'Return saved Order', text: 'Repository returns the persisted Order to Application Service.', kind: 'response' },
+    { edge: 'appsvc->ui', title: 'Return result to Controller', text: 'Application Service hands the completed Order back to the UI ring.', kind: 'response' },
+    { edge: 'ui->http', title: 'Reply 201 Created', text: 'Controller serializes the response DTO and returns 201 to HTTP Client.', kind: 'response' },
+  ]}
+/>
+
+## Code
+Using the shared **Order** service in TypeScript—notice how `Order` and `OrderRepository` have zero imports from Postgres or HTTP:
+
+<Tabs items={['TypeScript']}>
+  <Tab value="TypeScript">
+```ts
+// --- Ring 1: Domain Model (src/domain/order.ts) ---
+export interface OrderItem {
+  sku: string;
+  priceCents: number;
+  qty: number;
+}
+
+export class Order {
+  constructor(
+    public readonly id: string,
+    public readonly customerId: string,
+    public readonly totalCents: number,
+  ) {}
+
+  static create(customerId: string, items: OrderItem[]): Order {
+    if (items.length === 0) throw new Error('Order must contain at least one item');
+    const totalCents = items.reduce((sum, i) => sum + i.priceCents * i.qty, 0);
+    return new Order(crypto.randomUUID(), customerId, totalCents);
+  }
+}
+
+// --- Ring 2: Domain Services / Interfaces (src/domain/order-repository.ts) ---
+export interface OrderRepository {
+  save(order: Order): Promise<Order>;
+}
+
+// --- Ring 3: Application Services (src/application/place-order.ts) ---
+export class PlaceOrderAppService {
+  constructor(private readonly repo: OrderRepository) {}
+
+  async execute(customerId: string, items: OrderItem[]): Promise<Order> {
+    const order = Order.create(customerId, items);
+    return this.repo.save(order);
+  }
+}
+
+// --- Ring 4: Infrastructure (src/infrastructure/postgres-order-repo.ts) ---
+export class PostgresOrderRepository implements OrderRepository {
+  async save(order: Order): Promise<Order> {
+    // Runs SQL INSERT INTO orders ...
+    return order;
+  }
+}
+```
+  </Tab>
+</Tabs>
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'You are building a domain-rich application (DDD) where business invariants should outlive frameworks and databases.',
+    'You want fast unit tests on Application and Domain layers without booting a database.',
+  ]}
+  avoid={[
+    'Your app is simple CRUD with minimal business logic—Layered architecture is simpler with fewer indirections.',
+    'You are writing a quick script or prototype where ring boundaries add unnecessary boilerplate.',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Model the center first
+    Define entities and value objects (`Order`, `OrderItem`) with pure TypeScript and zero external imports.
+  </Step>
+  <Step>
+    ### Declare repository interfaces in Domain Services
+    Keep `OrderRepository` inside the core so Application Services never import SQL or ORM packages.
+  </Step>
+  <Step>
+    ### Implement Infrastructure in the outer ring
+    Write `PostgresOrderRepository` and HTTP controllers in outer folders, and wire them together at the composition root.
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'Business rules are completely isolated from databases, ORMs, and HTTP frameworks.',
+    'Easy to swap Postgres for an in-memory fake in unit tests via Dependency Inversion.',
+  ]}
+  cons={[
+    'More files, interfaces, and DTO mapping than a straightforward 3-layer app.',
+    'Teams new to DDD sometimes blur Domain Services and Application Services.',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'Hexagonal Architecture',
+      href: '/docs/architecture/hexagonal',
+      summary: 'Shares the same Dependency Inversion core, framed around Driving/Driven Ports and Adapters.',
+    },
+    {
+      name: 'Compare Architecture Styles',
+      href: '/docs/architecture/compare-styles',
+      summary: 'Side-by-side comparison of Layered, Hexagonal, Onion, and Clean on the same Order service.',
+    },
+    {
+      name: 'Dependency Inversion in Practice',
+      href: '/docs/architecture/dependency-inversion',
+      summary: 'The SOLID principle that lets inner rings define interfaces implemented by outer rings.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "In Onion Architecture, where should the OrderRepository interface be defined?",
+    options: [
+      { label: "Inside the core (Domain Services ring), so Infrastructure implements it", description: "Defining the interface inside the core keeps dependencies pointing inward.", correct: true },
+      { label: "Inside the PostgreSQL Infrastructure package", description: "If the interface lived in Infrastructure, Application Services would depend outward on Infrastructure." },
+      { label: "Inside the HTTP Controller", description: "Controllers sit in the outermost UI ring and should not own persistence contracts." }
+    ]
+  },
+  {
+    question: "What is allowed to import what under the Onion dependency rule?",
+    options: [
+      { label: "Application Services can import the Domain Model, but the Domain Model cannot import Application Services", description: "Dependencies only point inward toward the center.", correct: true },
+      { label: "The Domain Model can import ORM models for convenience", description: "Importing ORM packages in the Domain Model violates the inward dependency rule." },
+      { label: "Infrastructure and Domain Model can mutually import each other", description: "Circular dependencies break the isolation of the core." }
+    ]
+  }
+]} />
+
+## Sources
+- [Jeffrey Palermo: The Onion Architecture (Part 1)](https://jeffreypalermo.com/2008/07/the-onion-architecture-part-1/)
+- [Jeffrey Palermo: The Onion Architecture (Part 2)](https://jeffreypalermo.com/2008/07/the-onion-architecture-part-2/)
