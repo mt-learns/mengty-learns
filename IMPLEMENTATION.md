@@ -209,3 +209,6 @@ Spec: PLAN §10.5 and §10.6.
 ## 5. Time estimate
 About **5–6 working days** to launch with 3 notes (Steps 1–7).
 Phase 2: about **7–8 working days** (Steps 8–13), done P1 first (Steps 8–10, ~3½ days), then P2 and P3.
+
+### Step 16 — Landing page + "Ink & Jade" palette redesign (2–3 days) · P1, now
+Spec: `design/REDESIGN-PLAN.md`. It supersedes PLAN.md decision D3 (iOS blue) and removes the Projects and About pages. It also absorbs the old phase-2 quality-gate commit (Lighthouse + axe).

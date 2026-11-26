@@ -83,7 +83,7 @@ Optional, without a backend: a newsletter through an external form (Buttondown o
 |---|---|---|
 | D1 | Docs framework | Fumadocs |
 | D2 | Dark mode | `next-themes`, `.dark` class, system default |
-| D3 | Accent colour | **Owner to confirm.** Default is iOS blue: `#0066CC` light (AA on white), `#409CFF` dark. Pure `#007AFF` is about 4:1 on white and fails AA. |
+| D3 | Accent colour | **Superseded 2026-11-26 by `design/REDESIGN-PLAN.md`:** "Ink & Jade" (jade #0F766E / #2DD4BF, amber highlight, warm stone neutrals). Apple design principles, not Apple colours. |
 | D4 | Fonts | Inter via `next/font/google` (self-hosted at build time), falling back to the system stack. Mono: `ui-monospace, "SF Mono", "JetBrains Mono", monospace`. |
 | D5 | Hosting and domain | `mengtylearns.com` apex on Cloudflare Pages. `www` redirects to the apex. |
 | D6 | Package manager | pnpm, Node 22 LTS (`.nvmrc`) |
