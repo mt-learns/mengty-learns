@@ -1,0 +1,211 @@
+---
+title: "The C4 Model: Context, Container, Component, Code"
+description: Visualize software architecture at four zoom levels—System Context, Containers, Components, and Code—applied to Mengty Learns itself.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: concept
+type: explanation
+level: beginner
+tags: [architecture, c4-model, diagrams, documentation]
+tested_with:
+  typescript: "7.0.2"
+cards:
+  - q: "What are the four zoom levels of Simon Brown's C4 model?"
+    a: "Level 1: System Context (users & external systems), Level 2: Containers (deployable apps/stores), Level 3: Components (modules inside a container), Level 4: Code (classes/interfaces)."
+  - q: "In C4, what is a 'Container'?"
+    a: "A separately runnable/deployable unit or data store (e.g., a Next.js static site, an API server, a Postgres DB, or browser localStorage)—NOT a Docker container."
+  - q: "Which C4 levels are most useful for everyday team documentation and ADRs?"
+    a: "Levels 1 and 2 (Context and Container), plus Level 3 (Component) for complex services—Level 4 (Code) is best left to your IDE because it changes too fast."
+  - q: "Why does C4 forbid mixing levels in a single diagram?"
+    a: "Mixing users, databases, and TypeScript classes on one canvas creates unreadable clutter; keeping one zoom level per diagram lets each audience see the right detail."
+related:
+  - ci-cd/this-site-pipeline
+  - architecture/compare-styles
+sources:
+  - title: "The C4 Model for Visualising Software Architecture"
+    url: https://c4model.com/
+---
+
+## TL;DR
+The **C4 model** zooms into a system like Google Maps across four levels: **Context** (who uses it), **Container** (deployable apps & stores), **Component** (internal modules), and **Code** (classes). Below, we map **Mengty Learns** itself using C4.
+
+## Intent
+<Intent>
+Draw architecture diagrams at a consistent level of abstraction so stakeholders, DevOps engineers, and developers each get the exact zoom level they need without a wall of boxes and arrows.
+</Intent>
+
+## Problem
+Ad-hoc architecture diagrams mix "Customer", "Kubernetes Ingress", "PostgreSQL", and "`OrderValidator.ts`" on the same slide. Product managers get lost in class names, and engineers still don't know which process talks to which database.
+
+## Solution
+Simon Brown's **C4 model** defines four hierarchical zoom levels:
+1. **Level 1 — System Context:** your system as one box, surrounded by its users and external systems.
+2. **Level 2 — Containers:** zoom inside the system to show separately deployable apps, static bundles, APIs, and data stores. *(Note: in C4, "Container" means a deployable unit, not specifically Docker.)*
+3. **Level 3 — Components:** zoom inside one Container to show its logical modules/packages.
+4. **Level 4 — Code:** zoom inside one Component to show classes/functions (usually auto-generated or skipped).
+
+## Real-world analogy
+<Analogy>
+Think of **Google Maps**: Level 1 is the **country view** (Context), Level 2 is the **city view** (Containers), Level 3 is the **neighborhood streets** (Components), and Level 4 is the **building floorplan** (Code). You never try to print street names on a world map.
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="c4-zoom-levels"
+  title="C4 Model: Zooming from Context to Code"
+  nodes={[
+    { id: 'c1', label: 'L1: Context', subtitle: 'Users & systems', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'c2', label: 'L2: Containers', subtitle: 'Apps & stores', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+    { id: 'c3', label: 'L3: Components', subtitle: 'Internal modules', icon: 'service', category: 'service', rank: 2, order: 0 },
+    { id: 'c4', label: 'L4: Code', subtitle: 'Classes & types', icon: 'class', category: 'abstraction', rank: 3, order: 0 },
+  ]}
+  steps={[
+    { edge: 'c1->c2', title: 'Zoom into System Context', text: 'Open the system boundary to reveal deployable Containers (Static App, CI, Storage).' },
+    { edge: 'c2->c3', title: 'Zoom into one Container', text: 'Open the Next.js Web App container to see its internal Components (MDX, Review, Diagrams).' },
+    { edge: 'c3->c4', title: 'Zoom into one Component', text: 'Open a Component to inspect TypeScript classes, functions, and interfaces.' },
+    { edge: 'c4->c3', title: 'Zoom back to Components', text: 'Step back up to module boundaries when discussing feature ownership.', kind: 'response' },
+    { edge: 'c3->c2', title: 'Zoom back to Containers', text: 'Step back to deployment topology for ops and security reviews.', kind: 'response' },
+  ]}
+/>
+
+## Structure: Mengty Learns in C4
+
+### Level 1 — System Context (Mengty Learns)
+<Diagram
+  id="c4-mt-context"
+  ariaLabel="C4 Level 1 System Context for Mengty Learns: Learner, Author, GitHub Actions, and Static Host"
+  caption="Level 1 (Context): Who uses Mengty Learns and what external systems it touches."
+  nodes={[
+    { id: 'learner', label: 'Learner', subtitle: 'Reads & reviews', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'mt', label: 'Mengty Learns', subtitle: 'Static learning app', icon: 'gateway', category: 'service', rank: 1, order: 0 },
+    { id: 'gh', label: 'GitHub + Actions', subtitle: 'Git & CI/CD', icon: 'git', category: 'external', rank: 2, order: 0 },
+  ]}
+  edges={[
+    { from: 'learner', to: 'mt', kind: 'request', label: 'HTTPS' },
+    { from: 'gh', to: 'mt', kind: 'request', label: 'Deploys' },
+  ]}
+/>
+
+### Level 2 — Containers (Mengty Learns)
+<Diagram
+  id="c4-mt-containers"
+  ariaLabel="C4 Level 2 Containers for Mengty Learns: Static HTML/JS bundle, cards.json, and browser localStorage"
+  caption="Level 2 (Containers): Static export bundle, generated cards.json, and browser localStorage (zero backend)."
+  nodes={[
+    { id: 'browser', label: 'Browser SPA', subtitle: 'Next.js 16 static', icon: 'gateway', category: 'edge', rank: 0, order: 0 },
+    { id: 'cards', label: 'cards.json', subtitle: 'Build-time index', icon: 'db', category: 'data', rank: 1, order: 0 },
+    { id: 'ls', label: 'localStorage', subtitle: 'FSRS mt-*-v1', icon: 'db', category: 'concrete', rank: 1, order: 1 },
+  ]}
+  edges={[
+    { from: 'browser', to: 'cards', kind: 'request', label: 'Fetches' },
+    { from: 'browser', to: 'ls', kind: 'request', label: 'Reads/writes' },
+  ]}
+/>
+
+### Level 3 — Components (Web App Container)
+<Diagram
+  id="c4-mt-components"
+  ariaLabel="C4 Level 3 Components inside Mengty Learns: Fumadocs MDX, Diagram/Flow Renderer, and FSRS Review Engine"
+  caption="Level 3 (Components): Major internal modules inside the static Next.js application."
+  nodes={[
+    { id: 'mdx', label: 'Fumadocs MDX', subtitle: 'Docs & schema', icon: 'interface', category: 'abstraction', rank: 0, order: 0 },
+    { id: 'flow', label: 'Flow & Diagram', subtitle: 'Dagre + React Flow', icon: 'service', category: 'service', rank: 1, order: 0 },
+    { id: 'fsrs', label: 'FSRS Review', subtitle: 'ts-fsrs scheduler', icon: 'class', category: 'concrete', rank: 1, order: 1 },
+  ]}
+  edges={[
+    { from: 'mdx', to: 'flow', kind: 'request', label: 'Renders' },
+    { from: 'mdx', to: 'fsrs', kind: 'request', label: 'Feeds cards' },
+  ]}
+/>
+
+## Code
+At **Level 4 (Code)**, you inspect the actual TypeScript types inside the `Flow & Diagram` component—for example, `FlowNode` in `components/diagram/types.ts`:
+
+```ts
+// Level 4 detail: actual shape in components/diagram/types.ts (read-only reference)
+export interface C4DiagramNode {
+  id: string;
+  label: string;
+  subtitle?: string;
+  rank?: number;
+  order?: number;
+}
+```
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'Onboarding new engineers—Levels 1 and 2 explain the whole system in 5 minutes.',
+    'Architecture reviews and ADRs where mixing deployment boxes with class names causes confusion.',
+  ]}
+  avoid={[
+    'Maintaining hand-drawn Level 4 (Code) diagrams—they go stale on the next refactor; read the IDE instead.',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Draw Level 1 (Context) first
+    One box for your system, plus actors and external dependencies.
+  </Step>
+  <Step>
+    ### Draw Level 2 (Containers)
+    Show every deployable app, worker, queue, and database, with protocols (`HTTPS`, `SQL`).
+  </Step>
+  <Step>
+    ### Add Level 3 (Components) only where needed
+    Zoom into core services to show module boundaries; skip trivial CRUD containers.
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'Clear, hierarchical vocabulary shared by product, ops, and engineering.',
+    'Levels 1 and 2 change slowly, so diagrams stay accurate for months or years.',
+  ]}
+  cons={[
+    'Level 4 diagrams rot quickly if drawn manually.',
+    'The word "Container" occasionally confuses newcomers who think of Docker.',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'This Site Pipeline',
+      href: '/docs/ci-cd/this-site-pipeline',
+      summary: 'See how GitHub Actions builds and verifies the static containers shown above.',
+    },
+    {
+      name: 'Compare Architecture Styles',
+      href: '/docs/architecture/compare-styles',
+      summary: 'How internal Level 3 components can be structured (Layered, Hexagonal, Onion, Clean).',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "In the C4 model, what does 'Container' mean at Level 2?",
+    options: [
+      { label: "A separately runnable/deployable unit or data store (web app, API, database, browser SPA)", description: "C4 uses 'Container' for deployable runtime/storage units, not specifically Docker containers.", correct: true },
+      { label: "Only a Docker or OCI container", description: "A static S3 bucket, a Postgres instance, or a desktop app are also C4 Containers." },
+      { label: "A TypeScript interface inside a module", description: "Interfaces belong at Level 4 (Code)." }
+    ]
+  },
+  {
+    question: "Which C4 level is usually skipped in manual documentation because it goes stale fastest?",
+    options: [
+      { label: "Level 4 (Code)", description: "Classes and methods change daily; IDEs and type definitions are the source of truth.", correct: true },
+      { label: "Level 1 (System Context)", description: "System Context changes rarely and is essential for onboarding." },
+      { label: "Level 2 (Containers)", description: "Containers represent deployment topology and change infrequently." }
+    ]
+  }
+]} />
+
+## Sources
+- [The C4 Model for Visualising Software Architecture](https://c4model.com/)
