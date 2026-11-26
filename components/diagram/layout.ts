@@ -10,7 +10,7 @@ export const LR_CONTAINER_BREAKPOINT = 720;
 export const NO_PAN_CONTAINER_MIN = 640;
 export const STACKED_TREE_MAX_WIDTH = 480;
 export const FIT_PADDING = 0.12;
-export const MIN_READABLE_ZOOM = 0.87; // 15px * 0.87 = 13.05px >= 13px
+export const MIN_READABLE_ZOOM = 0.94; // 15px * 0.94 = 14.1px >= 14px; compact (14px) requires zoom >= 1
 export const MIN_CANVAS_HEIGHT = 240;
 export const MAX_CANVAS_HEIGHT = 560;
 
@@ -22,7 +22,7 @@ export const NODE_HEIGHT_DOUBLE = 80;
 export const COMPACT_NODE_MIN_WIDTH = 128;
 export const COMPACT_NODE_MAX_WIDTH = 160;
 export const COMPACT_NODE_HEIGHT_SINGLE = 52;
-export const COMPACT_NODE_HEIGHT_DOUBLE = 64;
+export const COMPACT_NODE_HEIGHT_DOUBLE = 58;
 
 export const RANK_GAP = 72;
 export const NODE_GAP = 40;
@@ -414,6 +414,14 @@ function runDagrePass(
           b.cy += r * rowStride;
         }
         cumulativeYShift += (numRows - 1) * rowStride;
+      } else {
+        const rowSpan = rowBoxes.length * nodeWidth + (rowBoxes.length - 1) * baseNodeGap;
+        const rowStartX = -rowSpan / 2;
+        for (let idx = 0; idx < rowBoxes.length; idx++) {
+          const b = rowBoxes[idx];
+          b.x = rowStartX + idx * (nodeWidth + baseNodeGap);
+          b.cx = b.x + b.width / 2;
+        }
       }
     }
 
@@ -734,7 +742,7 @@ export function computeDiagramLayout({
   containerWidth: number;
   clampHeight?: boolean;
 }): ComputedDiagramLayout {
-  const safeWidth = Math.max(320, containerWidth);
+  const safeWidth = Math.max(240, containerWidth);
   const padFactor = 1 + FIT_PADDING;
   const isTree = layout === 'tree';
 
@@ -775,8 +783,9 @@ export function computeDiagramLayout({
   // Fit is evaluated against FINAL rendered bounds (nodes + skip lanes + groups), §3.3.
   const finalFitFor = (p: Pass, dir: LayoutDirection, stk: boolean) =>
     computeFitZoom(applySkipLanes(p, dir, stk).finalBounds);
-  const fitsAtReadable = (p: Pass, dir: LayoutDirection, stk: boolean) =>
-    finalFitFor(p, dir, stk) >= MIN_READABLE_ZOOM;
+  const minZoomFor = (isCompact: boolean) => (isCompact ? 1 : MIN_READABLE_ZOOM);
+  const fitsAtReadable = (p: Pass, dir: LayoutDirection, stk: boolean, isCompact = false) =>
+    finalFitFor(p, dir, stk) >= minZoomFor(isCompact);
 
   // ---- §3.3 fit-before-pan ladder ------------------------------------------
   // (a) choose the LR/TB direction that fits best
@@ -817,7 +826,7 @@ export function computeDiagramLayout({
     pass = runDagre(direction, true, null, dims);
 
     // re-check direction choice with compact nodes
-    if (!fitsAtReadable(pass, direction, stacked) && !isTree) {
+    if (!fitsAtReadable(pass, direction, stacked, true) && !isTree) {
       const altDir: LayoutDirection = direction === 'LR' ? 'TB' : 'LR';
       const altPass = runDagre(altDir, true, null, dims);
       if (finalFitFor(altPass, altDir, stacked) > finalFitFor(pass, direction, stacked)) {
@@ -828,19 +837,19 @@ export function computeDiagramLayout({
   }
 
   // (c) wrap wide ranks into rows of N; siblings under a tree bus wrap onto a second row
-  if (!fitsAtReadable(pass, direction, stacked)) {
+  if (!fitsAtReadable(pass, direction, stacked, compact)) {
     const nodeGap = compact ? COMPACT_NODE_GAP : NODE_GAP;
     const maxPerRowCap = Math.max(
       1,
       Math.floor(
-        (safeWidth / (MIN_READABLE_ZOOM * padFactor) + nodeGap) /
+        (safeWidth / (minZoomFor(compact) * padFactor) + nodeGap) /
           (dims.nodeWidth + nodeGap),
       ),
     );
     // try wrapping, reducing N until it fits (single column always fits at any width >= 320)
     for (let n = Math.min(maxPerRowCap, nodes.length - 1); n >= 1; n--) {
       const wrapped = runDagre('TB', compact, n, dims);
-      if (fitsAtReadable(wrapped, 'TB', stacked)) {
+      if (fitsAtReadable(wrapped, 'TB', stacked, compact)) {
         direction = 'TB';
         pass = wrapped;
         break;
@@ -854,7 +863,7 @@ export function computeDiagramLayout({
   }
 
   // (d) stacked indented-list layout for trees and class diagrams under 480px
-  if (!fitsAtReadable(pass, direction, stacked) && isTree && safeWidth < STACKED_TREE_MAX_WIDTH) {
+  if (!fitsAtReadable(pass, direction, stacked, compact) && isTree && safeWidth < STACKED_TREE_MAX_WIDTH) {
     stacked = true;
     direction = 'TB';
 
@@ -863,7 +872,7 @@ export function computeDiagramLayout({
     const compactDims = computeNodeDimensions(nodes, true);
     const stackedCompact = runStackedTreePass(nodes, edges, groups, true, compactDims.nodeWidth, compactDims.nodeLines);
 
-    if (fitsAtReadable(stackedNormal, 'TB', true)) {
+    if (fitsAtReadable(stackedNormal, 'TB', true, false)) {
       compact = false;
       dims = normalDims;
       pass = stackedNormal;
@@ -880,13 +889,14 @@ export function computeDiagramLayout({
   // Re-fit AFTER skip-lane expansion so nothing is clipped (§3.1/§3.3).
   // If the expanded bounds no longer fit at readable zoom, drop to pan (never at >= 640px).
   const finalFitZoom = computeFitZoom(finalBounds);
-  const canFit = finalFitZoom >= MIN_READABLE_ZOOM;
+  const reqZoom = minZoomFor(compact);
+  const canFit = finalFitZoom >= reqZoom;
 
   // §3.3: pan is the last resort and never allowed when container >= 640px wide
   const panMode = !canFit && safeWidth < NO_PAN_CONTAINER_MIN;
 
-  // canFit -> render at fitZoom (>=0.87, <=1); otherwise readable pan zoom
-  const zoom = canFit ? Math.max(MIN_READABLE_ZOOM, finalFitZoom) : MIN_READABLE_ZOOM;
+  // canFit -> render at fitZoom (>=reqZoom, <=1); otherwise readable pan zoom
+  const zoom = canFit ? Math.max(reqZoom, finalFitZoom) : reqZoom;
 
   const rawHeight = finalBounds.height * zoom * padFactor;
   const canvasHeight = clampHeight

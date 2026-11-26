@@ -324,11 +324,12 @@ function assertLayoutInvariants(
     }
   }
 
-  // 6. Rendered label size >= 13px
+  // 6. Rendered label size >= 14px (15px normal, 14px compact)
+  const baseFontSize = layoutResult.compact ? 14 : 15;
   expect(
-    15 * layoutResult.zoom,
-    `${label} rendered label size >= 13px`,
-  ).toBeGreaterThanOrEqual(13);
+    baseFontSize * layoutResult.zoom,
+    `${label} rendered label size >= 14px`,
+  ).toBeGreaterThanOrEqual(14);
 }
 
 describe('DIAGRAM-RULES §9.1 layout invariants across all MDX flows and diagrams', () => {

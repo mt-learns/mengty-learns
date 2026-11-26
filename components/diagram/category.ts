@@ -23,3 +23,19 @@ export function resolveNodeCategory(
       return 'service';
   }
 }
+
+/**
+ * §4.3 category tints (tokens only, no hex): client gray, network blue, service indigo,
+ * data green, external orange, abstraction purple, concrete teal. Tint on icon tile only.
+ * Red/destructive is never a category tint — it is reserved for kind:'error'.
+ */
+export const CATEGORY_TOKENS: Record<FlowNodeCategory, { bg: string; fg: string }> = {
+  client: { bg: 'var(--diagram-client-soft)', fg: 'var(--diagram-client)' },
+  edge: { bg: 'var(--diagram-network-soft)', fg: 'var(--diagram-network)' },
+  network: { bg: 'var(--diagram-network-soft)', fg: 'var(--diagram-network)' },
+  service: { bg: 'var(--diagram-service-soft)', fg: 'var(--diagram-service)' },
+  data: { bg: 'var(--diagram-data-soft)', fg: 'var(--diagram-data)' },
+  external: { bg: 'var(--diagram-external-soft)', fg: 'var(--diagram-external)' },
+  abstraction: { bg: 'var(--diagram-abstraction-soft)', fg: 'var(--diagram-abstraction)' },
+  concrete: { bg: 'var(--diagram-concrete-soft)', fg: 'var(--diagram-concrete)' },
+};
