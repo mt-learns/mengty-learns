@@ -1,0 +1,111 @@
+---
+title: Image Layers and Build Cache
+description: How Docker caches read-only filesystem layers and why COPY order determines build speed.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: note
+type: explanation
+level: beginner
+tags: [docker, containers, caching, dockerfile]
+tested_with:
+  docker: "29.4.3"
+cards:
+  - q: "What happens to downstream Dockerfile layers when an earlier instruction's input changes?"
+    a: "Docker invalidates the cache for that layer and every subsequent layer in the build, forcing them to re-execute."
+  - q: "Why should you copy package.json and run npm install before copying application source code?"
+    a: "Dependencies change far less often than source files, so keeping package.json and npm install earlier preserves the dependency cache across code edits."
+  - q: "Which Dockerfile instructions create filesystem layers that affect image size?"
+    a: "RUN, COPY, and ADD create filesystem layers; metadata instructions like ENV, EXPOSE, and WORKDIR only update image configuration."
+  - q: "How does .dockerignore improve both build speed and cache stability?"
+    a: "It excludes unneeded files (like node_modules, .git, and logs) from the build context sent to the daemon, preventing unrelated file changes from invalidating COPY layers."
+related:
+  - containers/docker-basics
+  - containers/multi-stage-nextjs
+sources:
+  - title: "Docker Docs: Building best practices — Leverage build cache"
+    url: https://docs.docker.com/build/building/best-practices/#leverage-build-cache
+  - title: "Docker Docs: Build cache"
+    url: https://docs.docker.com/build/cache/
+---
+
+### TL;DR
+Every `RUN`, `COPY`, and `ADD` instruction in a `Dockerfile` creates an immutable layer. Once a layer's inputs change, Docker invalidates that layer and **every instruction after it**—so ordering instructions from least-frequently changed to most-frequently changed keeps builds fast.
+
+## Why it exists
+Without layer caching, rebuilding a container after editing a single line of application code would re-download the base image, re-install OS packages, and re-run `npm install` from scratch. Layer caching lets Docker reuse unchanged work across builds.
+
+## Mental model
+Think of a `Dockerfile` as a linear stack of checkpoints:
+
+1. **Base image** (`FROM node:22-alpine3.21`) — changes rarely.
+2. **Dependency manifest** (`COPY package.json ./` + `RUN npm install`) — changes only when dependencies change.
+3. **Application source** (`COPY server.mjs ./`) — changes on almost every commit.
+
+When Docker evaluates `COPY`, it checksums the copied files. If you write `COPY . .` *before* `RUN npm install`, editing `server.mjs` changes the `COPY . .` checksum, which busts the `npm install` layer below it. Splitting `COPY package.json ./` from `COPY server.mjs ./` isolates source edits to the final layer.
+
+<LabLink
+  name="docker-multistage-next"
+  description="Inspect the COPY order and two-stage Dockerfile in the minimal Node app lab."
+  command="docker build -t mt-multistage-next:lab labs/docker-multistage-next"
+/>
+
+## Do it
+Compare the slow order versus the cache-friendly order:
+
+```dockerfile
+# ❌ Cache-busting order: any edit to server.mjs re-runs npm install
+FROM node:22-alpine3.21
+WORKDIR /app
+COPY . .
+RUN npm install --omit=dev
+
+# ✅ Cache-friendly order: source edits skip npm install
+FROM node:22-alpine3.21
+WORKDIR /app
+COPY package.json ./
+RUN npm install --omit=dev --ignore-scripts
+COPY server.mjs ./
+```
+
+Run two consecutive builds on `labs/docker-multistage-next` to observe `CACHED` layers in BuildKit output:
+
+```bash
+docker build -t mt-multistage-next:lab labs/docker-multistage-next
+# Edit server.mjs, then rebuild:
+docker build -t mt-multistage-next:lab labs/docker-multistage-next
+```
+
+## Gotchas
+- **Missing `.dockerignore`:** Without `.dockerignore`, `COPY . .` sends local `node_modules`, `.git`, and log files into the build context, slowing context transfer and causing surprise cache misses.
+- **Unpinned base tags (`:latest`):** Even if your `Dockerfile` is unchanged, pulling a moving tag can silently change the base layer and invalidate everything below it.
+- **Deleting files in a later `RUN`:** Removing a large temp file in a *separate* `RUN` instruction does not shrink earlier layers; clean up in the same `RUN` or use multi-stage builds.
+
+## Production checklist
+- [ ] Order `COPY` instructions from least-frequently changed (`package.json`, lockfile) to most-frequently changed (source code).
+- [ ] Add a `.dockerignore` excluding `.git`, `node_modules`, `README.md`, and local build artifacts.
+- [ ] Pin base image tags (for example `node:22-alpine3.21`) instead of `:latest`.
+- [ ] Keep `RUN` package installs and cache cleanups in the same layer or drop build tools in a multi-stage build.
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "You edit server.mjs in a project whose Dockerfile runs COPY package.json ./, then RUN npm install, then COPY server.mjs ./. Which layers rebuild?",
+    options: [
+      { label: "Only COPY server.mjs ./ and layers after it", description: "package.json did not change, so the npm install layer stays cached.", correct: true },
+      { label: "All layers starting from FROM", description: "Earlier unchanged layers are reused from the build cache." },
+      { label: "RUN npm install and COPY server.mjs ./", description: "npm install only re-runs if an instruction before it was invalidated." }
+    ]
+  },
+  {
+    question: "Why is a .dockerignore file important even when you only COPY specific files?",
+    options: [
+      { label: "It keeps large local folders like node_modules and .git out of the build context sent to the Docker daemon", description: "Every build transfers the filtered context before executing instructions.", correct: true },
+      { label: "It automatically runs docker prune after each build", description: ".dockerignore only filters the build context." },
+      { label: "It encrypts environment variables inside the image", description: ".dockerignore does not encrypt anything." }
+    ]
+  }
+]} />
+
+## Sources
+- [Docker Docs: Building best practices — Leverage build cache](https://docs.docker.com/build/building/best-practices/#leverage-build-cache)
+- [Docker Docs: Build cache](https://docs.docker.com/build/cache/)
