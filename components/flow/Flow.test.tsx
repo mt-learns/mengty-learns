@@ -1,23 +1,34 @@
 // @vitest-environment jsdom
 import '@testing-library/jest-dom/vitest';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Flow } from './Flow';
+import {
+  buildFlowDeepLinkRelative,
+  buildFlowDeepLinkUrl,
+  parseFlowDeepLink,
+} from './deep-link';
 import { computeEdgePath, parseEdge } from './edges';
 import {
   CELL_X,
   CELL_Y,
+  GROUP_PAD_BOTTOM,
+  GROUP_PAD_TOP,
+  GROUP_PAD_X,
   NODE_HEIGHT,
   NODE_WIDTH,
   PADDING_X,
   PADDING_Y,
   getCanvasDimensions,
+  getGroupBox,
   getNodePosition,
 } from './layout';
 import { parseFlowProps } from './types';
 
 afterEach(() => {
   cleanup();
+  window.history.replaceState(null, '', '/');
+  vi.restoreAllMocks();
 });
 
 const SAMPLE_FLOW = {
@@ -78,8 +89,8 @@ describe('Flow layout and edge math', () => {
 describe('Flow Zod validation', () => {
   it('accepts valid flow props', () => {
     const parsed = parseFlowProps(SAMPLE_FLOW);
-    expect(parsed.steps[0].kind).toBe('request');
-    expect(parsed.steps[2].kind).toBe('response');
+    expect(parsed.steps?.[0].kind).toBe('request');
+    expect(parsed.steps?.[2].kind).toBe('response');
   });
 
   it('throws when a step references an unknown node id', () => {
@@ -157,5 +168,141 @@ describe('Flow keyboard navigation and controls', () => {
     const speed2x = screen.getByRole('button', { name: '2x' });
     fireEvent.click(speed2x);
     expect(speed2x).toHaveAttribute('aria-pressed', 'true');
+  });
+});
+
+describe('Flow v2: variants, deep links, and group nodes', () => {
+  const VARIANT_FLOW = {
+    id: 'compare-flow',
+    title: 'Compare Variants',
+    variants: [
+      {
+        id: 'same-len-a',
+        label: 'Variant A',
+        groups: [{ id: 'core-a', label: 'Domain Core', x: 1, y: 0, width: 1, height: 1 }],
+        nodes: [
+          { id: 'client', label: 'Client', x: 0, y: 0 },
+          { id: 'domain', label: 'Domain', x: 1, y: 0 },
+        ],
+        steps: [
+          { edge: 'client->domain', text: 'A step 1' },
+          { edge: 'domain->client', text: 'A step 2', kind: 'response' as const },
+        ],
+      },
+      {
+        id: 'same-len-b',
+        label: 'Variant B',
+        nodes: [
+          { id: 'client', label: 'Client', x: 0, y: 0 },
+          { id: 'port', label: 'Port', x: 1, y: 0 },
+        ],
+        steps: [
+          { edge: 'client->port', text: 'B step 1' },
+          { edge: 'port->client', text: 'B step 2', kind: 'response' as const },
+        ],
+      },
+      {
+        id: 'diff-len-c',
+        label: 'Variant C',
+        nodes: [
+          { id: 'client', label: 'Client', x: 0, y: 0 },
+          { id: 'layer', label: 'Layer', x: 1, y: 0 },
+          { id: 'db', label: 'DB', x: 2, y: 0 },
+        ],
+        steps: [
+          { edge: 'client->layer', text: 'C step 1' },
+          { edge: 'layer->db', text: 'C step 2' },
+          { edge: 'db->client', text: 'C step 3', kind: 'response' as const },
+        ],
+      },
+    ],
+  };
+
+  it('validates variants and group boxes with Zod and layout helpers', () => {
+    const parsed = parseFlowProps(VARIANT_FLOW);
+    expect(parsed.variants).toHaveLength(3);
+
+    const box = getGroupBox({ x: 1, y: 0, width: 1, height: 1 });
+    expect(box).toEqual({
+      x: PADDING_X + CELL_X - GROUP_PAD_X,
+      y: PADDING_Y - GROUP_PAD_TOP,
+      width: NODE_WIDTH + GROUP_PAD_X * 2,
+      height: NODE_HEIGHT + GROUP_PAD_TOP + GROUP_PAD_BOTTOM,
+    });
+
+    expect(() =>
+      parseFlowProps({
+        id: 'bad-variant',
+        variants: [
+          {
+            id: 'v1',
+            label: 'V1',
+            nodes: [
+              { id: 'a', label: 'A', x: 0, y: 0 },
+              { id: 'b', label: 'B', x: 1, y: 0 },
+            ],
+            steps: [{ edge: 'a->missing', text: 'Broken' }],
+          },
+        ],
+      }),
+    ).toThrow(/Unknown node id .*missing/);
+  });
+
+  it('switches variants, preserves step index on matching step counts, and resets on mismatch', () => {
+    render(<Flow {...VARIANT_FLOW} />);
+
+    expect(screen.getByText('Domain Core')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: 'Next step' }));
+    expect(screen.getByText('Step 2 / 2')).toBeInTheDocument();
+
+    // Variant B also has 2 steps -> keep step index 1 ("Step 2 / 2")
+    fireEvent.click(screen.getByRole('button', { name: 'Variant B' }));
+    expect(screen.getByText('Step 2 / 2')).toBeInTheDocument();
+    expect(screen.getAllByText('B step 2').length).toBeGreaterThanOrEqual(2);
+
+    // Variant C has 3 steps -> reset to step index 0 ("Step 1 / 3")
+    fireEvent.click(screen.getByRole('button', { name: 'Variant C' }));
+    expect(screen.getByText('Step 1 / 3')).toBeInTheDocument();
+    expect(screen.getAllByText('C step 1').length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('parses and builds step deep links', () => {
+    expect(parseFlowDeepLink('?flow=sample-flow&step=2', 'sample-flow', 3)).toBe(1);
+    expect(parseFlowDeepLink('?flow=other&step=2', 'sample-flow', 3)).toBeNull();
+    expect(parseFlowDeepLink('?flow=sample-flow&step=0', 'sample-flow', 3)).toBeNull();
+    expect(parseFlowDeepLink('?flow=sample-flow&step=4', 'sample-flow', 3)).toBeNull();
+    expect(parseFlowDeepLink('?flow=sample-flow&step=abc', 'sample-flow', 3)).toBeNull();
+
+    expect(
+      buildFlowDeepLinkRelative('/docs/architecture/layered/', '?foo=bar', '#flow', 'sample-flow', 2),
+    ).toBe('/docs/architecture/layered/?foo=bar&flow=sample-flow&step=3#flow');
+
+    expect(
+      buildFlowDeepLinkUrl('https://mengtylearns.com/docs/design/bridge/', 'bridge', 1),
+    ).toBe('https://mengtylearns.com/docs/design/bridge/?flow=bridge&step=2');
+  });
+
+  it('reads deep link on mount, updates URL with replaceState, and copies step link', async () => {
+    window.history.replaceState(null, '', '/docs/test?flow=sample-flow&step=3');
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
+
+    render(<Flow {...SAMPLE_FLOW} />);
+    expect(screen.getByText('Step 3 / 3')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole('button', { name: 'Previous step' }));
+    expect(screen.getByText('Step 2 / 3')).toBeInTheDocument();
+    expect(window.location.search).toContain('flow=sample-flow');
+    expect(window.location.search).toContain('step=2');
+
+    const copyBtn = screen.getByRole('button', { name: 'Copy link to this step' });
+    fireEvent.click(copyBtn);
+    expect(writeText).toHaveBeenCalledWith(
+      expect.stringContaining('?flow=sample-flow&step=2'),
+    );
+    expect(await screen.findByRole('button', { name: 'Link copied' })).toBeInTheDocument();
   });
 });
