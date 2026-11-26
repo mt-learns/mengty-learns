@@ -86,20 +86,20 @@ Think of a universal remote and a TV. The remote's buttons (Power, Volume Up, Mu
   id="bridge"
   title="Bridge Pattern: RemoteControl → Device"
   nodes={[
-    { id: 'client', label: 'Client', subtitle: 'App code', icon: 'user', x: 0, y: 1 },
-    { id: 'remote', label: 'RemoteControl', subtitle: 'Abstraction', icon: 'class', x: 1, y: 1 },
-    { id: 'device', label: 'Device', subtitle: 'Implementor', icon: 'interface', x: 2, y: 1 },
-    { id: 'tv', label: 'TV', subtitle: 'Concrete', icon: 'service', x: 3, y: 0 },
-    { id: 'radio', label: 'Radio', subtitle: 'Concrete', icon: 'service', x: 3, y: 2 },
+    { id: 'client', label: 'Client', subtitle: 'App code', icon: 'user', category: 'client', x: 0, y: 1 },
+    { id: 'remote', label: 'RemoteControl', subtitle: 'Abstraction', icon: 'class', category: 'service', x: 1, y: 1 },
+    { id: 'device', label: 'Device', subtitle: 'Implementor', icon: 'interface', category: 'edge', x: 2, y: 1 },
+    { id: 'tv', label: 'TV', subtitle: 'Concrete', icon: 'service', category: 'external', x: 3, y: 0 },
+    { id: 'radio', label: 'Radio', subtitle: 'Concrete', icon: 'service', category: 'external', x: 3, y: 2 },
   ]}
   steps={[
-    { edge: 'client->remote', text: 'Client calls remote.togglePower() on an Abstraction instance' },
-    { edge: 'remote->device', text: 'RemoteControl delegates to its held Device reference' },
-    { edge: 'device->tv', text: 'TV.enable() powers on the concrete TV hardware' },
-    { edge: 'tv->remote', text: 'TV confirms power state is now enabled', kind: 'response' },
-    { edge: 'client->remote', text: 'Client swaps the device or uses AdvancedRemote.mute() on Radio' },
-    { edge: 'remote->device', text: 'AdvancedRemote calls device.setVolume(0) through the same interface' },
-    { edge: 'device->radio', text: 'Radio.setVolume(0) mutes the Radio without changing RemoteControl' },
+    { edge: 'client->remote', title: 'Toggle power on remote', text: 'Client calls remote.togglePower() on an Abstraction instance' },
+    { edge: 'remote->device', title: 'Delegate to device', text: 'RemoteControl delegates to its held Device reference' },
+    { edge: 'device->tv', title: 'Power on TV hardware', text: 'TV.enable() powers on the concrete TV hardware' },
+    { edge: 'tv->remote', title: 'Confirm TV enabled', text: 'TV confirms power state is now enabled', kind: 'response' },
+    { edge: 'client->remote', title: 'Mute via AdvancedRemote', text: 'Client swaps the device or uses AdvancedRemote.mute() on Radio' },
+    { edge: 'remote->device', title: 'Set volume to zero', text: 'AdvancedRemote calls device.setVolume(0) through the same interface' },
+    { edge: 'device->radio', title: 'Mute Radio hardware', text: 'Radio.setVolume(0) mutes the Radio without changing RemoteControl' },
   ]}
 />
 
