@@ -1,34 +1,14 @@
-/* global fetch, setTimeout */
-// axe-core scan of the static export, light and dark, same routes as the CI
+// axe-core scan of the site, light and dark, same routes as the CI
 // quality job plus /radar and the 404. Exits 1 on any serious/critical issue.
-//   pnpm build && node scripts/qa-axe.mjs
-import { spawn } from 'node:child_process';
-import net from 'node:net';
-import path from 'node:path';
+//   pnpm preview   (in another terminal: Worker preview on :8787)
+//   node scripts/qa-axe.mjs [--url http://localhost:8787]
 import AxeBuilder from '@axe-core/playwright';
 import { chromium } from 'playwright';
+import { waitForQaTarget } from './lib/qa-target.mjs';
 
 const routes = ['/', '/docs/', '/docs/design/bridge/', '/review/', '/radar/', '/this-page-does-not-exist/'];
 
-const port = await new Promise((resolve) => {
-  const srv = net.createServer();
-  srv.listen(0, () => {
-    const { port: p } = srv.address();
-    srv.close(() => resolve(p));
-  });
-});
-const server = spawn(process.execPath, [path.resolve('node_modules/serve/build/main.js'), 'out', '-l', String(port), '--no-request-logging'], {
-  stdio: 'ignore',
-});
-const base = `http://127.0.0.1:${port}`;
-for (let i = 0; i < 50; i++) {
-  try {
-    await fetch(base);
-    break;
-  } catch {
-    await new Promise((r) => setTimeout(r, 200));
-  }
-}
+const base = await waitForQaTarget();
 
 const browser = await chromium.launch();
 let blocking = 0;
@@ -53,6 +33,5 @@ try {
   }
 } finally {
   await browser.close();
-  server.kill();
 }
 if (blocking) process.exitCode = 1;

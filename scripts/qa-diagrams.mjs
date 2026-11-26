@@ -1,12 +1,13 @@
 /* global window, document */
-import { spawnSync } from 'node:child_process';
+// Screenshots of every page with a diagram, against a running Worker preview.
+//   pnpm preview   (in another terminal: Worker preview on :8787)
+//   pnpm qa:diagrams [--url http://localhost:8787]
 import fs from 'node:fs';
-import http from 'node:http';
 import path from 'node:path';
 import { chromium } from '@playwright/test';
+import { waitForQaTarget } from './lib/qa-target.mjs';
 
 const ROOT = process.cwd();
-const OUT_DIR = path.join(ROOT, 'out');
 const QA_DIR = path.join(ROOT, 'qa', 'diagrams');
 
 const PAGES = [
@@ -21,44 +22,6 @@ const PAGES = [
 
 const WIDTHS = [360, 768, 1280];
 const THEMES = ['light', 'dark'];
-
-const MIME_TYPES = {
-  '.html': 'text/html; charset=utf-8',
-  '.js': 'application/javascript; charset=utf-8',
-  '.css': 'text/css; charset=utf-8',
-  '.json': 'application/json; charset=utf-8',
-  '.svg': 'image/svg+xml',
-  '.png': 'image/png',
-  '.woff2': 'font/woff2',
-  '.txt': 'text/plain; charset=utf-8',
-};
-
-function startStaticServer(rootDir) {
-  return new Promise((resolve) => {
-    const server = http.createServer((req, res) => {
-      const reqPath = (req.url || '/').split('?')[0];
-      let filePath = path.join(rootDir, decodeURIComponent(reqPath));
-      if (fs.existsSync(filePath) && fs.statSync(filePath).isDirectory()) {
-        filePath = path.join(filePath, 'index.html');
-      } else if (!fs.existsSync(filePath) && fs.existsSync(`${filePath}.html`)) {
-        filePath = `${filePath}.html`;
-      } else if (!fs.existsSync(filePath)) {
-        filePath = path.join(rootDir, '404.html');
-      }
-
-      const ext = path.extname(filePath);
-      res.writeHead(fs.existsSync(filePath) ? 200 : 404, {
-        'Content-Type': MIME_TYPES[ext] || 'application/octet-stream',
-      });
-      fs.createReadStream(filePath).pipe(res);
-    });
-
-    server.listen(0, '127.0.0.1', () => {
-      const addr = server.address();
-      resolve({ server, port: addr.port });
-    });
-  });
-}
 
 async function capturePage(page, baseUrl, item, width, theme, suffix = '') {
   await page.setViewportSize({ width, height: 900 });
@@ -102,19 +65,9 @@ async function capturePage(page, baseUrl, item, width, theme, suffix = '') {
 }
 
 async function main() {
-  console.log('Building static site...');
-  const buildRes = spawnSync('pnpm', ['build'], {
-    stdio: 'inherit',
-    shell: true,
-  });
-  if (buildRes.status !== 0) {
-    process.exit(buildRes.status ?? 1);
-  }
-
+  const baseUrl = await waitForQaTarget();
   fs.mkdirSync(QA_DIR, { recursive: true });
-  const { server, port } = await startStaticServer(OUT_DIR);
-  const baseUrl = `http://127.0.0.1:${port}`;
-  console.log(`Serving out/ at ${baseUrl}`);
+  console.log(`Capturing against ${baseUrl}`);
 
   const browser = await chromium.launch();
   try {
@@ -154,7 +107,6 @@ async function main() {
     }
   } finally {
     await browser.close();
-    server.close();
   }
 }
 

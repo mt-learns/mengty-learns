@@ -1,13 +1,13 @@
-/* global fetch, setTimeout, document, window, getComputedStyle */
-// Screenshots of the static export in light and dark at several widths, plus an
+/* global document, window, getComputedStyle */
+// Screenshots of the site in light and dark at several widths, plus an
 // edge-alignment report for the shared container.
-//   pnpm build && node scripts/qa-shots.mjs [--out dir] [--routes /,/docs/] [--widths 360,1280]
-// Serves out/ itself on a free port. Needs Playwright's Chromium (`pnpm exec playwright install chromium`).
-import { spawn } from 'node:child_process';
+//   pnpm preview   (in another terminal: Worker preview on :8787)
+//   node scripts/qa-shots.mjs [--url http://localhost:8787] [--out dir] [--routes /,/docs/] [--widths 360,1280]
+// Needs Playwright's Chromium (`pnpm exec playwright install chromium`).
 import fs from 'node:fs';
-import net from 'node:net';
 import path from 'node:path';
 import { chromium } from 'playwright';
+import { waitForQaTarget } from './lib/qa-target.mjs';
 
 const arg = (name, fallback) => {
   const i = process.argv.indexOf(`--${name}`);
@@ -15,35 +15,14 @@ const arg = (name, fallback) => {
 };
 
 const outDir = path.resolve(arg('out', '.shots'));
-const routes = arg('routes', '/,/docs/,/docs/design/bridge/,/review/,/radar/,/this-page-does-not-exist/').split(',');
+const routes = arg('routes', '/,/docs/,/docs/design/bridge/,/review/,/radar/,/digest/rss.xml,/this-page-does-not-exist/').split(',');
 const widths = arg('widths', '360,768,1280,1920').split(',').map(Number);
 const themes = arg('themes', 'light,dark').split(',');
 const fullPage = !process.argv.includes('--viewport-only');
 
-const freePort = () =>
-  new Promise((resolve) => {
-    const srv = net.createServer();
-    srv.listen(0, () => {
-      const { port } = srv.address();
-      srv.close(() => resolve(port));
-    });
-  });
+const base = await waitForQaTarget();
 
-const port = await freePort();
-const server = spawn(process.execPath, [path.resolve('node_modules/serve/build/main.js'), 'out', '-l', String(port), '--no-request-logging'], {
-  stdio: 'ignore',
-});
-const base = `http://127.0.0.1:${port}`;
-for (let i = 0; i < 50; i++) {
-  try {
-    await fetch(base);
-    break;
-  } catch {
-    await new Promise((r) => setTimeout(r, 200));
-  }
-}
-
-const slug = (route) => (route === '/' ? 'home' : route.replace(/^\/|\/$/g, '').replace(/\//g, '_'));
+const slug = (route) => (route === '/' ? 'home' : route.replace(/^\/|\/$/g, '').replace(/[/.]/g, '_'));
 
 // Elements whose content box must share the same left/right edges: the
 // Fumadocs home nav row and every <Container> (data-edge), footer included.
@@ -103,7 +82,6 @@ try {
   }
 } finally {
   await browser.close();
-  server.kill();
 }
 
 let misaligned = 0;
