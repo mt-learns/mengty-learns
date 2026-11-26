@@ -19,7 +19,7 @@ export function Intent({ children, title = 'TL;DR' }: IntentProps) {
         <Target className="size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
         <span>{title}</span>
       </div>
-      <div className="text-body text-foreground [&>p]:my-0">{children}</div>
+      <div className="text-body leading-[1.55] text-foreground [&>p]:my-0">{children}</div>
     </section>
   );
 }

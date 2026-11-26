@@ -173,13 +173,13 @@ export function ReviewClient({ initialCards }: { initialCards?: CardItem[] }) {
       <div className="flex gap-4 items-center bg-card p-4 rounded-card border">
         <div>
           <span className="text-subheadline text-muted-foreground block">Due Today</span>
-          <span className="text-2xl font-bold font-headline">
+          <span className="text-2xl font-bold font-headline tabular-nums">
             {Math.max(dueCards.length - currentIndex, 0)}
           </span>
         </div>
         <div className="border-l pl-4">
           <span className="text-subheadline text-muted-foreground block">Streak</span>
-          <span className="inline-flex items-center gap-1.5 text-2xl font-bold font-headline">
+          <span className="inline-flex items-center gap-1.5 text-2xl font-bold font-headline tabular-nums">
             <Flame className="size-5 text-primary" strokeWidth={1.75} aria-hidden="true" />
             <span>{streak}</span>
           </span>
@@ -213,7 +213,7 @@ export function ReviewClient({ initialCards }: { initialCards?: CardItem[] }) {
         // after hydration React updates the same nodes with the visitor's
         // own first due card, so no new, larger element replaces it.
         <div className="rounded-card border bg-card p-8 shadow-sm space-y-6" aria-busy={loading || undefined}>
-          <div className="flex justify-between items-center text-xs text-muted-foreground">
+          <div className="flex justify-between items-center text-footnote tabular-nums text-muted-foreground">
             <span className={loading ? 'invisible' : undefined}>
               Card {loading ? 1 : currentIndex + 1} of {loading ? initialCards?.length ?? 0 : dueCards.length}
             </span>
@@ -225,7 +225,7 @@ export function ReviewClient({ initialCards }: { initialCards?: CardItem[] }) {
             {loading ? (
               <div className="h-11 w-full rounded-control bg-muted" aria-hidden="true" />
             ) : showAnswer ? (
-              <div className="p-4 rounded-panel bg-muted text-body whitespace-pre-wrap border">
+              <div className="p-4 rounded-panel bg-muted font-reading text-body leading-[1.6] whitespace-pre-wrap border">
                 {shownCard.a}
               </div>
             ) : (

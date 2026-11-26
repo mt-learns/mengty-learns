@@ -13,7 +13,7 @@ export function MyTake({ children, title = 'My take' }: MyTakeProps) {
   return (
     <aside
       aria-label={title}
-      className="my-6 rounded-panel border border-border bg-muted/60 p-4 text-subheadline text-foreground"
+      className="my-6 rounded-panel border border-border bg-muted/60 p-4 text-subheadline leading-[1.55] text-foreground"
     >
       <div className="mb-1.5 flex items-center gap-2 font-headline text-foreground">
         <MessageSquareQuote className="size-4 shrink-0 text-primary" strokeWidth={1.75} aria-hidden="true" />
