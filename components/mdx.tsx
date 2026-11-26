@@ -4,6 +4,17 @@ import { Callout } from 'fumadocs-ui/components/callout';
 import { Card, Cards } from 'fumadocs-ui/components/card';
 import { Sidenote, Gotcha, Tip, Figure } from '@/components/mdx/sidenote';
 import { Terminal } from '@/components/mdx/terminal';
+import {
+  Analogy,
+  Checklist,
+  Intent,
+  LabLink,
+  MyTake,
+  ProsCons,
+  Relations,
+  Step,
+  Steps,
+} from '@/components/mdx/concept';
 import type { MDXComponents } from 'mdx/types';
 
 export function getMDXComponents(components?: MDXComponents) {
@@ -19,6 +30,15 @@ export function getMDXComponents(components?: MDXComponents) {
     Tip,
     Figure,
     Terminal,
+    Intent,
+    Analogy,
+    Checklist,
+    Steps,
+    Step,
+    ProsCons,
+    Relations,
+    LabLink,
+    MyTake,
     ...components,
   } satisfies MDXComponents;
 }
