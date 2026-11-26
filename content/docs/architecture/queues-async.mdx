@@ -1,0 +1,192 @@
+---
+title: Queues & Asynchronous Work
+description: Decouple slow work from HTTP requests with queues vs pub/sub, at-least-once delivery, idempotency keys, exponential backoff retries, and dead-letter queues.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: concept
+type: explanation
+level: intermediate
+tags: [architecture, queues, async, idempotency, dlq]
+tested_with:
+  typescript: "7.0.2"
+cards:
+  - q: "What is the key difference between a work queue and pub/sub?"
+    a: "A work queue delivers each message to one competing consumer (load sharing), whereas pub/sub broadcasts a copy of each event to every subscribed consumer group."
+  - q: "Why do distributed queues usually guarantee at-least-once delivery rather than exactly-once?"
+    a: "If a worker processes a job but crashes before acknowledging it, the broker redelivers the message—making idempotent consumers necessary."
+  - q: "What is an idempotency key used for in a queue worker?"
+    a: "It lets the worker detect and safely skip duplicate deliveries (for example, avoiding charging a card twice or sending two welcome emails)."
+  - q: "What is a Dead-Letter Queue (DLQ)?"
+    a: "A separate queue where poison messages are moved after exceeding max retry attempts so they stop blocking healthy jobs and can be inspected."
+related:
+  - architecture/caching-redis
+  - architecture/hexagonal
+sources:
+  - title: "AWS SQS Developer Guide: Dead-letter queues"
+    url: https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-dead-letter-queues.html
+  - title: "RabbitMQ Docs: Consumer Acknowledgements and Publisher Confirms"
+    url: https://www.rabbitmq.com/docs/confirms
+  - title: "Cloudflare Queues Docs: Batching, Retries, and Dead Letter Queues"
+    url: https://developers.cloudflare.com/queues/configuration/batching-retries/
+---
+
+## TL;DR
+Use a **queue** to move slow or failure-prone work (emails, webhooks, video encoding) out of the HTTP request path. Because brokers deliver **at least once**, workers must be **idempotent**, retry transient errors with **exponential backoff + jitter**, and route **poison messages** to a **Dead-Letter Queue (DLQ)**.
+
+## Intent
+<Intent>
+Understand when to use a queue versus pub/sub, how at-least-once delivery shapes worker design, and how retries and DLQs keep poison messages from stalling your pipeline.
+</Intent>
+
+## Problem
+Sending an email, generating a PDF, or calling a flaky third-party webhook inside an HTTP `POST` handler ties up request threads, exposes users to 30-second timeouts, and loses the job completely if the server restarts mid-request.
+
+## Solution
+
+### 1. Queue vs Pub/Sub
+- **Work Queue (point-to-point):** Multiple workers compete to pull messages; each message is processed by **one** worker. Use this for background jobs and load leveling.
+- **Pub/Sub (fan-out):** A publisher emits an event (`order.paid`) and **every** independent subscriber (billing, analytics, email) receives its own copy.
+
+### 2. At-least-once delivery & idempotency
+Network acks can be lost: a worker may finish charging a card or writing a row, then crash before sending `ACK` to the broker. The broker assumes the job failed and redelivers it. To make retries safe:
+- Attach a deterministic **idempotency key** (e.g., `invoice:1042:send-email`) to every message.
+- Record processed keys in a database unique constraint or atomic store before/with the side effect so duplicates become no-ops.
+
+### 3. Retries with backoff and Dead-Letter Queues (DLQ)
+- **Transient failures** (downstream `503`, rate limit): NACK or let visibility timeout expire, then retry with **exponential backoff + jitter** (`2s`, `4s`, `8s` + random ms) so you don't DDoS a recovering dependency.
+- **Poison messages** (malformed JSON, deleted user ID, bug): Retrying forever wastes worker capacity. After `max_retries` (for example 3–5 attempts), the broker moves the message to a **DLQ**, where engineers can alert, inspect, fix the bug, and replay.
+
+## Real-world analogy
+<Analogy>
+A work queue is a restaurant **ticket rail**: cashiers (**API**) clip orders onto the rail and immediately greet the next customer, line cooks (**workers**) pull one ticket at a time, and an unreadable order (**poison message**) is moved to a manager's clipboard (**DLQ**) instead of blocking the whole kitchen.
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="queues-async"
+  title="Async Job Lifecycle: API → Queue → Worker → Retry → DLQ"
+  nodes={[
+    { id: 'api', label: 'API Service', subtitle: 'Returns 202', icon: 'gateway', category: 'edge', rank: 0, order: 0 },
+    { id: 'queue', label: 'Work Queue', subtitle: 'Durable broker', icon: 'queue', category: 'data', rank: 1, order: 0 },
+    { id: 'worker', label: 'Worker', subtitle: 'Idempotent job', icon: 'pod', category: 'service', rank: 2, order: 0 },
+    { id: 'dlq', label: 'Dead-Letter Q', subtitle: 'Max retries', icon: 'queue', category: 'external', rank: 2, order: 1 },
+  ]}
+  steps={[
+    { edge: 'api->queue', title: 'Enqueue job with key', text: 'API persists a job with an idempotency key to the queue and replies 202 Accepted.', label: 'Enqueue' },
+    { edge: 'queue->worker', title: 'Deliver to worker', text: 'Queue hands the message to a worker and starts the visibility timeout.', label: 'Deliver' },
+    { edge: 'worker->queue', title: 'Transient fail → backoff', text: 'Downstream 503 fails the job; worker NACKs so the queue retries after backoff.', kind: 'error', label: 'Retry' },
+    { edge: 'queue->worker', title: 'Redeliver after backoff', text: 'Queue redelivers the job; worker checks its idempotency key before acting.', label: 'Attempt 2' },
+    { edge: 'queue->dlq', title: 'Poison message → DLQ', text: 'After max_retries, the broker moves the failing message to the DLQ for inspection.', kind: 'error', label: 'To DLQ' },
+  ]}
+/>
+
+## Code
+Minimal idempotent worker handler showing duplicate detection and throwing on transient errors so the broker schedules a retry:
+
+```typescript
+// Idempotent queue consumer (not run)
+interface JobMessage {
+  idempotencyKey: string;
+  userId: string;
+}
+
+export async function handleWelcomeEmail(
+  msg: JobMessage,
+  seenKeys: Set<string>,
+  sendEmail: (userId: string) => Promise<void>,
+): Promise<'ack' | 'skip'> {
+  if (seenKeys.has(msg.idempotencyKey)) {
+    return 'skip'; // Already processed; ACK safely without side effects
+  }
+
+  await sendEmail(msg.userId); // Throws on 5xx -> broker retries with backoff
+  seenKeys.add(msg.idempotencyKey); // In production, store atomically in DB
+  return 'ack';
+}
+```
+
+## When you DON'T need this
+- **Static sites or synchronous CRUD:** A static site (like this one) or a fast `< 50 ms` database write doesn't need a message broker—returning `200 OK` synchronously is simpler and easier to debug.
+- **Strict immediate response required:** If the user is waiting on the screen for the exact result (e.g., login or search), a queue just adds latency and polling complexity.
+- **Cost / complexity trade-off:** Adding a queue introduces eventual consistency, a broker to operate (or pay per-million-messages for SQS/Cloudflare Queues), DLQ monitoring, and harder end-to-end tracing. Use it only when decoupling latency or surviving downstream outages is worth that operational cost.
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'Slow tasks (> 500 ms) like email, PDF/image processing, or webhook delivery.',
+    'Traffic spikes where you need to buffer writes instead of overwhelming your database.',
+  ]}
+  avoid={[
+    'Fast synchronous reads/writes where the caller needs the result immediately.',
+    'Before you have idempotency keys—non-idempotent retries will corrupt data.',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Design messages with an idempotency key
+    Include a stable key (e.g., `orderId + action`) so duplicate deliveries are safe.
+  </Step>
+  <Step>
+    ### Configure backoff and max_retries
+    Set exponential backoff with jitter and cap retries (e.g., 3–5 attempts) before moving messages to a DLQ.
+  </Step>
+  <Step>
+    ### Alert on DLQ depth
+    A growing DLQ means a bug or broken integration—monitor its count and build a safe replay script.
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'Keeps HTTP APIs fast and resilient to slow or flaky third-party dependencies.',
+    'Smooths traffic bursts (load leveling) without over-provisioning databases.',
+  ]}
+  cons={[
+    'Eventual consistency: UI must handle 202 Accepted / pending states.',
+    'At-least-once delivery requires idempotency and DLQ replay tooling.',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'Caching Strategies & Redis',
+      href: '/docs/architecture/caching-redis',
+      summary: 'Pair async workers with Redis or DBs carefully—remember persistence trade-offs.',
+    },
+    {
+      name: 'Hexagonal Architecture',
+      href: '/docs/architecture/hexagonal',
+      summary: 'Model a queue publisher as an outbound port so tests can swap in an in-memory fake.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "Why must queue workers be idempotent under at-least-once delivery?",
+    options: [
+      { label: "A worker can finish the side effect and crash before acknowledging, causing the broker to redeliver the same message", description: "Idempotency keys let the worker detect the duplicate and ACK without repeating the side effect.", correct: true },
+      { label: "Queues always deliver every message to every subscriber", description: "That describes pub/sub fan-out, not a work queue." },
+      { label: "Idempotency prevents messages from ever entering the DLQ", description: "Poison messages still go to the DLQ if they fail validation or throw repeatedly." }
+    ]
+  },
+  {
+    question: "What happens if you configure a queue with infinite retries and no Dead-Letter Queue (DLQ)?",
+    options: [
+      { label: "A single poison message retries forever, wasting worker capacity and potentially stalling the queue", description: "Capping retries and routing poison messages to a DLQ isolates bad payloads for inspection.", correct: true },
+      { label: "The broker automatically fixes malformed JSON payloads", description: "Brokers never mutate application payloads to fix bugs." },
+      { label: "The API stops returning 202 Accepted", description: "The API only enqueues; infinite retries hurt workers and queue depth." }
+    ]
+  }
+]} />
+
+## Sources
+- [AWS SQS Developer Guide: Dead-letter queues](https://docs.aws.amazon.com/AWSSimpleQueueService/latest/SQSDeveloperGuide/sqs-dead-letter-queues.html)
+- [RabbitMQ Docs: Consumer Acknowledgements and Publisher Confirms](https://www.rabbitmq.com/docs/confirms)
+- [Cloudflare Queues Docs: Batching, Retries, and Dead Letter Queues](https://developers.cloudflare.com/queues/configuration/batching-retries/)
