@@ -1,0 +1,231 @@
+---
+title: "XSS & Content Security Policy (CSP)"
+description: Reflected, stored, and DOM XSS, context-aware output encoding, React's default escaping vs escape hatches, and CSP with nonces and strict-dynamic.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: concept
+type: explanation
+level: intermediate
+tags: [security, xss, csp, frontend, react, asvs]
+tested_with:
+  asvs: "5.0.0 (V1, V3)"
+cards:
+  - q: "What are the three main types of Cross-Site Scripting (XSS)?"
+    a: "Reflected XSS (payload echoed from the current request), Stored XSS (payload saved in DB and served to other users), and DOM XSS (client-side JS writes untrusted input into a dangerous sink like innerHTML)."
+  - q: "What does React escape by default, and what are its two main XSS escape hatches?"
+    a: "React escapes text inside JSX ({value}) as text nodes, but dangerouslySetInnerHTML bypasses escaping and javascript: URLs in href/src can still execute code."
+  - q: "Why does context-aware output encoding matter?"
+    a: "HTML entity encoding (< to &lt;) protects HTML body text, but does not stop injection inside unquoted attributes, <script> blocks, or URLs—each context needs its own encoder."
+  - q: "How does a nonce-based CSP with 'strict-dynamic' block injected scripts?"
+    a: "Only <script nonce='...'> tags carrying a fresh per-request cryptographic nonce (and scripts they dynamically load) are allowed to run; injected inline scripts without the nonce are blocked."
+related:
+  - security/sessions-vs-jwt
+  - security/security-headers
+sources:
+  - title: "OWASP Cross Site Scripting Prevention Cheat Sheet"
+    url: https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html
+  - title: "OWASP Content Security Policy Cheat Sheet"
+    url: https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html
+  - title: "OWASP ASVS 5.0: V1 Encoding and Sanitization & V3 Web Frontend Security"
+    url: https://github.com/OWASP/ASVS
+  - title: "MDN: Content Security Policy (CSP)"
+    url: https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CSP
+---
+
+## TL;DR
+**XSS** happens when untrusted input is interpreted as executable script in a victim's browser (**Reflected**, **Stored**, or **DOM-based**). Prevent it primarily with **context-aware output encoding** (plus sanitizing rich HTML with DOMPurify and rejecting `javascript:` URLs), and add a **nonce + `'strict-dynamic'` Content Security Policy (CSP)** as defense in depth.
+
+## Intent
+<Intent>
+Distinguish Reflected, Stored, and DOM XSS, know where React's automatic escaping stops, and pair context-aware encoding with a strict nonce-based CSP.
+</Intent>
+
+## Problem
+Many developers assume "React escapes everything" or "HTML-encoding `<` and `>` is enough". In reality, passing a user-supplied URL like `javascript:alert(1)` to `<a href={url}>`, using `dangerouslySetInnerHTML` without sanitization, or writing to `element.innerHTML` still gives attackers full script execution in the victim's origin.
+
+<Diagram
+  id="xss-types-diagram"
+  ariaLabel="Three XSS delivery paths: Reflected via URL, Stored via database, and DOM via client JavaScript sinks"
+  caption="All three XSS types end in the victim's browser executing untrusted script in your origin."
+  nodes={[
+    { id: 'reflected', label: 'Reflected XSS', subtitle: 'Echoed from URL', icon: 'gateway', category: 'edge', rank: 0, order: 0 },
+    { id: 'stored', label: 'Stored XSS', subtitle: 'Saved in database', icon: 'db', category: 'data', rank: 0, order: 1 },
+    { id: 'dom', label: 'DOM XSS', subtitle: 'Client sink', icon: 'service', category: 'service', rank: 0, order: 2 },
+    { id: 'victim', label: 'Victim Browser', subtitle: 'Runs in origin', icon: 'user', category: 'client', rank: 1, order: 1 },
+  ]}
+  edges={[
+    { from: 'reflected', to: 'victim', kind: 'error' },
+    { from: 'stored', to: 'victim', kind: 'error' },
+    { from: 'dom', to: 'victim', kind: 'error' },
+  ]}
+/>
+
+## Solution
+Layer primary encoding/sanitization with a strong browser CSP (ASVS V1 & V3):
+
+1. **Context-aware output encoding:** Encode for the exact sink—HTML body (`&lt;`), HTML attribute, JavaScript data (JSON serialization, never string interpolation inside `<script>`), and URLs (validate `https:` / `http:` scheme before rendering `href`/`src`).
+2. **React's boundary:** JSX `{userInput}` is safe for text nodes. Never pass unsanitized HTML to `dangerouslySetInnerHTML` (sanitize first with DOMPurify), and always validate URL schemes before rendering `<a href={userUrl}>`.
+3. **Strict CSP (defense in depth):** Generate a fresh cryptographic `nonce` per response and set `script-src 'nonce-<random>' 'strict-dynamic'; object-src 'none'; base-uri 'none';`. Avoid `'unsafe-inline'` and `'unsafe-eval'`.
+
+## Real-world analogy
+<Analogy>
+**Output encoding** is putting a visitor's handwritten note inside a sealed glass display case so it can only be read as text, never mistaken for a PA-system command. **CSP with nonces** is requiring a one-time wax seal on every legitimate announcement—any forged note slipped under the door lacks the seal and is ignored.
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="xss-csp"
+  title="XSS Attack vs Context Encoding + Nonce CSP"
+  variants={[
+    {
+      id: 'unsafe',
+      label: 'Unsafe (No encoding / CSP)',
+      nodes: [
+        { id: 'attacker', label: 'Attacker', subtitle: 'Sends <script>', icon: 'user', category: 'client', rank: 0, order: 0 },
+        { id: 'app', label: 'Web App', subtitle: 'Raw HTML concat', icon: 'service', category: 'service', rank: 1, order: 0, variant: 'problem' },
+        { id: 'victim', label: 'Victim Browser', subtitle: 'No CSP header', icon: 'gateway', category: 'edge', rank: 2, order: 0 },
+        { id: 'exfil', label: 'Attacker Server', subtitle: 'Receives data', icon: 'db', category: 'external', rank: 3, order: 0 },
+      ],
+      steps: [
+        { edge: 'attacker->app', title: '1. Submit script payload', text: 'Attacker posts <script>fetch(...)</script> in a profile or query param.' },
+        { edge: 'app->victim', title: '2. Render unencoded HTML', text: 'Server concatenates raw input into HTML with no CSP header.', kind: 'error' },
+        { edge: 'victim->exfil', title: '3. Script runs & exfiltrates', text: 'Victim browser executes the injected script and leaks session/DOM data.', kind: 'error' },
+      ],
+    },
+    {
+      id: 'safe',
+      label: 'Safe (Encoded + Nonce CSP)',
+      nodes: [
+        { id: 'attacker', label: 'Attacker', subtitle: 'Sends <script>', icon: 'user', category: 'client', rank: 0, order: 0 },
+        { id: 'app', label: 'Web App', subtitle: 'Encodes + CSP nonce', icon: 'service', category: 'service', rank: 1, order: 0 },
+        { id: 'victim', label: 'Victim Browser', subtitle: 'Enforces CSP', icon: 'gateway', category: 'edge', rank: 2, order: 0 },
+        { id: 'inert', label: 'Safe DOM', subtitle: 'Text only / blocked', icon: 'db', category: 'data', rank: 3, order: 0 },
+      ],
+      steps: [
+        { edge: 'attacker->app', title: '1. Submit script payload', text: 'Attacker posts <script>...</script> or a javascript: URL.' },
+        { edge: 'app->victim', title: '2. Encode + attach nonce CSP', text: 'App HTML-encodes text, validates URLs, and sends Content-Security-Policy with nonce.', kind: 'response' },
+        { edge: 'victim->inert', title: '3. Inert text & CSP block', text: 'Browser renders encoded text safely and blocks any un-nonced inline script.', kind: 'response' },
+      ],
+    },
+  ]}
+/>
+
+## Code
+Watch out for React's two classic escape hatches (`dangerouslySetInnerHTML` and unvalidated `href`):
+
+```tsx
+// UNSAFE: raw HTML injection and unvalidated URL scheme (allows javascript:alert(1))
+function UnsafeProfile({ bioHtml, websiteUrl }: { bioHtml: string; websiteUrl: string }) {
+  return (
+    <div>
+      <div dangerouslySetInnerHTML={{ __html: bioHtml }} />
+      <a href={websiteUrl}>Website</a>
+    </div>
+  );
+}
+
+// SAFE: sanitize rich HTML and enforce https:/http: URL allowlist (ASVS V1, V3)
+import DOMPurify from 'dompurify';
+
+function safeHref(raw: string): string {
+  try {
+    const parsed = new URL(raw);
+    return parsed.protocol === 'https:' || parsed.protocol === 'http:' ? parsed.toString() : '#';
+  } catch {
+    return '#';
+  }
+}
+
+function SafeProfile({ bioHtml, websiteUrl }: { bioHtml: string; websiteUrl: string }) {
+  const cleanHtml = DOMPurify.sanitize(bioHtml);
+  return (
+    <div>
+      <div dangerouslySetInnerHTML={{ __html: cleanHtml }} />
+      <a href={safeHref(websiteUrl)} rel="noopener noreferrer">Website</a>
+    </div>
+  );
+}
+```
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'Use framework auto-escaping (React JSX text nodes) for plain text, and DOMPurify when you must render user-authored HTML.',
+    'Validate URL protocols (https:/http:) before placing user input into href, src, or window.location.',
+    'Deploy a nonce + strict-dynamic CSP on dynamic HTML responses to contain any missed encoding bug.',
+  ]}
+  avoid={[
+    'Never rely on CSP alone while leaving raw innerHTML or dangerouslySetInnerHTML unescaped.',
+    'Never add unsafe-inline or wildcard domains (https: *) to script-src—they defeat CSP.',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Audit dangerous sinks
+    Search the codebase for `dangerouslySetInnerHTML`, `innerHTML`, `document.write`, `eval`, and dynamic `href`/`src` props.
+  </Step>
+  <Step>
+    ### Enforce URL and HTML sanitization
+    Wrap rich HTML with DOMPurify and reject non-`http(s):` URLs.
+  </Step>
+  <Step>
+    ### Roll out CSP in Report-Only first
+    Start with `Content-Security-Policy-Report-Only`, inspect violation reports, then switch to enforcing mode.
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'Context-aware encoding eliminates XSS at the root without breaking legitimate user text.',
+    'Nonce + strict-dynamic CSP blocks injected inline scripts even if a template bug slips into production.',
+  ]}
+  cons={[
+    'Static sites without per-request HTML generation cannot easily rotate per-response nonces (they use script hashes instead).',
+    'Third-party analytics or tag managers often conflict with strict CSP unless loaded via a nonced loader.',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'Security Headers Cheatsheet',
+      href: '/docs/security/security-headers',
+      summary: 'Full CSP, frame-ancestors, and HSTS header configuration.',
+    },
+    {
+      name: 'Server Sessions vs JWTs',
+      href: '/docs/security/sessions-vs-jwt',
+      summary: 'Why HttpOnly cookies keep session credentials safe from XSS theft.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "A React component renders <a href={userWebsite}>Profile</a>. Is React's default JSX escaping enough to prevent XSS here?",
+    options: [
+      { label: "No—an attacker can supply a javascript: URL that executes when clicked", description: "JSX escapes HTML entities in attributes, not dangerous URL schemes like javascript:.", correct: true },
+      { label: "Yes—React automatically strips javascript: URLs in all versions", description: "You must explicitly validate the URL protocol (https: or http:) yourself." },
+      { label: "Only if the link uses target='_blank'", description: "target='_blank' does not block javascript: execution." }
+    ]
+  },
+  {
+    question: "What does 'strict-dynamic' do in a nonce-based Content Security Policy?",
+    options: [
+      { label: "Allows scripts loaded by an already-trusted nonced script to execute without listing every CDN host", description: "It propagates trust from a nonced bootstrap script to its dynamic imports while blocking injected scripts.", correct: true },
+      { label: "Allows all inline <script> tags on the page to run", description: "That is 'unsafe-inline', which 'strict-dynamic' avoids." },
+      { label: "Encrypts cookies sent over HTTP", description: "CSP controls script/resource loading, not cookie transport encryption." }
+    ]
+  }
+]} />
+
+## Sources
+- [OWASP Cross Site Scripting Prevention Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html)
+- [OWASP Content Security Policy Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Content_Security_Policy_Cheat_Sheet.html)
+- [OWASP ASVS 5.0 (GitHub)](https://github.com/OWASP/ASVS)
+- [MDN: Content Security Policy (CSP)](https://developer.mozilla.org/en-US/docs/Web/HTTP/Guides/CSP)
