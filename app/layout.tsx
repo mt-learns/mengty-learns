@@ -10,7 +10,7 @@ const inter = Inter({
   variable: '--font-inter',
 });
 
-const tagline = 'Learning DevOps, architecture and security — one note at a time.';
+const tagline = 'See how infrastructure really works: notes, animated flows, labs that CI runs and flashcards for DevOps, architecture and security.';
 
 export const viewport: Viewport = {
   themeColor: [

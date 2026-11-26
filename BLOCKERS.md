@@ -33,3 +33,13 @@ Only issues in `app/layout.tsx`, `app/(home)/page.tsx`, and `lib/layout.shared.t
 - `app/tokens.css` now defines `--diagram-{client,network,service,data,external,abstraction,concrete}` (icon colour) and `--diagram-*-soft` (tile fill) for both themes, measured in `DESIGN.md` (every icon ≥ 4.5:1 on its tile).
 - **After the diagram-rules merge, `components/diagram/category.ts` must use these tokens** instead of its own values.
 - `components/flow/v3/flow.css` still declares `--flow-cat-*` with the old Apple blues (`#0066cc`, `#409cff`). It is outside this branch's scope, so `grep -i "0066cc\|409cff" components` is not empty until the diagram worker replaces or deletes that file. Map `edge` → `--diagram-network`, `service` → `--diagram-service`, `data` → `--diagram-data`, `external` → `--diagram-external`, `client` → `--diagram-client`.
+
+## B. Landing page decisions the plan didn't cover
+
+- **No eyebrow above the H1.** The plan asks for "DevOps · Architecture · Security" as an eyebrow; the impeccable craft floor (which the owner asked us to follow) bans eyebrows outright. The three topics moved into the sub copy instead.
+- **Read / Do / Remember use real artifacts instead of spot illustrations.** There is no spot art for "Read", and an icon-plus-text card is the template the plan wants to leave behind. Each column shows real material: the k8s flow's nodes, the commands `labs.yml` runs, and a real flashcard question.
+- **Hero right column is the `hero-desk` illustration**, not a live `<Flow>`: React Flow in the first viewport would load ~60 KB of JS before interaction and put the performance gate at risk. The live flow is section 5 instead, lazy-loaded below the fold.
+- **The home flow duplicates the data of `content/docs/kubernetes/service-routing.mdx`** (`components/home/k8s-flow.tsx`), because that file belongs to the diagram-rules worker. After the merge, move the flow data to a shared module (or switch to the new `<Flow>`/`<Diagram>` API if it changes) so there is one copy.
+- **`<Flow>` on mobile (owner: diagram-rules worker):** at 360px the canvas is tall and the nodes render ~6px text. It's the shared Player's mobile layout, not the landing page; the home page inherits whatever the diagram work ships.
+- **GitOps has no pages yet.** Its learning-path card shows "Coming soon" with a dashed border and no link instead of linking to a 404.
+- **Screenshots use the `playwright` package already on `main`** (`scripts/qa-shots.mjs`) rather than adding `@playwright/test`, to avoid a `package.json` / lockfile conflict with the diagram-rules branch, which adds it.

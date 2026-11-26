@@ -86,3 +86,19 @@ html > body[data-scroll-locked] {
     background-color: var(--code-bg);
   }
 }
+
+/*
+ * One container (REDESIGN-PLAN section 5): the Fumadocs home nav uses the same
+ * 1200px max width and 24px / 32px gutters as components/layout/container.tsx.
+ */
+#nd-home-layout {
+  --fd-layout-width: 1200px;
+}
+#nd-nav [class~='max-w-(--fd-layout-width)'] {
+  padding-inline: 1.5rem;
+}
+@media (width >= 48rem) {
+  #nd-nav [class~='max-w-(--fd-layout-width)'] {
+    padding-inline: 2rem;
+  }
+}
