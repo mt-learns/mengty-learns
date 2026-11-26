@@ -1,0 +1,320 @@
+---
+title: Decorator Pattern
+description: Layer cross-cutting behaviors like logging, caching, and retries around an object without changing its interface or subclassing.
+kind: concept
+type: explanation
+level: intermediate
+tags: [design-patterns, oop, typescript, structural]
+tested_with:
+  typescript: "7.0.2"
+status: stable
+updated: "2026-11-26"
+verified: "2026-11-26"
+cards:
+  - q: "What problem does the Decorator pattern solve?"
+    a: "It lets you attach extra behaviors to an object dynamically by wrapping it in layers that share the same interface, avoiding combinatorial subclass explosion."
+  - q: "How does Decorator differ from Adapter?"
+    a: "Decorator preserves the wrapped object's interface and supports recursive stacking; Adapter changes an incompatible interface into the one callers expect."
+  - q: "Why does wrapper order matter when stacking Decorators?"
+    a: "Outer decorators run before and after inner ones—for example, Logging outside Cache measures cache hits too, whereas Logging inside Cache only logs cache misses."
+  - q: "What is the main drawback of deep Decorator stacks?"
+    a: "Wiring and debugging many nested wrappers can be noisy, and removing a specific wrapper from the middle of a stack is awkward."
+related:
+  - design/adapter
+  - design/strategy
+  - design/bridge
+sources:
+  - title: "TypeScript Handbook: Classes"
+    url: https://www.typescriptlang.org/docs/handbook/2/classes.html
+  - title: "Refactoring.Guru: Decorator Pattern"
+    url: https://refactoring.guru/design-patterns/decorator
+  - title: "Dive Into Design Patterns — Structural Design Patterns: Decorator (Alexander Shvets)"
+    url: https://refactoring.guru/design-patterns/book
+---
+
+## 1. Intent
+
+<Intent>
+Attach additional responsibilities to an object dynamically by wrapping it inside one or more **Decorator** objects that implement the exact same interface as the core component.
+</Intent>
+
+## 2. Problem
+
+Suppose you have an `HttpClient` interface with a single `request(url)` method. Over time, different services need combinations of retries on 503s, in-memory response caching, and structured request logging.
+
+If you add those combinations via inheritance (`RetryingHttpClient`, `CachedHttpClient`, `LoggedCachedRetryingHttpClient`), every new feature doubles the number of subclasses. Even worse, you cannot toggle caching or retries per environment at runtime without building yet another subclass.
+
+<Diagram
+  id="decorator-problem"
+  layout="tree"
+  ariaLabel="Subclass explosion from combining retry, cache, and logging via inheritance"
+  caption="Combining optional behaviors via inheritance multiplies subclasses rapidly."
+  nodes={[
+    { id: 'base', label: 'HttpClient', icon: 'gateway', category: 'service', rank: 0, order: 0 },
+    { id: 'ret', label: 'RetryingClient', icon: 'ci', category: 'external', rank: 1, order: 0, variant: 'problem' },
+    { id: 'cache', label: 'CachedClient', icon: 'db', category: 'external', rank: 1, order: 1, variant: 'problem' },
+    { id: 'both', label: 'LoggedCachedRetry', icon: 'service', category: 'external', rank: 2, order: 0, variant: 'problem' },
+  ]}
+  edges={[
+    { from: 'base', to: 'ret' },
+    { from: 'base', to: 'cache' },
+    { from: 'ret', to: 'both' },
+    { from: 'cache', to: 'both' },
+  ]}
+/>
+
+## 3. Solution
+
+Create wrapper classes (`LoggingDecorator`, `CacheDecorator`, `RetryDecorator`) that all implement the same `HttpClient` interface and take another `HttpClient` in their constructor.
+
+Each decorator runs its own pre- and post-processing around `this.inner.request(req)`. Because every wrapper looks like an `HttpClient` from the outside, you can stack them in any order at startup without changing caller code.
+
+## 4. Real-world analogy
+
+<Analogy>
+Think of HTTP reverse-proxy middleware (or Russian nesting dolls). A request enters the outer logging layer, passes through the rate-limiter and cache layers, hits the upstream server, and then the response travels back out through the same layers in reverse order.
+</Analogy>
+
+## 5. Flow: watch it work
+
+<Flow
+  id="decorator"
+  title="Decorator Pattern: Logging → Cache → Retry → HTTP"
+  nodes={[
+    { id: 'caller', label: 'Caller', subtitle: 'App code', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'log', label: 'LoggingWrapper', subtitle: 'Decorator', icon: 'service', category: 'abstraction', rank: 1, order: 0 },
+    { id: 'cache', label: 'CacheWrapper', subtitle: 'Decorator', icon: 'db', category: 'data', rank: 2, order: 0 },
+    { id: 'retry', label: 'RetryWrapper', subtitle: 'Decorator', icon: 'ci', category: 'service', rank: 3, order: 0 },
+    { id: 'http', label: 'FetchHttpClient', subtitle: 'Component', icon: 'gateway', category: 'external', rank: 4, order: 0 },
+  ]}
+  steps={[
+    { edge: 'caller->log', title: 'Send GET /status', text: 'Caller invokes request(req) on the outermost LoggingWrapper' },
+    { edge: 'log->cache', title: 'Log & forward', text: 'LoggingWrapper records start time and delegates to CacheWrapper' },
+    { edge: 'cache->retry', title: 'Cache miss', text: 'CacheWrapper misses and delegates to RetryWrapper' },
+    { edge: 'retry->http', title: 'Execute HTTP call', text: 'RetryWrapper invokes FetchHttpClient.request(req) with backoff' },
+    { edge: 'http->retry', title: 'Return 200 OK', text: 'FetchHttpClient returns the HTTP response to RetryWrapper', kind: 'response' },
+    { edge: 'retry->cache', title: 'Pass response up', text: 'RetryWrapper succeeds and returns the response to CacheWrapper', kind: 'response' },
+    { edge: 'cache->log', title: 'Store & return', text: 'CacheWrapper caches the response and returns to LoggingWrapper', kind: 'response' },
+    { edge: 'log->caller', title: 'Log elapsed & return', text: 'LoggingWrapper logs total duration and returns to Caller', kind: 'response' },
+  ]}
+/>
+
+## 6. Structure
+
+<Diagram
+  id="decorator-structure"
+  ariaLabel="Decorator structure: HttpClient interface implemented by FetchHttpClient and wrappers holding an inner HttpClient"
+  caption="Every Decorator implements HttpClient and wraps another HttpClient instance."
+  nodes={[
+    { id: 'iface', label: 'HttpClient', subtitle: '«interface»', icon: 'interface', category: 'abstraction', rank: 0, order: 0 },
+    { id: 'core', label: 'FetchHttpClient', subtitle: 'Concrete', icon: 'gateway', category: 'concrete', rank: 1, order: 0 },
+    { id: 'log', label: 'LoggingWrapper', subtitle: '- inner: HttpClient', icon: 'service', category: 'service', rank: 1, order: 1 },
+    { id: 'cache', label: 'CacheWrapper', subtitle: '- inner: HttpClient', icon: 'db', category: 'data', rank: 1, order: 2 },
+  ]}
+  edges={[
+    { from: 'iface', to: 'core', kind: 'response', dashed: true },
+    { from: 'iface', to: 'log', kind: 'response', dashed: true },
+    { from: 'iface', to: 'cache', kind: 'response', dashed: true },
+  ]}
+/>
+
+## 7. Code
+
+<Tabs items={['TypeScript']}>
+  <Tab value="TypeScript">
+```ts
+interface HttpRequest {
+  method: 'GET' | 'POST';
+  url: string;
+}
+
+interface HttpResponse {
+  status: number;
+  body: string;
+}
+
+// Component interface
+interface HttpClient {
+  request(req: HttpRequest): Promise<HttpResponse>;
+}
+
+// Concrete Component
+class FetchHttpClient implements HttpClient {
+  async request(req: HttpRequest): Promise<HttpResponse> {
+    return { status: 200, body: `ok:${req.method}:${req.url}` };
+  }
+}
+
+// Decorator 1: Retry transient failures
+class RetryHttpClient implements HttpClient {
+  constructor(
+    private readonly inner: HttpClient,
+    private readonly maxAttempts = 3,
+  ) {}
+
+  async request(req: HttpRequest): Promise<HttpResponse> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= this.maxAttempts; attempt++) {
+      try {
+        const res = await this.inner.request(req);
+        if (res.status < 500 || attempt === this.maxAttempts) return res;
+      } catch (err) {
+        lastError = err;
+        if (attempt === this.maxAttempts) throw lastError;
+      }
+    }
+    throw lastError;
+  }
+}
+
+// Decorator 2: In-memory GET cache
+class CachedHttpClient implements HttpClient {
+  private readonly cache = new Map<string, HttpResponse>();
+
+  constructor(private readonly inner: HttpClient) {}
+
+  async request(req: HttpRequest): Promise<HttpResponse> {
+    if (req.method === 'GET') {
+      const hit = this.cache.get(req.url);
+      if (hit) return hit;
+    }
+    const res = await this.inner.request(req);
+    if (req.method === 'GET' && res.status === 200) {
+      this.cache.set(req.url, res);
+    }
+    return res;
+  }
+}
+
+// Decorator 3: Structured logging
+class LoggingHttpClient implements HttpClient {
+  constructor(private readonly inner: HttpClient) {}
+
+  async request(req: HttpRequest): Promise<HttpResponse> {
+    const start = Date.now();
+    const res = await this.inner.request(req);
+    console.log(`[http] ${req.method} ${req.url} -> ${res.status} (${Date.now() - start}ms)`);
+    return res;
+  }
+}
+
+// Compose stack: Logging -> Cache -> Retry -> FetchHttpClient
+const client: HttpClient = new LoggingHttpClient(
+  new CachedHttpClient(
+    new RetryHttpClient(new FetchHttpClient(), 3),
+  ),
+);
+
+await client.request({ method: 'GET', url: 'https://api.example.com/health' });
+```
+  </Tab>
+</Tabs>
+
+## 8. When to use / when to avoid
+
+<Checklist
+  use={[
+    'You need to compose optional, orthogonal behaviors (logging, caching, retries, auth headers) in different combinations at runtime.',
+    'You cannot or should not subclass the core component (e.g. third-party classes or final-like modules).',
+    'Each cross-cutting concern should stay small and testable in isolation.',
+  ]}
+  avoid={[
+    'Wrapper order is implicit and error-prone without clear documentation (e.g. caching *outside* auth leaks tenant responses).',
+    'You need to inspect or remove a specific middle layer dynamically after construction.',
+    'A simple middleware array or pipeline function (`middlewares.reduceRight(...)`) is cleaner than nested `new A(new B(new C()))`.',
+  ]}
+/>
+
+### When NOT to use it
+
+Overengineering occurs when you wrap a single concrete class in three decorators that are *always* used together in the exact same order. If nobody ever composes them differently, a single well-factored class (or a small helper function) is far easier to read than four constructor-chained wrappers.
+
+### Real-world example in this stack
+
+In Next.js (`next.config.mjs`) and Fumadocs (`lib/source.ts`), configuration and loader plugins wrap base config objects with additional capabilities (MDX compilation, search indexing) while preserving the underlying config contract.
+
+## 9. How to implement
+
+<Steps>
+  <Step>
+    ### Define the Component interface
+    Keep the contract (`HttpClient.request`) narrow so every wrapper is easy to implement.
+  </Step>
+  <Step>
+    ### Implement the Concrete Component
+    Write the core `FetchHttpClient` with zero logging, caching, or retry logic.
+  </Step>
+  <Step>
+    ### Create Decorators wrapping `HttpClient`
+    Each decorator implements `HttpClient`, accepts `inner: HttpClient`, and delegates to `this.inner.request(req)`.
+  </Step>
+  <Step>
+    ### Document and wire the stack order
+    Assemble the chain at your composition root (`Logging -> Cache -> Retry -> Fetch`) and verify order-dependent interactions.
+  </Step>
+</Steps>
+
+## 10. Pros / Cons
+
+<ProsCons
+  pros={[
+    'Compose behaviors dynamically without combinatorial subclassing.',
+    'Single Responsibility Principle: each wrapper handles one cross-cutting concern.',
+    'Open/Closed Principle: add a new wrapper (e.g. circuit breaker) without touching existing wrappers.',
+  ]}
+  cons={[
+    'Deeply nested `new A(new B(new C()))` construction is noisy to read.',
+    'Order-dependent bugs (e.g. Retry outside Cache vs Cache outside Retry) can be subtle.',
+    'Hard to remove a specific inner decorator once the stack is built.',
+  ]}
+/>
+
+## 11. Relations
+
+<Relations
+  items={[
+    {
+      name: 'Decorator vs Adapter',
+      summary: 'Decorator keeps the same interface and stacks recursively; Adapter changes an incompatible interface to match what callers expect.',
+    },
+    {
+      name: 'Decorator vs Proxy',
+      summary: 'Both share the component interface and wrap another object, but Proxy controls access/lifecycle (lazy init, auth) whereas Decorator layers new behavior.',
+    },
+    {
+      name: 'Decorator vs Chain of Responsibility',
+      summary: 'Both pass calls along a chain, but Chain handlers can short-circuit independently while Decorators enrich the same operation.',
+    },
+  ]}
+/>
+
+## 12. Check yourself
+
+<MyTake>
+Pay close attention to wrapper order. Putting `Cache` *outside* `Retry` means cache hits skip retries entirely (good), whereas putting `Logging` *inside* `Cache` hides cache hits from your logs (usually surprising).
+</MyTake>
+
+<Quiz questions={[
+  {
+    question: "In a stack Logging(Cached(Retry(Fetch))), what happens on a cache hit for a GET request?",
+    options: [
+      { label: "Logging runs, Cache returns the stored response, and Retry and Fetch are never called", description: "Outer decorators execute first; Cache short-circuits before delegating to Retry.", correct: true },
+      { label: "Retry runs three times before Cache checks its map", description: "Retry is inside Cache, so it only runs on a cache miss." },
+      { label: "Logging is skipped because Cache is in the middle", description: "Logging wraps Cache, so it still logs the request and response." }
+    ]
+  },
+  {
+    question: "How does Decorator differ from Adapter?",
+    options: [
+      { label: "Decorator preserves the exact same interface while adding behavior; Adapter translates to a different interface", description: "Because Decorator keeps the same interface, decorators can be stacked recursively.", correct: true },
+      { label: "Decorator requires class inheritance, whereas Adapter uses composition", description: "Both Object Adapter and Decorator rely on composition." },
+      { label: "Adapter supports recursive stacking, whereas Decorator only wraps once", description: "It is the other way around: Decorator supports recursive stacking." }
+    ]
+  }
+]} />
+
+### Sources
+
+- [TypeScript Handbook: Classes](https://www.typescriptlang.org/docs/handbook/2/classes.html)
+- [Refactoring.Guru: Decorator Pattern](https://refactoring.guru/design-patterns/decorator)
+- *Dive Into Design Patterns* (Alexander Shvets), chapter "Structural Design Patterns: Decorator"

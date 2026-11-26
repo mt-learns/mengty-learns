@@ -3,6 +3,7 @@
   "pages": [
     "oop-pillars",
     "solid",
+    "factory-method",
     "adapter",
     "bridge",
     "decorator",
