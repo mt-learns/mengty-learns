@@ -1,0 +1,144 @@
+---
+title: "Lean PRD and User Stories"
+description: Write a 1-page PRD (problem, non-goals, requirements, metrics, risks), INVEST user stories, Given/When/Then acceptance criteria, and know when to skip personas.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: how-to
+level: beginner
+tags: [process, prd, user-stories, acceptance-criteria, invest]
+tested_with:
+  spec_format: "lean-prd-v1"
+cards:
+  - q: "What does the INVEST acronym for user stories stand for?"
+    a: "Independent, Negotiable, Valuable, Estimable, Small, and Testable."
+  - q: "Why is a 'Non-goals' section one of the highest-leverage parts of a lean PRD?"
+    a: "Explicitly naming what you are NOT building prevents scope creep and stops teammates or AI agents from inventing extra features."
+  - q: "What are the three clauses of BDD-style acceptance criteria?"
+    a: "Given (initial state/context), When (user or system action), Then (observable outcome)."
+  - q: "When do personas and user journeys actually pay off for a small team?"
+    a: "When you have 2+ distinct user types with conflicting needs (e.g., learner vs recruiter, or admin vs buyer); skip them for single-user internal tools."
+related:
+  - process/idea-to-production
+  - process/scrum-kanban-waterfall
+  - security/threat-modeling
+sources:
+  - title: "Atlassian Agile Coach: User Stories"
+    url: https://www.atlassian.com/agile/project-management/user-stories
+  - title: "Cucumber: Gherkin Reference (Given / When / Then)"
+    url: https://cucumber.io/docs/gherkin/reference/
+  - title: "Bill Wake: INVEST in Good Stories"
+    url: https://xp123.com/invest-in-good-stories-and-smart-tasks/
+---
+
+## TL;DR
+A **lean PRD** fits on one page: **Problem**, **Goals / Non-goals**, **Users**, **Requirements** (functional + non-functional), **Success metrics**, and **Risks**. Break it into **INVEST** stories with **Given / When / Then** acceptance criteria so anyone—human or AI agent—knows when a slice is done.
+
+## Why it exists
+Jumping straight into code without writing down the problem and non-goals leads to half-built features, gold-plating, and "that's not what I meant" reviews. A 1-page PRD aligns everyone in 15 minutes without turning into a 30-page Waterfall binder.
+
+## 1. Lean PRD template (1 page)
+
+```markdown
+# Feature: <Name>
+Owner: <Name> · Date: <YYYY-MM-DD> · Status: Draft | Approved
+
+## Problem
+2–3 sentences describing the user pain or business gap today.
+
+## Goals & Non-goals
+- Goal: What success looks like.
+- Non-goal: What we are explicitly NOT building in this iteration.
+
+## Users
+| User | Primary need |
+|---|---|
+| Learner | Find notes fast and review flashcards daily |
+
+## Requirements
+### Functional
+- F1: ...
+### Non-functional
+- NF1 (Performance): Page loads < 1.5s LCP; 0 KB extra JS on non-flow pages.
+- NF2 (Security / A11y): Contrast ≥ 4.5:1; keyboard navigable.
+
+## Success metrics
+- Measurable signal checked 2 weeks after launch (e.g., 0 broken links, Lighthouse ≥ 95).
+
+## Risks & mitigations
+- Risk: ... → Mitigation: ...
+```
+
+Notice how `PLAN.md` §1 in this repository uses this exact structure (Problem, Goals, Non-goals, Users table, Success metrics) in under 40 lines.
+
+## 2. INVEST user stories
+A user story is a **vertical slice of value**, not a technical layer ("create DB table"). Check each story against **INVEST**:
+
+| Letter | Meaning | Small-team check |
+|---|---|---|
+| **I** | Independent | Can it be built and merged without waiting on 3 other PRs? |
+| **N** | Negotiable | Describes the *outcome*, leaving implementation details flexible |
+| **V** | Valuable | Delivers visible value to a user or removes real operational risk |
+| **E** | Estimable | Clear enough to size as S / M / L (if not, do a 1-hour spike first) |
+| **S** | Small | Fits in 1–2 days (1–2 PRs); split anything bigger |
+| **T** | Testable | Has concrete acceptance criteria you can assert in a test or QA check |
+
+## 3. Given / When / Then acceptance criteria
+Turn vague wishes ("flashcards should work offline") into verifiable checks:
+
+- **Good (testable):**
+  - **Given** a learner grades a card as "Good" on `/review`,
+  - **When** they reload the page offline,
+  - **Then** the updated FSRS due date persists in `localStorage` (`mt-*-v1`).
+- **Bad (vague):** "Flashcard scheduling works well and saves state."
+
+## 4. Personas and user journeys: only when they pay off
+- **Use personas/journeys when:** your product serves **2+ distinct roles** with different workflows (e.g., a learner reviewing cards vs a recruiter scanning projects in 30 seconds, or an admin moderating uploads vs a customer uploading).
+- **Skip them when:** you are building a single-user CLI, an internal developer script, or a backend bug fix where the "persona" adds zero new design constraints.
+
+## Minimum viable version (1–3 person team + AI agents)
+For a 1–2 day feature:
+- Skip the separate PRD document and put **Problem**, **Non-goals (2 bullets)**, and **3 Given/When/Then criteria** directly in the GitHub Issue or task brief.
+- AI coding agents perform dramatically better when given explicit **Non-goals** and **Given/When/Then** checks—they stop hallucinating extra features and know what tests to write.
+
+## When it's overkill
+- Writing a full PRD for a 30-minute bug fix or dependency bump.
+- Creating fictional demographic personas ("Sarah, 34, drinks oat-milk lattes") that never inform a single engineering or UX decision.
+- Splitting a 1-hour task into 6 micro-stories just to inflate sprint velocity.
+
+## Gotchas
+- **Missing Non-goals:** Without explicit non-goals, scope silently doubles during implementation.
+- **Horizontal slicing:** Splitting a feature into "Story 1: Backend API", "Story 2: Frontend UI" means neither delivers value alone. Slice vertically ("Story 1: Create + display one item end-to-end").
+- **Forgetting non-functional requirements:** Latency, accessibility, auth boundaries, and bundle budgets belong in the PRD, not as an afterthought before launch.
+
+## Production checklist
+- [ ] Problem statement is 2–3 sentences with no solution baked in.
+- [ ] At least 2 explicit **Non-goals** are listed.
+- [ ] Both functional and non-functional requirements (a11y, perf, security) are stated.
+- [ ] Every story passes INVEST and has ≥ 2 **Given / When / Then** acceptance criteria.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "Why should a lean PRD always include a 'Non-goals' section?",
+    options: [
+      { label: "It draws a clear boundary so teammates and AI agents do not build out-of-scope features", description: "Explicit exclusions prevent silent scope creep during build and review.", correct: true },
+      { label: "It replaces the need for acceptance criteria", description: "Non-goals bound scope; Given/When/Then criteria verify behavior." },
+      { label: "It is required by the Scrum Guide 2020", description: "The Scrum Guide does not prescribe PRDs or a Non-goals section." }
+    ]
+  },
+  {
+    question: "Which story best follows the INVEST principle?",
+    options: [
+      { label: "As a learner, I can filter /review cards by tag so I can focus on Security before an interview (1 day, with Given/When/Then)", description: "It is a small, independent, testable vertical slice delivering user value.", correct: true },
+      { label: "Build the SQLite database schema for all future user features", description: "Horizontal technical layer with no direct user value and unclear size." },
+      { label: "Redesign the entire application", description: "Far too large (not Small) and not directly testable." }
+    ]
+  }
+]} />
+
+## Sources
+- [Atlassian Agile Coach: User Stories](https://www.atlassian.com/agile/project-management/user-stories)
+- [Cucumber: Gherkin Reference (Given / When / Then)](https://cucumber.io/docs/gherkin/reference/)
+- [Bill Wake: INVEST in Good Stories](https://xp123.com/invest-in-good-stories-and-smart-tasks/)
