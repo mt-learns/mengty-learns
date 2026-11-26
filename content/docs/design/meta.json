@@ -3,7 +3,8 @@
   "pages": [
     "oop-pillars",
     "solid",
-    "bridge"
+    "bridge",
+    "strategy"
   ],
   "icon": "design"
 }
