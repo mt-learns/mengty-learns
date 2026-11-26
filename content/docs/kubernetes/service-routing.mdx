@@ -1,6 +1,7 @@
 ---
 title: "Service Routing: Ingress → Service → Pod"
 description: How a Kubernetes request travels from a user's browser through Ingress and Service to a healthy Pod and back.
+kind: concept
 type: explanation
 level: intermediate
 tags: [kubernetes, networking, ingress, service]
@@ -8,11 +9,30 @@ tested_with:
   kubernetes: "1.31"
 status: stable
 updated: "2026-11-26"
+verified: "2026-11-26"
+cards:
+  - q: "What is the role of Ingress vs Service in Kubernetes?"
+    a: "Ingress handles L7 HTTP/HTTPS routing (host, path, TLS) and forwards to a Service; Service provides a stable virtual ClusterIP and L4 load balancing across Ready Pods."
+  - q: "How does a Service avoid sending traffic to a Pod that is still starting or failing?"
+    a: "An EndpointSlice only includes Pods whose readinessProbe succeeds; unready Pods are removed from the Service's endpoints."
+  - q: "What happens if Pod IPs change during a rolling deployment?"
+    a: "Clients and Ingress target the Service's stable ClusterIP/DNS name, while kube-proxy updates DNAT rules from the updated EndpointSlice."
+  - q: "How does a Service match which Pods receive its traffic?"
+    a: "Via spec.selector matching the Pod's metadata.labels (for example app: web)."
+related:
+  - kubernetes/kubectl-cheatsheet
+  - kubernetes/pods-deployments
+  - containers/multi-stage-nextjs
+sources:
+  - title: "Kubernetes Docs: Service"
+    url: https://kubernetes.io/docs/concepts/services-networking/service/
+  - title: "Kubernetes Docs: Ingress"
+    url: https://kubernetes.io/docs/concepts/services-networking/ingress/
+  - title: "Kubernetes Docs: EndpointSlices"
+    url: https://kubernetes.io/docs/concepts/services-networking/endpoint-slices/
 ---
 
 import { K8S_REQUEST_FLOW } from '@/lib/flows/k8s-request';
-
-{/* TODO(schema-v2): Add kind: 'concept', verified, cards, related, and sources to frontmatter once lib/source.ts supports them. */}
 
 ## 1. Intent
 
@@ -229,7 +249,24 @@ spec:
 When a Service returns `502` or `503` behind an Ingress, my first command is always `kubectl get endpointslices -l kubernetes.io/service-name=web`. Nine times out of ten, either the label selector does not match the Pod labels or the Pod's readiness probe is failing.
 </MyTake>
 
-{/* TODO(step-11): Add <Quiz> component once Step 11 is merged. */}
+<Quiz questions={[
+  {
+    question: "A Deployment scales from 2 Pods to 3, and the new Pod's readinessProbe is failing. What does the Service do?",
+    options: [
+      { label: "Excludes the new Pod from its EndpointSlice until readiness passes", description: "EndpointSlice only marks Ready Pods as ready endpoints, so kube-proxy will not route traffic to unready Pods.", correct: true },
+      { label: "Terminates the Pod immediately", description: "Failing a readinessProbe removes the Pod from Service endpoints; livenessProbe triggers container restarts." },
+      { label: "Buffers requests in the Service until the Pod becomes ready", description: "ClusterIP Services do not buffer HTTP requests; traffic is only routed to ready endpoints." }
+    ]
+  },
+  {
+    question: "Which Kubernetes resource handles TLS termination and HTTP path routing like /cart → web:80?",
+    options: [
+      { label: "Ingress", description: "Ingress operates at Layer 7 for HTTP/HTTPS host, path, and TLS rules.", correct: true },
+      { label: "ClusterIP Service", description: "ClusterIP Services operate at Layer 4 (IP/port) and do not inspect HTTP paths." },
+      { label: "EndpointSlice", description: "EndpointSlice tracks the IP:port pairs of Ready Pods backing a Service." }
+    ]
+  }
+]} />
 
 ### Sources
 

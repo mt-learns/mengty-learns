@@ -1,6 +1,7 @@
 ---
 title: "Layered vs Hexagonal vs Onion vs Clean"
 description: Compare the four major application architecture styles side by side using the same TypeScript Order service request.
+kind: note
 type: explanation
 level: intermediate
 tags: [architecture, layered, hexagonal, onion, clean-architecture, typescript]
@@ -8,9 +9,30 @@ tested_with:
   typescript: "5.x"
 status: stable
 updated: "2026-11-26"
+verified: "2026-11-26"
+cards:
+  - q: "What is the single biggest difference between Layered and Hexagonal/Onion/Clean?"
+    a: "Layered points dependencies downward toward the database, while Hexagonal, Onion, and Clean invert them inward toward the domain."
+  - q: "What mechanism do Hexagonal, Onion, and Clean share in TypeScript?"
+    a: "The domain core defines a repository/gateway interface, and outer infrastructure adapters implement it."
+  - q: "When is Layered Architecture a better fit than Clean or Onion?"
+    a: "For simple CRUD apps, internal admin tools, or fast prototypes where extra boundary interfaces are pure ceremony."
+  - q: "How do Onion and Clean differ from Hexagonal?"
+    a: "Hexagonal focuses on driving/driven ports around one core, while Onion and Clean subdivide the core into concentric rings (Entities vs Use Cases / App Services)."
+related:
+  - architecture/layered
+  - architecture/hexagonal
+  - architecture/dependency-inversion
+sources:
+  - title: "Martin Fowler: PresentationDomainDataLayering"
+    url: https://martinfowler.com/bliki/PresentationDomainDataLayering.html
+  - title: "Alistair Cockburn: Hexagonal Architecture"
+    url: https://alistair.cockburn.us/hexagonal-architecture/
+  - title: "Jeffrey Palermo: The Onion Architecture (Part 1)"
+    url: https://jeffreypalermo.com/2008/07/the-onion-architecture-part-1/
+  - title: "Robert C. Martin: The Clean Architecture"
+    url: https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html
 ---
-
-{/* TODO(schema-v2): Add kind: 'note', verified, cards, related, and sources to frontmatter once lib/source.ts supports them. */}
 
 <Intent>
 **Layered** points dependencies **downward** toward the database. **Hexagonal**, **Onion**, and **Clean** all invert that bottom arrow so dependencies point **inward** toward the domain—they mainly differ in how they subdivide the core and name the boundaries.
@@ -166,6 +188,27 @@ In TypeScript, **Hexagonal, Onion, and Clean share the exact same core mechanism
 <MyTake>
 In practice, Hexagonal is the easiest inward-dependency style to explain and maintain in TypeScript projects. You get 90% of the benefits of Onion and Clean—fast in-memory tests and zero framework lock-in—without maintaining separate Presenter and Input/Output boundary DTOs for every endpoint.
 </MyTake>
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "Which architecture styles enforce an inward Dependency Rule toward the domain?",
+    options: [
+      { label: "Hexagonal, Onion, and Clean", description: "All three invert the persistence dependency so infrastructure depends on domain-owned interfaces.", correct: true },
+      { label: "Layered, Hexagonal, and Onion", description: "Classic Layered points dependencies downward from Business to Data." },
+      { label: "Only Clean Architecture", description: "Hexagonal and Onion also invert dependencies toward the core." }
+    ]
+  },
+  {
+    question: "Why might a small CRUD API choose Layered over Clean Architecture?",
+    options: [
+      { label: "Less boilerplate when domain rules are thin and map closely to database tables", description: "Layered avoids extra boundary interfaces, presenters, and DTO mapping when CRUD is all you need.", correct: true },
+      { label: "Layered makes it easier to swap Postgres for an in-memory Map without interfaces", description: "Swapping databases without mocking internals is actually easier in Hexagonal/Onion/Clean." },
+      { label: "Layered forbids controllers from validating HTTP payloads", description: "Presentation in Layered is specifically responsible for HTTP validation and formatting." }
+    ]
+  }
+]} />
 
 ### Sources
 

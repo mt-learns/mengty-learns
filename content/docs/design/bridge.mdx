@@ -1,6 +1,7 @@
 ---
 title: Bridge Pattern
 description: Separate an abstraction from its implementation so both can evolve independently.
+kind: concept
 type: explanation
 level: intermediate
 tags: [design-patterns, oop, typescript]
@@ -8,9 +9,26 @@ tested_with:
   typescript: "5.x"
 status: stable
 updated: "2026-11-26"
+verified: "2026-11-26"
+cards:
+  - q: "What problem does the Bridge pattern solve?"
+    a: "It prevents M x N subclass explosion when a class varies along two independent dimensions (Abstraction and Implementation)."
+  - q: "How does Bridge connect Abstraction and Implementation?"
+    a: "Through composition: the Abstraction holds a reference to an Implementor interface and delegates low-level work to it."
+  - q: "How does Bridge differ from Adapter?"
+    a: "Bridge is designed up front so two hierarchies evolve independently; Adapter wraps an incompatible existing interface after the fact."
+  - q: "How does Bridge differ from Strategy?"
+    a: "Strategy swaps a single interchangeable algorithm, whereas Bridge decouples an entire abstraction hierarchy from an implementation hierarchy."
+related:
+  - design/oop-pillars
+  - design/solid
+  - architecture/dependency-inversion
+sources:
+  - title: "TypeScript Handbook: Classes & Interfaces"
+    url: https://www.typescriptlang.org/docs/handbook/2/classes.html
+  - title: "Refactoring.Guru: Bridge Pattern"
+    url: https://refactoring.guru/design-patterns/bridge
 ---
-
-{/* TODO(schema-v2): Add kind: 'concept', verified, cards, related, and sources to frontmatter once lib/source.ts supports them. */}
 
 ## 1. Intent
 
@@ -264,7 +282,24 @@ radioRemote.mute();
 In TypeScript codebases, I reach for Bridge when I catch myself naming classes like `PostgresOrderExporter` and `CsvOrderExporter` alongside `AsyncPostgresOrderExporter`. Splitting `Exporter` (sync/async) from `StorageDriver` (Postgres/CSV) immediately stops the combinatorial growth.
 </MyTake>
 
-{/* TODO(step-11): Add <Quiz> component once Step 11 is merged. */}
+<Quiz questions={[
+  {
+    question: "You have 3 Abstraction variants and 4 Implementation backends. Roughly how many concrete classes do you need with Bridge vs inheritance?",
+    options: [
+      { label: "3 + 4 = 7 with Bridge, instead of 3 x 4 = 12 with inheritance", description: "Bridge separates the two dimensions via composition so each grows additively.", correct: true },
+      { label: "3 x 4 = 12 in both cases", description: "Avoiding the M x N Cartesian product is the main reason to use Bridge." },
+      { label: "1 class total using inheritance", description: "A single class would mix both dimensions and still require branching." }
+    ]
+  },
+  {
+    question: "Which OOP mechanism forms the 'bridge' between Abstraction and Implementation?",
+    options: [
+      { label: "Composition: the Abstraction holds a reference to an Implementor interface", description: "Delegating to an injected interface lets you swap implementations without changing the abstraction.", correct: true },
+      { label: "Multiple inheritance from two concrete base classes", description: "TypeScript does not support multiple class inheritance, and Bridge specifically replaces inheritance with composition." },
+      { label: "Global singleton state", description: "Bridge injects the implementation reference into the abstraction instance." }
+    ]
+  }
+]} />
 
 ### Sources
 
