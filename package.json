@@ -11,6 +11,7 @@
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "qa:diagrams": "node scripts/qa-diagrams.mjs",
     "new": "node scripts/new.mjs"
   },
   "dependencies": {
@@ -37,6 +38,7 @@
   "devDependencies": {
     "@axe-core/playwright": "4.14.1",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "1.65.1",
     "@lhci/cli": "0.16.1",
     "@tailwindcss/postcss": "^4.3.5",
     "@testing-library/jest-dom": "8.0.0",

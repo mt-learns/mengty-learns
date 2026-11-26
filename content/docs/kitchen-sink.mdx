@@ -79,13 +79,14 @@ console.log(hello);
   id="kitchen-sink-flow"
   title="Sample request flow"
   nodes={[
-    { id: 'client', label: 'Browser', subtitle: 'Client', icon: 'user', category: 'client', x: 0, y: 0 },
-    { id: 'gw', label: 'Gateway', subtitle: 'HTTPS', icon: 'gateway', category: 'edge', x: 1, y: 0 },
-    { id: 'api', label: 'API', subtitle: 'Service', icon: 'service', category: 'service', x: 2, y: 0 },
+    { id: 'client', label: 'Browser', subtitle: 'Client', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'gw', label: 'Gateway', subtitle: 'HTTPS', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+    { id: 'api', label: 'API', subtitle: 'Service', icon: 'service', category: 'service', rank: 2, order: 0 },
   ]}
   steps={[
     { edge: 'client->gw', title: 'Send request', text: 'Browser sends GET /api/health over TLS.' },
     { edge: 'gw->api', title: 'Forward to API', text: 'Gateway routes the request to the API service.' },
-    { edge: 'api->client', title: 'Return 200 OK', text: 'API responds with JSON status.', kind: 'response' },
+    { edge: 'api->gw', title: 'Return 200 OK', text: 'API responds with JSON status to Gateway.', kind: 'response' },
+    { edge: 'gw->client', title: 'Deliver response', text: 'Gateway returns 200 OK over TLS to Browser.', kind: 'response' },
   ]}
 />

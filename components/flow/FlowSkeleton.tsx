@@ -1,8 +1,8 @@
 import type { FlowNode, ParsedFlowStep } from './types';
 
-const SKELETON_CELL_X = 160;
+const SKELETON_CELL_X = 180;
 const SKELETON_CELL_Y = 96;
-const SKELETON_NODE_W = 128;
+const SKELETON_NODE_W = 148;
 const SKELETON_NODE_H = 52;
 const SKELETON_PAD = 24;
 
@@ -15,6 +15,7 @@ function parseEdgeEndpoints(edge: string): [string, string] | null {
 /**
  * Lightweight static SVG skeleton rendered on the server and shown until
  * the interactive React Flow canvas enters the viewport and hydrates.
+ * Intentionally avoids importing dagre so dagre stays in the lazy chunk.
  */
 export function FlowSkeleton({
   nodes,
@@ -25,23 +26,36 @@ export function FlowSkeleton({
   steps: ParsedFlowStep[];
   title?: string;
 }) {
-  const maxX = Math.max(0, ...nodes.map((n) => n.x));
-  const maxY = Math.max(0, ...nodes.map((n) => n.y));
-  const width = SKELETON_PAD * 2 + maxX * SKELETON_CELL_X + SKELETON_NODE_W;
-  const height = SKELETON_PAD * 2 + maxY * SKELETON_CELL_Y + SKELETON_NODE_H;
+  const rankCounts = new Map<number, number>();
+  const coords = new Map<string, { x: number; y: number }>();
 
-  const nodeMap = new Map(
-    nodes.map((n) => [
-      n.id,
-      {
-        x: SKELETON_PAD + n.x * SKELETON_CELL_X,
-        y: SKELETON_PAD + n.y * SKELETON_CELL_Y,
-      },
-    ]),
-  );
+  for (let i = 0; i < nodes.length; i++) {
+    const node = nodes[i];
+    const rank = node.rank ?? i;
+    const seenInRank = rankCounts.get(rank) ?? 0;
+    const order = node.order ?? seenInRank;
+    rankCounts.set(rank, seenInRank + 1);
+    coords.set(node.id, {
+      x: SKELETON_PAD + rank * SKELETON_CELL_X,
+      y: SKELETON_PAD + order * SKELETON_CELL_Y,
+    });
+  }
+
+  const allCoords = [...coords.values()];
+  const maxX = Math.max(0, ...allCoords.map((c) => c.x));
+  const maxY = Math.max(0, ...allCoords.map((c) => c.y));
+  const width = maxX + SKELETON_NODE_W + SKELETON_PAD;
+  const height = maxY + SKELETON_NODE_H + SKELETON_PAD;
 
   const seenEdges = new Set<string>();
-  const edgeLines: { key: string; x1: number; y1: number; x2: number; y2: number; dashed: boolean }[] = [];
+  const edgeLines: {
+    key: string;
+    x1: number;
+    y1: number;
+    x2: number;
+    y2: number;
+    dashed: boolean;
+  }[] = [];
 
   for (const step of steps) {
     const parsed = parseEdgeEndpoints(step.edge);
@@ -50,8 +64,8 @@ export function FlowSkeleton({
     if (seenEdges.has(key)) continue;
     seenEdges.add(key);
 
-    const from = nodeMap.get(parsed[0]);
-    const to = nodeMap.get(parsed[1]);
+    const from = coords.get(parsed[0]);
+    const to = coords.get(parsed[1]);
     if (!from || !to) continue;
 
     edgeLines.push({
@@ -66,13 +80,13 @@ export function FlowSkeleton({
 
   return (
     <div
+      role="img"
       className="flex h-full w-full items-center justify-center p-4"
       aria-label={title ? `${title} diagram preview` : 'Flow diagram preview'}
     >
       <svg
         viewBox={`0 0 ${width} ${height}`}
         className="h-auto max-h-full w-full max-w-full"
-        role="img"
         aria-hidden="true"
       >
         {edgeLines.map((e) => (
@@ -88,7 +102,7 @@ export function FlowSkeleton({
           />
         ))}
         {nodes.map((node) => {
-          const pos = nodeMap.get(node.id)!;
+          const pos = coords.get(node.id)!;
           return (
             <g key={node.id} transform={`translate(${pos.x}, ${pos.y})`}>
               <rect

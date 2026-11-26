@@ -24,48 +24,24 @@ In a standard layered setup, `PlaceOrderService` directly imports `PostgresOrder
 
 Move the `OrderRepository` interface **into the domain/business module**, and make `PostgresOrderRepo` implement it from the infrastructure module. Source code imports now point **from infrastructure toward the domain**, while runtime control still flows from domain to Postgres.
 
-<figure className="my-6">
-  <svg
-    viewBox="0 0 560 190"
-    className="w-full h-auto rounded-card border border-border bg-card p-3"
-    role="img"
-    aria-label="Dependency Inversion: PlaceOrderService and PostgresOrderRepo both depend on OrderRepository interface"
-  >
-    {/* Boundary */}
-    <line x1="280" y1="16" x2="280" y2="155" stroke="var(--border)" strokeWidth="1.5" strokeDasharray="5 4" />
-    <text x="140" y="24" textAnchor="middle" fill="var(--primary)" fontSize="11" fontWeight="600">Domain / Business Module</text>
-    <text x="420" y="24" textAnchor="middle" fill="var(--muted-foreground)" fontSize="11" fontWeight="600">Infrastructure Module</text>
-
-    {/* Service */}
-    <rect x="24" y="54" width="130" height="52" rx="12" fill="var(--card)" stroke="var(--primary)" strokeWidth="1.5" />
-    <text x="89" y="77" textAnchor="middle" fill="var(--foreground)" fontSize="12" fontWeight="600">PlaceOrderService</text>
-    <text x="89" y="94" textAnchor="middle" fill="var(--muted-foreground)" fontSize="10">High-level policy</text>
-
-    {/* Interface owned by domain */}
-    <rect x="180" y="54" width="150" height="52" rx="12" fill="var(--card)" stroke="var(--primary)" strokeWidth="1.5" />
-    <text x="255" y="77" textAnchor="middle" fill="var(--foreground)" fontSize="12" fontWeight="600">«interface»</text>
-    <text x="255" y="94" textAnchor="middle" fill="var(--primary)" fontSize="11" fontWeight="600">OrderRepository</text>
-
-    {/* Concrete Postgres */}
-    <rect x="380" y="54" width="156" height="52" rx="12" fill="var(--muted)" stroke="var(--border)" strokeWidth="1.5" />
-    <text x="458" y="77" textAnchor="middle" fill="var(--foreground)" fontSize="12" fontWeight="600">PostgresOrderRepo</text>
-    <text x="458" y="94" textAnchor="middle" fill="var(--muted-foreground)" fontSize="10">Low-level detail</text>
-
-    {/* Arrows pointing to interface */}
-    <line x1="154" y1="80" x2="176" y2="80" stroke="var(--primary)" strokeWidth="2" />
-    <polygon points="172,76 172,84 180,80" fill="var(--primary)" />
-
-    <line x1="380" y1="80" x2="334" y2="80" stroke="var(--primary)" strokeWidth="2" strokeDasharray="4 3" />
-    <polygon points="338,76 338,84 330,80" fill="var(--primary)" />
-
-    <text x="280" y="176" textAnchor="middle" fill="var(--muted-foreground)" fontSize="11">
-      Dependency Rule: PostgresOrderRepo imports OrderRepository across the boundary, not vice versa.
-    </text>
-  </svg>
-  <figcaption className="mt-2 text-center text-caption-1 text-muted-foreground">
-    Compile-time dependency is inverted: Infrastructure depends on the Domain interface.
-  </figcaption>
-</figure>
+<Diagram
+  id="dip-dependency"
+  ariaLabel="Dependency Inversion: PlaceOrderService and PostgresOrderRepo both depend on OrderRepository interface"
+  caption="Compile-time dependency is inverted: Infrastructure depends on the Domain interface."
+  groups={[
+    { id: 'domain-mod', label: 'Domain Module', nodeIds: ['svc', 'iface'] },
+    { id: 'infra-mod', label: 'Infra Module', nodeIds: ['pg'] },
+  ]}
+  nodes={[
+    { id: 'svc', label: 'PlaceOrderService', subtitle: 'High-level policy', icon: 'service', category: 'service', rank: 0, order: 0 },
+    { id: 'iface', label: 'OrderRepository', subtitle: '«interface»', icon: 'interface', category: 'edge', rank: 1, order: 0 },
+    { id: 'pg', label: 'PostgresOrderRepo', subtitle: 'Low-level detail', icon: 'db', category: 'data', rank: 2, order: 0 },
+  ]}
+  edges={[
+    { from: 'svc', to: 'iface', kind: 'request' },
+    { from: 'pg', to: 'iface', kind: 'request', dashed: true },
+  ]}
+/>
 
 ## Code: Before vs After DIP
 

@@ -18,6 +18,7 @@ import {
 } from '@/components/mdx/concept';
 
 import { FlowServer as Flow } from '@/components/flow/FlowServer';
+import { Diagram } from '@/components/diagram/Diagram';
 import { Quiz } from '@/components/learn/Quiz';
 import { Illustration, SectionIcon } from '@/components/illustrations';
 import type { MDXComponents } from 'mdx/types';
@@ -45,6 +46,7 @@ export function getMDXComponents(components?: MDXComponents) {
     LabLink,
     MyTake,
     Flow,
+    Diagram,
     Quiz,
     SectionIcon,
     Illustration,

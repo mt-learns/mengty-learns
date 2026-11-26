@@ -1,4 +1,4 @@
-/* global fetch, setTimeout, document, getComputedStyle */
+/* global fetch, setTimeout, document, window, getComputedStyle */
 // Screenshots of the static export in light and dark at several widths, plus an
 // edge-alignment report for the shared container.
 //   pnpm build && node scripts/qa-shots.mjs [--out dir] [--routes /,/docs/] [--widths 360,1280]
@@ -64,7 +64,16 @@ try {
       const page = await context.newPage();
       for (const route of routes) {
         await page.goto(base + route, { waitUntil: 'networkidle' });
-        await page.waitForTimeout(300);
+        // Scroll every <Flow> region into view so IntersectionObserver mounts React Flow
+        const flowRegions = page.locator('section[id^="flow-"]');
+        const flowCount = await flowRegions.count();
+        for (let i = 0; i < flowCount; i++) {
+          const region = flowRegions.nth(i);
+          await region.scrollIntoViewIfNeeded();
+          await region.locator('.react-flow__node').first().waitFor({ timeout: 5000 }).catch(() => {});
+        }
+        await page.evaluate(() => window.scrollTo(0, 0));
+        await page.waitForTimeout(350);
         const file = path.join(outDir, `${slug(route)}-${width}-${theme}.png`);
         await page.screenshot({ path: file, fullPage });
         const edges = await page.evaluate((selectors) => {

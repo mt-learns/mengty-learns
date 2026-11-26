@@ -8,6 +8,7 @@ out/
 next-env.d.ts
 tsconfig.tsbuildinfo
 public/cards.json
+qa/
 .lighthouseci/
 
 # Impeccable design skill: per-developer consent + generated copy of DESIGN.md
