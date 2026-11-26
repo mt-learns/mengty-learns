@@ -17,3 +17,9 @@ qa/
 
 # QA screenshots (scripts/qa-shots.mjs)
 .shots/
+
+# Cloudflare Workers (OpenNext build output, wrangler state, local secrets)
+.open-next/
+.wrangler/
+.dev.vars*
+!.dev.vars.example

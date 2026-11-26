@@ -114,6 +114,8 @@ Cloudflare Pages, from `out/`: build command `pnpm build`, output directory `out
 | React | 19.3.x |
 | TypeScript | 7.0.x |
 | Node / pnpm | 22 / 11.6.0 |
+| @opennextjs/cloudflare | 1.20.18 |
+| Wrangler | 4.168.0 |
 
 ## License
 
