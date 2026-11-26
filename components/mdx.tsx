@@ -15,6 +15,8 @@ import {
   Step,
   Steps,
 } from '@/components/mdx/concept';
+
+import { FlowServer as Flow } from '@/components/flow/FlowServer';
 import type { MDXComponents } from 'mdx/types';
 
 export function getMDXComponents(components?: MDXComponents) {
@@ -39,6 +41,7 @@ export function getMDXComponents(components?: MDXComponents) {
     Relations,
     LabLink,
     MyTake,
+    Flow,
     ...components,
   } satisfies MDXComponents;
 }
