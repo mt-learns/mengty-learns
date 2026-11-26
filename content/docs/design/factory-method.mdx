@@ -1,0 +1,318 @@
+---
+title: Factory Method Pattern
+description: Delegate object instantiation to a factory method so callers work with an interface rather than concrete classes.
+kind: concept
+type: explanation
+level: intermediate
+tags: [design-patterns, oop, typescript, creational]
+tested_with:
+  typescript: "7.0.2"
+status: stable
+updated: "2026-11-26"
+verified: "2026-11-26"
+cards:
+  - q: "What problem does the Factory Method pattern solve?"
+    a: "It decouples code that uses a product from the concrete class that creates it, so new product types can be added without modifying caller logic."
+  - q: "How does Factory Method differ from Abstract Factory?"
+    a: "Factory Method uses a single method (often overridden by subclasses) to create one product; Abstract Factory uses an object interface with multiple methods to create families of related products."
+  - q: "What is the Creator's primary role in Factory Method?"
+    a: "The Creator contains core workflow logic that calls its abstract createProduct() method and operates on the returned Product interface."
+  - q: "When is a simple factory function in TypeScript better than a Factory Method class hierarchy?"
+    a: "When you only need to pick an implementation based on config or environment without inheriting shared Creator workflow logic."
+related:
+  - design/bridge
+  - design/strategy
+  - design/solid
+sources:
+  - title: "TypeScript Handbook: Classes"
+    url: https://www.typescriptlang.org/docs/handbook/2/classes.html
+  - title: "Refactoring.Guru: Factory Method Pattern"
+    url: https://refactoring.guru/design-patterns/factory-method
+  - title: "Dive Into Design Patterns — Creational Design Patterns: Factory Method (Alexander Shvets)"
+    url: https://refactoring.guru/design-patterns/book
+---
+
+## 1. Intent
+
+<Intent>
+Define an interface for creating an object in a base **Creator**, but let subclasses or concrete factories decide which **Product** class to instantiate, keeping callers coupled only to the product interface.
+</Intent>
+
+## 2. Problem
+
+Suppose your service emits structured logs. In local development it writes pretty-printed lines to `StdoutExporter`. In production it ships JSON batches over gRPC to an OpenTelemetry collector (`OtlpExporter`), and in CI it writes to a local NDJSON file.
+
+If your telemetry service calls `new StdoutExporter()` directly—or scatters `if (env === 'prod') new OtlpExporter()` across five modules—adding a new sink (like Datadog) forces edits everywhere an exporter is constructed.
+
+<Diagram
+  id="factory-problem"
+  layout="tree"
+  ariaLabel="TelemetryApp directly instantiating StdoutExporter and OtlpExporter with conditionals"
+  caption="Direct `new` calls scatter environment branching across the codebase."
+  nodes={[
+    { id: 'app', label: 'TelemetryApp', subtitle: 'if (env === prod)', icon: 'service', category: 'service', rank: 0, order: 0, variant: 'problem' },
+    { id: 'out', label: 'StdoutExporter', icon: 'service', category: 'external', rank: 1, order: 0, variant: 'problem' },
+    { id: 'otlp', label: 'OtlpExporter', icon: 'gateway', category: 'external', rank: 1, order: 1, variant: 'problem' },
+  ]}
+  edges={[
+    { from: 'app', to: 'out' },
+    { from: 'app', to: 'otlp' },
+  ]}
+/>
+
+## 3. Solution
+
+Extract a `LogExporter` interface (`write(entry)`, `flush()`) and move construction into a `createExporter()` factory method on an abstract `ExporterCreator` class.
+
+`ExporterCreator` implements the shared emission workflow (`emit(entry)`), calling `this.createExporter()` without knowing which concrete class it gets. Concrete creators (`DevExporterCreator`, `ProdExporterCreator`) override `createExporter()` to return `StdoutExporter` or `OtlpExporter`.
+
+### Factory Method vs Abstract Factory
+
+| Aspect | Factory Method | Abstract Factory |
+|---|---|---|
+| **Scope** | Creates **one** product per factory method | Creates a **family** of related products |
+| **Mechanism** | Typically a method overridden in subclasses | An interface with multiple creation methods |
+| **Example** | `createExporter() -> LogExporter` | `CloudFactory.createBlobStore()` + `createQueue()` |
+
+## 4. Real-world analogy
+
+<Analogy>
+Think of a container runtime entrypoint script. The base pipeline always runs the same steps (`build`, `test`, `publish`), but each environment profile overrides *which* artifact registry client is created—a local Docker daemon in dev, or an authenticated cloud registry in prod.
+</Analogy>
+
+## 5. Flow: watch it work
+
+<Flow
+  id="factory-method"
+  title="Factory Method: Creator → Product Interface → Concrete"
+  nodes={[
+    { id: 'app', label: 'TelemetryApp', subtitle: 'Client', icon: 'service', category: 'client', rank: 0, order: 0 },
+    { id: 'creator', label: 'ExporterCreator', subtitle: 'Factory Method', icon: 'class', category: 'abstraction', rank: 1, order: 0 },
+    { id: 'iface', label: 'LogExporter', subtitle: '«interface»', icon: 'interface', category: 'edge', rank: 2, order: 0 },
+    { id: 'stdout', label: 'StdoutExporter', subtitle: 'Dev product', icon: 'service', category: 'concrete', rank: 3, order: 0 },
+    { id: 'otlp', label: 'OtlpExporter', subtitle: 'Prod product', icon: 'gateway', category: 'external', rank: 3, order: 1 },
+  ]}
+  steps={[
+    { edge: 'app->creator', title: 'Call emit(entry)', text: 'TelemetryApp calls emit() on the configured ExporterCreator' },
+    { edge: 'creator->iface', title: 'Call createExporter()', text: 'ProdCreator overrides createExporter() and returns a LogExporter' },
+    { edge: 'iface->otlp', title: 'Write to OtlpExporter', text: 'OtlpExporter batches and sends the log record to the collector' },
+    { edge: 'otlp->iface', title: 'Confirm batch sent', text: 'OtlpExporter returns delivery confirmation to LogExporter', kind: 'response' },
+    { edge: 'iface->creator', title: 'Return to creator', text: 'ExporterCreator flushes and completes emit() lifecycle', kind: 'response' },
+    { edge: 'creator->app', title: 'Emit complete', text: 'TelemetryApp finishes without importing OtlpExporter', kind: 'response' },
+  ]}
+/>
+
+## 6. Structure
+
+<Diagram
+  id="factory-structure"
+  ariaLabel="Factory Method structure: ExporterCreator defines createExporter() returning LogExporter; subclasses return StdoutExporter or OtlpExporter"
+  caption="Creator subclasses decide which Concrete Product to instantiate."
+  nodes={[
+    { id: 'base', label: 'ExporterCreator', subtitle: '+ createExporter()', icon: 'class', category: 'abstraction', rank: 0, order: 0 },
+    { id: 'dev', label: 'DevCreator', subtitle: 'ConcreteCreator', icon: 'class', category: 'service', rank: 1, order: 0 },
+    { id: 'prod', label: 'ProdCreator', subtitle: 'ConcreteCreator', icon: 'class', category: 'service', rank: 1, order: 1 },
+    { id: 'iface', label: 'LogExporter', subtitle: '«interface»', icon: 'interface', category: 'edge', rank: 1, order: 2 },
+    { id: 'out', label: 'StdoutExporter', icon: 'service', category: 'concrete', rank: 2, order: 0 },
+    { id: 'otlp', label: 'OtlpExporter', icon: 'gateway', category: 'external', rank: 2, order: 1 },
+  ]}
+  edges={[
+    { from: 'base', to: 'iface', label: 'creates' },
+    { from: 'base', to: 'dev' },
+    { from: 'base', to: 'prod' },
+    { from: 'iface', to: 'out', kind: 'response', dashed: true },
+    { from: 'iface', to: 'otlp', kind: 'response', dashed: true },
+  ]}
+/>
+
+## 7. Code
+
+<Tabs items={['TypeScript (Creator Hierarchy)', 'TypeScript (Simple Factory)']}>
+  <Tab value="TypeScript (Creator Hierarchy)">
+```ts
+interface LogEntry {
+  level: 'info' | 'error';
+  message: string;
+}
+
+// Product interface
+interface LogExporter {
+  write(entry: LogEntry): Promise<void>;
+  flush(): Promise<void>;
+}
+
+// Concrete Products
+class StdoutExporter implements LogExporter {
+  async write(entry: LogEntry): Promise<void> {
+    console.log(`[dev:${entry.level}] ${entry.message}`);
+  }
+  async flush(): Promise<void> {}
+}
+
+class OtlpExporter implements LogExporter {
+  constructor(private readonly endpoint: string) {}
+  async write(entry: LogEntry): Promise<void> {
+    console.log(`[otlp -> ${this.endpoint}] ${JSON.stringify(entry)}`);
+  }
+  async flush(): Promise<void> { /* flush gRPC batch */ }
+}
+
+// Abstract Creator
+abstract class ExporterCreator {
+  // Factory Method
+  protected abstract createExporter(): LogExporter;
+
+  async emit(entry: LogEntry): Promise<void> {
+    const exporter = this.createExporter();
+    await exporter.write(entry);
+    await exporter.flush();
+  }
+}
+
+// Concrete Creators
+class DevExporterCreator extends ExporterCreator {
+  protected createExporter(): LogExporter {
+    return new StdoutExporter();
+  }
+}
+
+class ProdExporterCreator extends ExporterCreator {
+  constructor(private readonly collectorUrl: string) {
+    super();
+  }
+  protected createExporter(): LogExporter {
+    return new OtlpExporter(this.collectorUrl);
+  }
+}
+
+// Usage
+function selectCreator(env: 'dev' | 'prod'): ExporterCreator {
+  return env === 'prod'
+    ? new ProdExporterCreator('https://otel.internal:4317')
+    : new DevExporterCreator();
+}
+
+const telemetry = selectCreator('prod');
+await telemetry.emit({ level: 'info', message: 'Service started' });
+```
+  </Tab>
+  <Tab value="TypeScript (Simple Factory)">
+```ts
+// Often enough in TypeScript when there is no shared Creator workflow:
+type Env = 'dev' | 'prod';
+
+function createExporter(env: Env): LogExporter {
+  if (env === 'prod') return new OtlpExporter('https://otel.internal:4317');
+  return new StdoutExporter();
+}
+```
+  </Tab>
+</Tabs>
+
+## 8. When to use / when to avoid
+
+<Checklist
+  use={[
+    'You do not know beforehand the exact concrete types your code will need to instantiate.',
+    'You want library or framework users to extend internal components by subclassing a Creator.',
+    'You have shared Creator lifecycle logic (`emit` -> `write` -> `flush`) around an interchangeable product.',
+  ]}
+  avoid={[
+    'A single plain function `createExporter(env)` solves the branching cleanly with no Creator class hierarchy.',
+    'There is only one concrete product and no second environment or driver in sight.',
+    'You need to create whole families of matching objects together—use Abstract Factory instead.',
+  ]}
+/>
+
+### When NOT to use it
+
+Overengineering happens when you create an `AbstractCreator` and three `ConcreteCreator` subclasses just to wrap a single `switch (env)` that could have been a 5-line `createExporter(env)` function. Only reach for the full Creator hierarchy when the base Creator carries meaningful shared workflow logic or when external users subclass it.
+
+### Real-world example in this stack
+
+In `scripts/new.mjs`, the scaffolding CLI acts as a template factory: given a `kind` (`note` or `concept`), it selects the matching file in `content/_templates/` and stamps out a new MDX page with today's dates.
+
+## 9. How to implement
+
+<Steps>
+  <Step>
+    ### Extract a Product interface
+    Ensure all concrete products (`StdoutExporter`, `OtlpExporter`) implement a common `LogExporter` contract.
+  </Step>
+  <Step>
+    ### Add the factory method to the Creator
+    Declare `createExporter(): LogExporter` on the base Creator class.
+  </Step>
+  <Step>
+    ### Replace direct `new` calls in Creator logic
+    Have `emit()` call `this.createExporter()` instead of instantiating a concrete class.
+  </Step>
+  <Step>
+    ### Implement Concrete Creators per variant
+    Create `DevExporterCreator` and `ProdExporterCreator` (or use a simple factory function if there is no shared Creator behavior).
+  </Step>
+</Steps>
+
+## 10. Pros / Cons
+
+<ProsCons
+  pros={[
+    'Avoids tight coupling between Creator logic and concrete Product classes.',
+    'Single Responsibility Principle: centralizes product creation in one place.',
+    'Open/Closed Principle: introduce new log exporters without editing existing workflow code.',
+  ]}
+  cons={[
+    'Requires creating parallel Creator subclasses if you only wanted to swap one dependency.',
+    'A simple factory function or constructor injection is often cleaner in TypeScript.',
+  ]}
+/>
+
+## 11. Relations
+
+<Relations
+  items={[
+    {
+      name: 'Factory Method vs Abstract Factory',
+      summary: 'Factory Method creates a single product via an overridden method; Abstract Factory creates families of related products via an object interface.',
+    },
+    {
+      name: 'Factory Method vs Template Method',
+      summary: 'Factory Method is often a specialization of Template Method—a step inside a larger base-class algorithm.',
+    },
+    {
+      name: 'Factory Method + Bridge',
+      summary: 'A Factory Method (or Abstract Factory) can instantiate and pair the right Abstraction and Implementation at startup.',
+    },
+  ]}
+/>
+
+## 12. Check yourself
+
+<MyTake>
+In TypeScript, I almost always start with a plain `createExporter(config)` function. I only promote it to a class-based Factory Method when a base class has real orchestration logic (like connection pooling or lifecycle hooks) that subclasses should inherit.
+</MyTake>
+
+<Quiz questions={[
+  {
+    question: "How does Factory Method differ from Abstract Factory?",
+    options: [
+      { label: "Factory Method creates one product via an overridable method, whereas Abstract Factory creates families of related products", description: "Abstract Factory groups multiple factory methods into one interface so related products match.", correct: true },
+      { label: "Factory Method only works with static methods", description: "Factory Method is typically an instance method overridden by subclasses." },
+      { label: "Abstract Factory cannot use interfaces", description: "Abstract Factory is built around a factory interface and product interfaces." }
+    ]
+  },
+  {
+    question: "When is a Factory Method class hierarchy overkill in TypeScript?",
+    options: [
+      { label: "When there is no shared Creator workflow and a plain factory function returning the interface is enough", description: "A simple function avoids parallel Creator subclasses when you only need to instantiate a product.", correct: true },
+      { label: "When you have two different environments like dev and prod", description: "Supporting multiple environments is a valid reason for a factory—just choose between a simple function and a Creator hierarchy." },
+      { label: "When products implement a shared interface", description: "A shared Product interface is required for Factory Method." }
+    ]
+  }
+]} />
+
+### Sources
+
+- [TypeScript Handbook: Classes](https://www.typescriptlang.org/docs/handbook/2/classes.html)
+- [Refactoring.Guru: Factory Method Pattern](https://refactoring.guru/design-patterns/factory-method)
+- *Dive Into Design Patterns* (Alexander Shvets), chapter "Creational Design Patterns: Factory Method"

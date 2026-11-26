@@ -8,7 +8,8 @@
     "bridge",
     "decorator",
     "observer",
-    "strategy"
+    "strategy",
+    "pattern-relations"
   ],
   "icon": "design"
 }
