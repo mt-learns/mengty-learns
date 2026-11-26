@@ -1,0 +1,63 @@
+import fs from 'node:fs';
+import path from 'node:path';
+import { describe, expect, it } from 'vitest';
+import { contentSecurityPolicy, immutableCache, securityHeaders } from './security-headers.mjs';
+
+/** Parse a Cloudflare _headers file into { pattern: { name: value } }. */
+function parseHeadersFile(text: string) {
+  const rules: Record<string, Record<string, string>> = {};
+  let current: Record<string, string> | null = null;
+  for (const line of text.split(/\r?\n/)) {
+    if (!line.trim() || line.trimStart().startsWith('#')) continue;
+    if (!/^\s/.test(line)) {
+      current = rules[line.trim()] = {};
+    } else if (current) {
+      const i = line.indexOf(':');
+      current[line.slice(0, i).trim()] = line.slice(i + 1).trim();
+    }
+  }
+  return rules;
+}
+
+const rules = parseHeadersFile(fs.readFileSync(path.join(process.cwd(), 'public/_headers'), 'utf8'));
+
+describe('public/_headers', () => {
+  it('caches hashed build assets for a year, immutable', () => {
+    expect(rules['/_next/static/*']).toEqual({ 'Cache-Control': immutableCache });
+  });
+
+  it('sends exactly the security headers from lib/security-headers.mjs on every asset', () => {
+    expect(rules['/*']).toEqual(Object.fromEntries(securityHeaders.map((h) => [h.key, h.value])));
+  });
+
+  it('stays within the Cloudflare limits (100 rules, 2000 chars per line)', () => {
+    expect(Object.keys(rules).length).toBeLessThanOrEqual(100);
+    for (const h of securityHeaders) expect(`  ${h.key}: ${h.value}`.length).toBeLessThan(2000);
+  });
+});
+
+describe('content security policy', () => {
+  const directives = Object.fromEntries(
+    contentSecurityPolicy.split(';').map((d) => {
+      const [name, ...values] = d.trim().split(/\s+/);
+      return [name, values];
+    })
+  );
+
+  it('blocks framing, plugins and base/form hijacking', () => {
+    expect(directives['frame-ancestors']).toEqual(["'none'"]);
+    expect(directives['object-src']).toEqual(["'none'"]);
+    expect(directives['base-uri']).toEqual(["'self'"]);
+    expect(directives['form-action']).toEqual(["'self'"]);
+  });
+
+  it('allows no eval and no third-party script origins', () => {
+    expect(directives['script-src']).not.toContain("'unsafe-eval'");
+    expect(directives['script-src'].every((v: string) => v.startsWith("'"))).toBe(true);
+  });
+
+  it('sets HSTS for a year without preload', () => {
+    const hsts = securityHeaders.find((h) => h.key === 'Strict-Transport-Security')!.value;
+    expect(hsts).toBe('max-age=31536000; includeSubDomains');
+  });
+});
