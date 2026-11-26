@@ -6,6 +6,7 @@
     "multi-stage-nextjs",
     "dockerfile-best-practices",
     "compose",
+    "volumes-vs-bind-mounts",
     "non-root-and-scanning",
     "docker-cheatsheet"
   ],

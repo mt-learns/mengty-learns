@@ -1,0 +1,121 @@
+---
+title: Volumes vs Bind Mounts vs tmpfs
+description: Choose the right Docker storage mount—named volumes, bind mounts, or tmpfs—avoid UID permission mismatches, and back up persistent volumes safely.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: note
+type: explanation
+level: beginner
+tags: [docker, storage, volumes, bind-mounts, backups]
+tested_with:
+  docker: "29.4.3"
+cards:
+  - q: "Who manages the host directory for a Docker named volume?"
+    a: "Docker manages it under /var/lib/docker/volumes/ (on Linux), decoupling the container from host directory layouts."
+  - q: "When should you use a bind mount instead of a named volume?"
+    a: "When you want to share a specific host file or directory (such as local source code for hot reload or a host config file) directly into the container."
+  - q: "Where does a tmpfs mount store its data?"
+    a: "In host memory (RAM) only; it is never written to the container writable layer or disk and vanishes when the container stops."
+  - q: "How do you safely back up a Docker named volume used by a database?"
+    a: "Stop writes (or run a logical dump like pg_dump), then archive the volume using a temporary container mounting the volume and a host backup directory."
+related:
+  - containers/docker-basics
+  - containers/compose
+  - containers/dockerfile-best-practices
+sources:
+  - title: "Docker Docs: Storage overview"
+    url: https://docs.docker.com/engine/storage/
+  - title: "Docker Docs: Volumes"
+    url: https://docs.docker.com/engine/storage/volumes/
+  - title: "Docker Docs: Bind mounts"
+    url: https://docs.docker.com/engine/storage/bind-mounts/
+  - title: "Docker Docs: tmpfs mounts"
+    url: https://docs.docker.com/engine/storage/tmpfs/
+---
+
+## TL;DR
+Container filesystems are ephemeral. Use **named volumes** for persistent app/database state managed by Docker, **bind mounts** for sharing host source code or config files in development, and **tmpfs** for fast, non-persistent secrets or `/tmp` scratch space.
+
+## Why it exists
+Writing inside a container's default writable layer ties data to that container's lifecycle (`docker rm` destroys it) and goes through the union filesystem (Copy-on-Write), which is slower for heavy database I/O. Mounts bypass the writable layer and map a path inside the container to storage outside it.
+
+## Mental model
+| Mount type | Where data lives | Managed by | Best for |
+|---|---|---|---|
+| **Named volume** (`-v pgdata:/var/lib/postgresql/data`) | Docker storage area (`/var/lib/docker/volumes/...`) | Docker Engine | Databases, uploads, stateful services |
+| **Bind mount** (`-v ./src:/app/src`) | Exact host path you specify | Host OS / user | Local dev hot-reload, single config files |
+| **tmpfs** (`--tmpfs /tmp:rw,noexec,nosuid`) | Host RAM (never persisted to disk) | Linux kernel | `/tmp` with `--read-only`, ephemeral secrets |
+
+### The UID / permissions pitfall
+- **Named volumes:** When you mount an *empty* named volume over a container directory that already has files (for example `/app/data` owned by UID `1001`), Docker copies the directory's contents and ownership into the volume on first start.
+- **Bind mounts:** Docker mounts the host directory *as-is* with the host's UID/GID. If your container runs as `USER 1001:1001` (`nextjs`) but your host folder is owned by UID `1000` (or `root`), the container gets `EACCES: permission denied`. On Linux, match the UID or use `chmod`/ACLs; on Docker Desktop (macOS/Windows), the VM file-sharing layer translates ownership differently, masking bugs that appear later on Linux CI/prod.
+
+## Do it
+
+### 1. Use `--mount` syntax for clarity
+Prefer the explicit `--mount` flag over `-v` because it fails loudly if a bind-mount source path does not exist (whereas `-v` silently creates an empty root-owned directory):
+
+```bash
+# Named volume for persistent Postgres data (not run)
+docker run -d --name db \
+  --mount type=volume,source=pgdata,target=/var/lib/postgresql/data \
+  postgres:17-alpine
+
+# Read-only bind mount for a host config file (not run)
+docker run -d --name proxy \
+  --mount type=bind,source="$(pwd)/nginx.conf",target=/etc/nginx/conf.d/default.conf,readonly \
+  nginx:1.30-alpine
+```
+
+### 2. Back up and restore a named volume
+Never copy raw database files while Postgres is actively writing—either stop the database container first (or use `pg_dump` for live logical backups). To archive a volume's raw files safely:
+
+```bash
+# Back up volume "pgdata" into ./backups/pgdata.tar.gz (not run)
+docker run --rm \
+  --mount type=volume,source=pgdata,target=/data,readonly \
+  --mount type=bind,source="$(pwd)/backups",target=/backup \
+  alpine:3.21 tar -czf /backup/pgdata.tar.gz -C /data .
+```
+
+## When you DON'T need this
+- **Stateless apps and static sites:** A Next.js static export or stateless API holding state in a managed database needs **zero** local Docker volumes. Keeping containers stateless makes scaling and replacement trivial.
+- **Multi-node clusters:** Local Docker volumes live on one host's disk. In Kubernetes or multi-host deployments, use managed cloud databases or CSI PersistentVolumes instead of host-local volumes.
+- **Cost / complexity trade-off:** Named volumes are free and simple on one server, but you own backups, disk space monitoring, and host migration. Managed object storage (S3/R2) or managed Postgres costs money per GB/hour in exchange for automated replication and snapshots.
+
+## Gotchas
+- **`-v /host/path:/container/path` silently creates a root-owned directory:** If `/host/path` has a typo, Docker creates an empty directory owned by `root:root`. Use `--mount type=bind,...`, which errors immediately if the source is missing.
+- **`docker compose down -v` deletes named volumes:** Adding `-v` wipes all project volumes—never run it against a stateful environment unless you intend to destroy the database.
+- **Hiding `node_modules` with a bind mount:** Mounting `.:/app` overwrites the container's `/app/node_modules` with the host's (often empty or wrong-OS) `node_modules`. Add an anonymous volume `/app/node_modules` only in dev Compose files, or build clean images without bind mounts.
+
+## Production checklist
+- [ ] Stateless containers have no persistent volumes; state lives in a managed DB, object store, or explicit named volume.
+- [ ] Bind mounts for config files use `readonly` (`ro`).
+- [ ] Container `USER` UID matches volume ownership on Linux hosts.
+- [ ] Backups of stateful volumes are automated and periodically restored into a test container.
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "Why is --mount type=bind,... generally safer than -v /path:/target for host files?",
+    options: [
+      { label: "--mount fails immediately if the host source path does not exist, whereas -v silently creates an empty root-owned directory", description: "This catches path typos before the container starts with an empty directory.", correct: true },
+      { label: "--mount automatically encrypts the bind mount on disk", description: "Neither -v nor --mount encrypts data on disk." },
+      { label: "-v only works for tmpfs mounts", description: "-v supports volumes and bind mounts, just with terser syntax." }
+    ]
+  },
+  {
+    question: "What happens if you run docker compose down -v on a stack with a named Postgres volume?",
+    options: [
+      { label: "Compose stops the containers and deletes the named volumes declared in the Compose file", description: "The -v flag removes named volumes; omit -v to preserve database data across restarts.", correct: true },
+      { label: "Compose backs up the volume to /var/backups before stopping", description: "Docker Compose never creates automatic backups." },
+      { label: "Only tmpfs mounts are removed", description: "tmpfs mounts already vanish when a container stops; -v deletes named volumes." }
+    ]
+  }
+]} />
+
+## Sources
+- [Docker Docs: Storage overview](https://docs.docker.com/engine/storage/)
+- [Docker Docs: Volumes](https://docs.docker.com/engine/storage/volumes/)
+- [Docker Docs: Bind mounts](https://docs.docker.com/engine/storage/bind-mounts/)
+- [Docker Docs: tmpfs mounts](https://docs.docker.com/engine/storage/tmpfs/)
