@@ -3,7 +3,9 @@
   "pages": [
     "oop-pillars",
     "solid",
+    "adapter",
     "bridge",
+    "decorator",
     "observer",
     "strategy"
   ],

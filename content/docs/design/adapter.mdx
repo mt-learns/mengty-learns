@@ -1,0 +1,329 @@
+---
+title: Adapter Pattern
+description: Wrap incompatible third-party or legacy interfaces behind a single contract your application already expects.
+kind: concept
+type: explanation
+level: intermediate
+tags: [design-patterns, oop, typescript, structural]
+tested_with:
+  typescript: "7.0.2"
+status: stable
+updated: "2026-11-26"
+verified: "2026-11-26"
+cards:
+  - q: "What problem does the Adapter pattern solve?"
+    a: "It translates an incompatible existing or third-party interface into the Target interface that client code expects, without modifying either side."
+  - q: "How does Adapter differ from Bridge?"
+    a: "Adapter is applied retroactively to make incompatible interfaces work together; Bridge is designed up front so abstractions and implementations evolve independently."
+  - q: "What are the two responsibilities of an Object Adapter?"
+    a: "It implements the client's Target interface while holding a reference to the wrapped Adaptee and translating calls and return types."
+  - q: "When should you NOT write an Adapter?"
+    a: "When you own the incompatible class yourself and can simply update its interface directly with less code."
+related:
+  - design/bridge
+  - design/strategy
+  - architecture/hexagonal
+sources:
+  - title: "TypeScript Handbook: Object Types"
+    url: https://www.typescriptlang.org/docs/handbook/2/objects.html
+  - title: "Refactoring.Guru: Adapter Pattern"
+    url: https://refactoring.guru/design-patterns/adapter
+  - title: "Dive Into Design Patterns — Structural Design Patterns: Adapter (Alexander Shvets)"
+    url: https://refactoring.guru/design-patterns/book
+---
+
+## 1. Intent
+
+<Intent>
+Convert the interface of an existing or third-party class into another interface that your application code expects, letting incompatible components collaborate without rewriting either one.
+</Intent>
+
+## 2. Problem
+
+Suppose your backup service stores database snapshots in AWS S3. Later, your team adds multi-cloud support for Google Cloud Storage (GCS) or a local MinIO-compatible mock.
+
+The AWS SDK expects `s3.send(new PutObjectCommand({ Bucket, Key, Body }))` and returns `{ ETag }`, while the GCS SDK expects `bucket.file(key).save(buffer)` and returns `void`. If your backup service branches on provider types everywhere, cloud SDK details leak straight into your domain logic.
+
+<Diagram
+  id="adapter-problem"
+  layout="tree"
+  ariaLabel="BackupService directly coupled to incompatible AwsS3Sdk and GcsSdk method signatures"
+  caption="Without an Adapter, BackupService must know each cloud SDK's incompatible API."
+  nodes={[
+    { id: 'svc', label: 'BackupService', subtitle: 'if (aws) ... else ...', icon: 'service', category: 'service', rank: 0, order: 0, variant: 'problem' },
+    { id: 's3', label: 'AwsS3Sdk', subtitle: 'send(Command)', icon: 'db', category: 'external', rank: 1, order: 0, variant: 'problem' },
+    { id: 'gcs', label: 'GcsSdk', subtitle: 'file().save()', icon: 'db', category: 'external', rank: 1, order: 1, variant: 'problem' },
+  ]}
+  edges={[
+    { from: 'svc', to: 's3' },
+    { from: 'svc', to: 'gcs' },
+  ]}
+/>
+
+## 3. Solution
+
+Define a single **Target** interface (`BlobStore`) owned by your application with clean methods like `putObject(key, data)` and `getObject(key)`.
+
+Then write one **Adapter** class per third-party SDK (`S3BlobAdapter`, `GcsBlobAdapter`). Each adapter implements `BlobStore`, holds a reference to its vendor SDK client, translates incoming arguments into the SDK's expected format, and normalizes the SDK's return value back into your domain type.
+
+## 4. Real-world analogy
+
+<Analogy>
+Think of a travel power plug adapter. Your laptop charger expects a flat two-prong outlet, while the hotel wall has round European sockets. The adapter does not change the voltage or rewrite your charger—it simply translates the physical shape so both sides connect safely.
+</Analogy>
+
+## 5. Flow: watch it work
+
+<Flow
+  id="adapter"
+  title="Adapter Pattern: Client → Adapter → SDK"
+  nodes={[
+    { id: 'client', label: 'BackupService', subtitle: 'Client', icon: 'service', category: 'client', rank: 0, order: 0 },
+    { id: 'iface', label: 'BlobStore', subtitle: 'Target interface', icon: 'interface', category: 'abstraction', rank: 1, order: 0 },
+    { id: 'adapter', label: 'S3Adapter', subtitle: 'Adapter', icon: 'class', category: 'service', rank: 2, order: 0 },
+    { id: 'sdk', label: 'AwsS3Sdk', subtitle: 'Third-party SDK', icon: 'db', category: 'external', rank: 3, order: 0 },
+  ]}
+  steps={[
+    { edge: 'client->iface', title: 'Call putObject()', text: 'BackupService calls the unified BlobStore.putObject(key, data)' },
+    { edge: 'iface->adapter', title: 'Dispatch to adapter', text: 'S3Adapter implements BlobStore and receives the request' },
+    { edge: 'adapter->sdk', title: 'Translate & call SDK', text: 'S3Adapter builds a PutObjectCommand and calls AwsS3Sdk.send()' },
+    { edge: 'sdk->adapter', title: 'Return SDK response', text: 'AwsS3Sdk returns { ETag, VersionId } metadata', kind: 'response' },
+    { edge: 'adapter->iface', title: 'Normalize result', text: 'S3Adapter maps the SDK metadata into a BlobReceipt', kind: 'response' },
+    { edge: 'iface->client', title: 'Return BlobReceipt', text: 'BackupService receives a uniform receipt without knowing AWS details', kind: 'response' },
+  ]}
+/>
+
+## 6. Structure
+
+<Diagram
+  id="adapter-structure"
+  ariaLabel="Adapter structure: BackupService depends on BlobStore; S3Adapter and GcsAdapter implement BlobStore and wrap AwsS3Sdk and GcsSdk"
+  caption="Object Adapter uses composition: the adapter implements Target and wraps the Adaptee."
+  nodes={[
+    { id: 'client', label: 'BackupService', icon: 'service', category: 'client', rank: 0, order: 0 },
+    { id: 'iface', label: 'BlobStore', subtitle: '«interface»', icon: 'interface', category: 'abstraction', rank: 1, order: 0 },
+    { id: 's3a', label: 'S3Adapter', subtitle: 'Adapter', icon: 'class', category: 'service', rank: 2, order: 0 },
+    { id: 'gcsa', label: 'GcsAdapter', subtitle: 'Adapter', icon: 'class', category: 'service', rank: 2, order: 1 },
+    { id: 's3', label: 'AwsS3Sdk', subtitle: 'Adaptee', icon: 'db', category: 'external', rank: 3, order: 0 },
+    { id: 'gcs', label: 'GcsSdk', subtitle: 'Adaptee', icon: 'db', category: 'external', rank: 3, order: 1 },
+  ]}
+  edges={[
+    { from: 'client', to: 'iface', label: 'uses' },
+    { from: 'iface', to: 's3a', kind: 'response', dashed: true },
+    { from: 'iface', to: 'gcsa', kind: 'response', dashed: true },
+    { from: 's3a', to: 's3', label: 'wraps' },
+    { from: 'gcsa', to: 'gcs', label: 'wraps' },
+  ]}
+/>
+
+## 7. Code
+
+<Tabs items={['TypeScript']}>
+  <Tab value="TypeScript">
+```ts
+// Target interface owned by our application
+interface BlobReceipt {
+  key: string;
+  etag: string;
+}
+
+interface BlobStore {
+  putObject(key: string, data: Uint8Array): Promise<BlobReceipt>;
+  getObject(key: string): Promise<Uint8Array | null>;
+}
+
+// Incompatible third-party SDK #1 (AWS-style command pattern)
+class AwsS3Sdk {
+  private readonly objects = new Map<string, Uint8Array>();
+
+  async send(command: { type: 'put' | 'get'; Bucket: string; Key: string; Body?: Uint8Array }) {
+    const path = `${command.Bucket}/${command.Key}`;
+    if (command.type === 'put' && command.Body) {
+      this.objects.set(path, command.Body);
+      return { ETag: `"s3-${command.Body.byteLength}"` };
+    }
+    return { Body: this.objects.get(path) ?? null };
+  }
+}
+
+// Incompatible third-party SDK #2 (GCS-style fluent file handle)
+class GcsSdk {
+  private readonly files = new Map<string, Uint8Array>();
+
+  bucket(name: string) {
+    return {
+      file: (key: string) => ({
+        save: async (buf: Uint8Array) => {
+          this.files.set(`${name}/${key}`, buf);
+        },
+        download: async (): Promise<[Uint8Array] | null> => {
+          const data = this.files.get(`${name}/${key}`);
+          return data ? [data] : null;
+        },
+      }),
+    };
+  }
+}
+
+// Adapter 1: AWS S3 -> BlobStore
+class S3BlobAdapter implements BlobStore {
+  constructor(
+    private readonly sdk: AwsS3Sdk,
+    private readonly bucketName: string,
+  ) {}
+
+  async putObject(key: string, data: Uint8Array): Promise<BlobReceipt> {
+    const res = await this.sdk.send({
+      type: 'put',
+      Bucket: this.bucketName,
+      Key: key,
+      Body: data,
+    });
+    return { key, etag: res.ETag ?? 'unknown' };
+  }
+
+  async getObject(key: string): Promise<Uint8Array | null> {
+    const res = await this.sdk.send({ type: 'get', Bucket: this.bucketName, Key: key });
+    return res.Body ?? null;
+  }
+}
+
+// Adapter 2: GCS -> BlobStore
+class GcsBlobAdapter implements BlobStore {
+  constructor(
+    private readonly sdk: GcsSdk,
+    private readonly bucketName: string,
+  ) {}
+
+  async putObject(key: string, data: Uint8Array): Promise<BlobReceipt> {
+    await this.sdk.bucket(this.bucketName).file(key).save(data);
+    return { key, etag: `gcs-${data.byteLength}` };
+  }
+
+  async getObject(key: string): Promise<Uint8Array | null> {
+    const result = await this.sdk.bucket(this.bucketName).file(key).download();
+    return result ? result[0] : null;
+  }
+}
+
+// Client works identically with either cloud
+async function archiveSnapshot(store: BlobStore, key: string, payload: Uint8Array) {
+  return store.putObject(key, payload);
+}
+
+const s3Store = new S3BlobAdapter(new AwsS3Sdk(), 'prod-backups');
+const gcsStore = new GcsBlobAdapter(new GcsSdk(), 'dr-backups');
+
+await archiveSnapshot(s3Store, 'db-2026-11-26.bin', new Uint8Array([1, 2, 3]));
+await archiveSnapshot(gcsStore, 'db-2026-11-26.bin', new Uint8Array([1, 2, 3]));
+```
+  </Tab>
+</Tabs>
+
+## 8. When to use / when to avoid
+
+<Checklist
+  use={[
+    'You must integrate a third-party SDK, legacy module, or external API whose signature does not match your domain contract.',
+    'You want to support multiple vendors (S3, GCS, local disk) behind one stable application interface.',
+    'You want to isolate vendor-specific error shapes and DTOs so they do not leak across your codebase.',
+  ]}
+  avoid={[
+    'You own both the caller and the callee—simply refactor the callee method signature directly.',
+    'The adapter has to invent missing data or fake unsupported semantics that break the Target contract.',
+    'You are wrapping a tiny one-off utility function where a single helper function is clearer.',
+  ]}
+/>
+
+### When NOT to use it
+
+Overengineering happens when teams write `FooAdapter` wrappers around internal modules they control, just to follow a pattern. If you can edit the source class directly without breaking external consumers, changing its interface is cleaner than maintaining an extra translation layer.
+
+### Real-world example in this stack
+
+In `lib/source.ts`, this site adapts Fumadocs' `docs.toFumadocsSource()` output—filtering out `status: 'draft'` pages in production builds—into the `source` shape expected by Fumadocs `loader()`. Likewise, in [Hexagonal Architecture](/docs/architecture/hexagonal), every driven database or HTTP adapter translates between a domain port and an external driver.
+
+## 9. How to implement
+
+<Steps>
+  <Step>
+    ### Identify the Target interface and the Adaptee
+    Define the minimal interface your application wants to call (`BlobStore`), and inspect the incompatible external API (`AwsS3Sdk`).
+  </Step>
+  <Step>
+    ### Create the Adapter class
+    Have the adapter `implements BlobStore` and accept the Adaptee instance via its constructor.
+  </Step>
+  <Step>
+    ### Translate calls and normalize responses
+    Map parameters, convert exceptions or error codes into domain errors, and return the Target's data types.
+  </Step>
+  <Step>
+    ### Wire the Adapter at the composition root
+    Inject `S3BlobAdapter` or `GcsBlobAdapter` at startup so business logic only imports `BlobStore`.
+  </Step>
+</Steps>
+
+## 10. Pros / Cons
+
+<ProsCons
+  pros={[
+    'Single Responsibility Principle: keeps data translation out of business logic.',
+    'Open/Closed Principle: add new vendor adapters without editing client code.',
+    'Makes testing easy by swapping in an in-memory implementation of the Target interface.',
+  ]}
+  cons={[
+    'Adds extra classes and indirection when a direct refactor would have been simpler.',
+    'Leaky abstractions happen if two wrapped SDKs have fundamentally different semantics (e.g. eventual vs strong consistency).',
+  ]}
+/>
+
+## 11. Relations
+
+<Relations
+  items={[
+    {
+      name: 'Adapter vs Bridge',
+      summary: 'Adapter wraps incompatible existing interfaces after the fact; Bridge is designed up front to separate two independent hierarchies.',
+    },
+    {
+      name: 'Adapter vs Decorator',
+      summary: 'Adapter changes the interface of a wrapped object; Decorator keeps the exact same interface and adds behavior around it.',
+    },
+    {
+      name: 'Adapter vs Facade',
+      summary: 'Adapter wraps one incompatible object to match an expected interface; Facade creates a brand-new simplified interface over an entire subsystem.',
+    },
+  ]}
+/>
+
+## 12. Check yourself
+
+<MyTake>
+Never let a third-party cloud SDK's types (`PutObjectCommandOutput`, vendor-specific error classes) appear in your domain service signatures. Put them inside an Adapter at the boundary so swapping clouds or writing unit tests stays painless.
+</MyTake>
+
+<Quiz questions={[
+  {
+    question: "How does an Object Adapter connect the Client's Target interface to an incompatible third-party SDK?",
+    options: [
+      { label: "It implements the Target interface and holds a reference to the SDK via composition, translating calls and responses", description: "Composition lets the adapter work with any concrete SDK instance without multiple inheritance.", correct: true },
+      { label: "It forces the third-party SDK to extend the Client class", description: "You cannot modify third-party SDK source code to inherit from your classes." },
+      { label: "It exposes the SDK's raw types directly to the Client", description: "Exposing raw SDK types defeats the purpose of isolating the incompatible interface." }
+    ]
+  },
+  {
+    question: "When is writing an Adapter usually unnecessary?",
+    options: [
+      { label: "When you own both the caller and the callee and can refactor the callee's interface directly", description: "Adding an adapter between two internal classes you control creates needless indirection.", correct: true },
+      { label: "When you need to wrap two cloud storage SDKs with different method signatures", description: "Unifying incompatible external SDKs is a textbook use case for Adapter." },
+      { label: "When you want to keep vendor DTOs out of your domain layer", description: "Isolating vendor DTOs at the boundary is one of Adapter's main benefits." }
+    ]
+  }
+]} />
+
+### Sources
+
+- [TypeScript Handbook: Object Types](https://www.typescriptlang.org/docs/handbook/2/objects.html)
+- [Refactoring.Guru: Adapter Pattern](https://refactoring.guru/design-patterns/adapter)
+- *Dive Into Design Patterns* (Alexander Shvets), chapter "Structural Design Patterns: Adapter"
