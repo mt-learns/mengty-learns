@@ -1,0 +1,111 @@
+---
+title: Backups & Disaster Recovery
+description: Design reliable backups using RPO/RTO targets, the 3-2-1 rule, logical vs physical PostgreSQL backups, regular restore drills, and pragmatic DR tiers.
+updated: "2026-11-26"
+verified: "2026-11-26"
+kind: note
+type: explanation
+level: beginner
+tags: [backups, disaster-recovery, postgres, rpo, rto]
+tested_with:
+  postgresql: "19 (docs)"
+cards:
+  - q: "What is the difference between RPO and RTO?"
+    a: "RPO (Recovery Point Objective) is the maximum acceptable data loss measured in time; RTO (Recovery Time Objective) is the maximum acceptable downtime to restore service."
+  - q: "What does the 3-2-1 backup rule mean?"
+    a: "Keep at least 3 copies of your data, on 2 different storage media/systems, with at least 1 copy stored off-site (and ideally immutable/air-gapped against ransomware)."
+  - q: "When should you use pg_basebackup + WAL archiving instead of pg_dump?"
+    a: "When you have a large database or need Point-in-Time Recovery (PITR) to a specific second rather than a slow logical dump/restore."
+  - q: "Why is an untested backup considered equivalent to no backup?"
+    a: "Corrupt archives, missing encryption keys, or broken restore scripts only surface when you run a real restore drill into a clean environment."
+related:
+  - containers/volumes-vs-bind-mounts
+  - ci-cd/deploy-and-rollback
+sources:
+  - title: "PostgreSQL Docs: Backup and Restore"
+    url: https://www.postgresql.org/docs/current/backup.html
+  - title: "PostgreSQL Docs: pg_dump"
+    url: https://www.postgresql.org/docs/current/app-pgdump.html
+  - title: "PostgreSQL Docs: pg_basebackup"
+    url: https://www.postgresql.org/docs/current/app-pgbasebackup.html
+  - title: "Google SRE Book: Data Integrity — What You Read Is What You Wrote"
+    url: https://sre.google/sre-book/data-integrity/
+---
+
+## TL;DR
+Define **RPO** (how much data you can afford to lose) and **RTO** (how long you can stay down) before choosing backup tools. Follow the **3-2-1 rule**, pick **logical (`pg_dump`)** for small DBs or **physical (`pg_basebackup` + WAL)** for PITR, and schedule automated **restore drills**—an untested backup is a wish, not a plan.
+
+## Why it exists
+RAID mirrors, database replication, and `git push` protect against a single disk dying—not against an accidental `DROP TABLE`, a bad migration, or ransomware deleting your primary and replica together. Backups and Disaster Recovery (DR) exist to recover point-in-time state when replication faithfully copies your mistake.
+
+## Mental model
+
+### 1. RPO, RTO, and the 3-2-1 rule
+- **RPO (Recovery Point Objective):** Maximum data loss in time (e.g., `24h` with nightly snapshots, `< 1m` with continuous WAL archiving).
+- **RTO (Recovery Time Objective):** Maximum time from incident start until service is restored (e.g., `4h` for cold restore, `< 5m` for multi-region failover).
+- **3-2-1 rule:** **3** copies of data, on **2** separate systems/media, with **1** off-site (in a different cloud account/region with object-lock or immutable retention).
+
+### 2. Logical vs Physical backups (PostgreSQL)
+| Type | Tool | Pros | Cons |
+|---|---|---|---|
+| **Logical** | `pg_dump -Fc` / `pg_restore` | Portable across PG major versions; can restore one table | Slow on multi-hundred-GB DBs; no sub-snapshot PITR |
+| **Physical** | `pg_basebackup` + WAL archiving | Fast binary restore; **Point-in-Time Recovery (PITR)** to any second | Tied to same PG major version & architecture; restores whole cluster |
+
+### 3. DR tiers (match spend to risk)
+- **Backup & Restore (cheap, RTO hours):** Nightly snapshots + WAL in off-site object storage; spin up a fresh instance on failure.
+- **Pilot Light / Warm Standby (medium, RTO minutes):** Small replica running in a second region, scaled up on failover.
+- **Multi-Region Active-Active (expensive, RTO seconds):** Simultaneous writes across regions—rarely needed below huge scale.
+
+## Do it
+Run a compressed custom-format logical dump and verify restoring it into a temporary database:
+
+```bash
+# Create a compressed logical backup (not run)
+pg_dump --format=custom --file=app_$(date +%F).dump "$DATABASE_URL"
+
+# Restore drill into a scratch database (not run)
+createdb restore_drill
+pg_restore --dbname=restore_drill --no-owner app_2026-11-26.dump
+```
+
+## When you DON'T need this
+- **Git-backed static sites (like this one):** Every page, config, and script in Mengty Learns lives in Git (already replicated across developer laptops and GitHub). There is no production database to back up—rebuilding from `main` restores the entire site.
+- **Ephemeral caches (Redis pure cache):** If all cached data can be recomputed from Postgres, backing up Redis snapshots adds storage cost with little benefit.
+- **Cost / complexity trade-off:** Automated backups + off-site object storage are very cheap (pennies per GB/month). Paying for cross-region warm standbys or active-active clusters multiplies compute cost 2x+ and adds replication lag bugs—only pay for low RTO when downtime actually costs more than the standby infrastructure.
+
+## Gotchas
+- **Confusing replication with backup:** A read replica immediately applies `DROP TABLE` or `DELETE FROM users;`—it does not replace point-in-time backups.
+- **Storing backups in the same cloud account with the same admin key:** If an attacker compromises your primary account, they can delete your backups too. Use cross-account replication or WORM/Object Lock.
+- **Never testing `pg_restore`:** Silent cron failures, truncated dumps, or missing KMS permissions are only caught by running periodic restore drills.
+
+## Production checklist
+- [ ] Written **RPO** and **RTO** targets exist for every stateful system.
+- [ ] Backups follow **3-2-1** with off-site, immutable (or separate-account) storage.
+- [ ] Backups are encrypted at rest and in transit, with keys stored separately from the data.
+- [ ] Automated restore drill runs on a schedule (monthly/quarterly) into an isolated scratch DB and verifies row counts.
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "Your nightly pg_dump runs at 02:00 UTC and the database is corrupted at 14:00 UTC. What is your actual RPO if you only have nightly dumps?",
+    options: [
+      { label: "Up to 12 hours of lost writes (since the 02:00 UTC dump)", description: "RPO measures data loss in time; without continuous WAL archiving, you lose everything written since the last snapshot.", correct: true },
+      { label: "Zero data loss", description: "Zero data loss requires synchronous replication or continuous WAL recovery." },
+      { label: "It depends only on how fast pg_restore runs", description: "Restore speed determines RTO (downtime), not RPO (data loss)." }
+    ]
+  },
+  {
+    question: "Why is a PostgreSQL read replica not a substitute for backups?",
+    options: [
+      { label: "Accidental DELETEs, DROP TABLEs, and app-level data corruption replicate to the standby immediately", description: "Replicas protect against hardware failure, not human/software mistakes or ransomware.", correct: true },
+      { label: "Read replicas do not store table data", description: "Read replicas hold a full copy of the cluster data." },
+      { label: "Read replicas cannot be promoted to primary", description: "Replicas can be promoted, which is useful for high availability (RTO), not point-in-time recovery." }
+    ]
+  }
+]} />
+
+## Sources
+- [PostgreSQL Docs: Backup and Restore](https://www.postgresql.org/docs/current/backup.html)
+- [PostgreSQL Docs: pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html)
+- [PostgreSQL Docs: pg_basebackup](https://www.postgresql.org/docs/current/app-pgbasebackup.html)
+- [Google SRE Book: Data Integrity](https://sre.google/sre-book/data-integrity/)

@@ -4,7 +4,8 @@
     "git-cheatsheet",
     "networking-basics",
     "linux-processes-signals",
-    "reverse-proxy-tls"
+    "reverse-proxy-tls",
+    "backups-and-dr"
   ],
   "icon": "foundations"
 }
