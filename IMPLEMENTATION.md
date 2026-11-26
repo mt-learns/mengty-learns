@@ -178,6 +178,23 @@ Same rules as before: one commit per step, with lint, typecheck and build green.
 ### Step 14 — `<Flow>` v2/v3 (as needed) · P3–P4
 Compare toggle ("without / with"), step deep links (`?flow=&step=`), a details drawer per step, zoom levels (a group node opens a sub-flow, with a breadcrumb), and an optional ELK auto-layout.
 
+### Step 15 — `<Flow>` v3 redesign on React Flow + docs style fixes (2–3 days) · P1, do this now
+Spec: PLAN §10.5 and §10.6.
+1. **Style fix first (separate commit):** remove the `pre` rule from `app/global.css`, then style the Fumadocs code block container once so there's one frame. Check callouts, tabs and cards for double frames. Update `/docs/kitchen-sink`.
+2. `pnpm add @xyflow/react @dagrejs/dagre` (pin the versions). Create `components/flow/v3/`:
+   - `FlowCanvas.tsx`: a read-only ReactFlow with the props in PLAN §10.5. Import `@xyflow/react/dist/base.css` only inside this component, and add theme overrides through tokens.
+   - `IosNode.tsx`: icon squircle + label + subtitle, category tint, active/inactive states.
+   - `StepEdge.tsx`: custom edge with step badge, visited/active/idle styles, a travelling dot (SVG `animateMotion` or motion/mini), and dashed/error variants.
+   - `GroupNode.tsx`: frosted group panel.
+   - `layout.ts`: grid → px on desktop, and a dagre top→bottom layout below 640px (recalculated on resize, debounced).
+   - `Player.tsx`: card shell, step header, ‹ › + dots + Play/Replay, `<details>` step list (server-rendered), variants SegmentedControl, ⋯ menu (copy link).
+3. Keep the data format, and add an optional `title` per step plus an optional `category` per node (with sensible defaults). Keep Zod build-time validation. **Don't break the 6 existing flow pages.** Then add short step `title`s to them.
+4. Lazy-load: `FlowLazy` loads the canvas through `next/dynamic` with `ssr: false` when scrolled into view (IntersectionObserver). Until then it shows the server-rendered static SVG skeleton and the step list.
+5. Delete the v1/v2 SVG renderer once v3 is at parity, keeping only the static skeleton.
+6. Tests: layout switch, step engine (next/prev/dots/end → replay), visited-edge state, deep-link parsing, keyboard. Playwright (or a manual checklist in the PR) at 360px and 1280px, in both themes, with reduced motion.
+
+**Done when:** the PLAN §10.5 acceptance checks pass. Record the `next build` route sizes: flow pages ≤ 80 KB gzip extra, and the rest unchanged.
+
 ### Later
 - Section 3D icons and hero art (PLAN §6 pipeline).
 - `<StepThrough>` and `<Playground>` explainers. One signature explainer per month (`CONTENT-PLAN.md`).

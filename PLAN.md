@@ -322,7 +322,7 @@ TL;DR → Why it exists (the problem) → Mental model (one diagram or `<Flow>`)
 />
 ```
 
-**Tech:** hand-built SVG on a grid layout (`x`/`y` × cell size), with edges drawn as SVG paths. The `motion` library (`motion/react`) animates the dot along each path and the highlight changes, using `--ease-ios`. Nodes use iOS styling: `rounded-panel` cards, a section-icon squircle, and a light material. Rejected: React Flow (heavy, looks like an editor) and Mermaid (can't animate a step sequence). An automatic ELK layout is a possible later addition.
+**Tech:** hand-built SVG on a grid layout (`x`/`y` × cell size), with edges drawn as SVG paths. The `motion` library (`motion/react`) animates the dot along each path and the highlight changes, using `--ease-ios`. Nodes use iOS styling: `rounded-panel` cards, a section-icon squircle, and a light material. Mermaid was rejected (it can't animate a step sequence). **Superseded by §10.5:** v3 draws flows with React Flow in read-only mode. An automatic ELK layout is a possible later addition.
 
 **Non-functional rules**
 - `'use client'`, rendered only inside docs pages. The JS budget is ≤ 35 KB gzip for `<Flow>` + motion. Pages without a flow ship none of it.
@@ -346,6 +346,63 @@ Home ─▶ Learning path (3/8) ─▶ Concept page
 | **P2** | `/review` + `cards.json` + `<Quiz>`, learning-path progress, "May be outdated" badge, labs tested in CI, response/error edges, deep links |
 | **P3** | `<Flow>` compare toggle, `/radar` + `/digest`, the RSS inbox Action |
 | **P4** | Zoom levels, ELK auto-layout, 1–2 new flows a month (`CONTENT-PLAN.md`) |
+
+### 10.5 `<Flow>` v3: UX redesign (replaces the v1/v2 renderer)
+
+**Why.** Review of v1/v2 (2026-11-26):
+- **Too many controls:** prev, play, next, replay, speed, scrubber, and the full step list are all visible at once. The player takes more space than the diagram.
+- **Hard to read:** labels are SVG text at 11–13px, and the whole SVG scales down on mobile, so text gets tiny.
+- **Not iOS:** the nodes are plain bordered boxes, there's no depth, and the step history isn't visible.
+- **Lost path:** only the current edge is highlighted, so readers forget where the request came from.
+
+**Decision: draw flows with React Flow (`@xyflow/react`) in read-only "presentation mode".** Keep our own step engine and the **same data format** (`nodes`, `steps`, `variants`, `groups`), so the 6 existing flow pages need no content changes.
+- **Why React Flow now:** nodes are real HTML/React. Text stays sharp and readable at any size, and iOS Tailwind styles apply directly. It also handles fit-to-view, zoom and pan, custom edges and edge labels.
+- **Not an editor:** `nodesDraggable=false`, `nodesConnectable=false`, `elementsSelectable=false`, `zoomOnScroll=false`, `panOnScroll=false`, `preventScrolling=false` (the page keeps scrolling). Zoom happens only through the buttons and pinch on touch.
+- **Layout:** keep the hand-placed `x`/`y` grid on desktop. On narrow screens (< 640px), switch automatically to a **top→bottom** layout calculated with `@dagrejs/dagre` (small). ELK is too heavy.
+- **Cost:** about 50–60 KB gzip, **loaded lazily** (dynamic import once scrolled into view) and only on pages with a flow. The new budget is **≤ 80 KB gzip on flow pages, 0 KB elsewhere**. Show a static skeleton (the SVG from v1's no-JS fallback) until it loads.
+
+**The new player: one iOS card**
+```
+╭──────────────────────────────────────────────────────────╮
+│  Kubernetes request path                      [−] [+] [⤢] │  ← title + zoom (small, quiet)
+│ ┌────────────────────────────────────────────────────────┐ │
+│ │   ◉ User ──①──▶ ◉ Ingress ──②──▶ ◉ Service ──③─▶ ◉ Pod A │ │  ← canvas (grouped bg, 16:9, min-h 320)
+│ │                                         ╰───────▶ ◉ Pod B │ │
+│ └────────────────────────────────────────────────────────┘ │
+│  ②  Ingress routes the request                             │  ← step title (headline)
+│     Matches host + path, forwards to Service "web":80.     │  ← 1–2 lines (subheadline, muted)
+│                                                            │
+│   ‹    ● ● ◉ ○ ○    ›                    ▶ Play            │  ← dots = scrubber; one primary action
+│  ▸ All steps (5)                                           │  ← disclosure, iOS grouped list inside
+╰──────────────────────────────────────────────────────────╯
+```
+
+| Area | v3 rule |
+|---|---|
+| **Card** | `rounded-card`, `bg-card`, a soft shadow, and **no inner borders**. The canvas uses the `grouped` background with `rounded-panel`. No double borders anywhere. |
+| **Nodes** | iOS app-icon style: a **44px squircle icon** with a per-category tint (client = gray, edge/network = blue, service = indigo, data = green, external = orange), plus a **15px semibold label** and an optional 13px subtitle. Real HTML text. |
+| **Active state** | The active node gets a tinted ring, soft shadow and `scale(1.04)` (spring, `--ease-ios`, 300ms). Inactive nodes drop to **opacity 0.55** and stay legible. |
+| **Edges** | 1.5px neutral at rest. **The active edge** is 2.5px accent with a dot travelling along it. **Visited edges stay tinted**, so the path so far stays visible. Each edge has a **step-number badge** (pill, 11px) at its midpoint. Response = dashed, error = destructive. |
+| **Groups** | Frosted `material-thin` rounded panels with a small uppercase label (for the hexagon, onion rings and "Cluster"). |
+| **Step text** | Steps gain a short **`title`** (≤ 6 words) plus the `text` (≤ 2 lines). A number badge matches the edge badge. |
+| **Controls** | Only **‹ / ›**, **step dots** (tap to jump, also the scrubber), and **one Play/Pause/Replay** button. **Removed:** the speed selector (fixed at about 2.2 s per step) and the range scrubber. Replay appears in place of Play at the end. |
+| **Start state** | Step 0 is an **Overview**: everything at full opacity, with a "Start ▶" call to action. No autoplay. |
+| **Step list** | A `<details>` "All steps (n)" disclosure in iOS grouped-list style. Tapping a row jumps to that step. The list is server-rendered, so it works without JS, for screen readers and in print. |
+| **Variants** | An iOS `SegmentedControl` above the canvas, full width on mobile. |
+| **Mobile** | Top→bottom layout, a fixed canvas height of 420px, pinch to zoom, double-tap to fit, and controls in a single row. |
+| **Keyboard / a11y** | ← → move between steps when the card is focused. Space plays or pauses. Visible focus rings. `aria-live` announces "Step 2 of 5: Ingress routes the request". Reduced motion: no dot travel and no scale, just an instant highlight. |
+| **Deep links** | Kept from v2 (`?flow=&step=`), with "Copy link" in a small ⋯ menu. |
+
+**Acceptance checks**
+- At 360px, every label is ≥ 13px with no overlap, and the whole flow fits without horizontal scroll.
+- The path-so-far is visible at every step.
+- Only 3 controls are visible at once, plus the disclosure.
+- Light and dark modes pass 4.5:1 contrast for labels.
+- Lighthouse a11y ≥ 95 on a flow page. Pages without a flow have no React Flow JS.
+
+### 10.6 Docs styling fixes (found in review)
+- **Double border on code blocks:** the global `pre { border; rounded-xl }` rule in `app/global.css` nests inside Fumadocs' own code-block `figure`, which already has a border and radius. **Fix:** delete the `pre` rule, and style the Fumadocs code-block container once (radius 12px, one border or none, `bg-card`). Do the same check for callouts, tabs and cards, so each has exactly **one frame**.
+- Add a **visual check page** (`/docs/kitchen-sink`) to the review checklist, with code blocks, tabs, callouts, tables and a flow, in both themes at 360px and 1280px.
 
 ---
 
