@@ -1,20 +1,17 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
   <style>
-    .bg { fill: #0F766E; }
-    .fg { fill: #FFFFFF; }
+    .t { fill: #FAFAF8; }
+    .s { stroke: #0F766E; }
+    .d { fill: #B45309; }
     @media (prefers-color-scheme: dark) {
-      .bg { fill: #2DD4BF; }
-      .fg { fill: #0E1013; }
+      .t { fill: #0E1013; }
+      .s { stroke: #2DD4BF; }
+      .d { fill: #F59E0B; }
     }
   </style>
-  <!-- Squircle tile -->
-  <path
-    class="bg"
-    d="M64 4C99.5 4 124 28.5 124 64C124 99.5 99.5 124 64 124C28.5 124 4 99.5 4 64C4 28.5 28.5 4 64 4Z"
-  />
-  <!-- Geometric MT monogram -->
-  <path
-    class="fg"
-    d="M27 88V40H37.5L51.5 64.5L65.5 40H76V88H66V57.5L54.5 77.5H48.5L37 57.5V88H27ZM83 49.5V40H107V49.5H100V88H90V49.5H83Z"
-  />
+  <!-- Tile keeps the mark at 3:1 or more on any tab bar, whatever the browser theme. -->
+  <rect class="t" width="128" height="128" rx="24"/>
+  <!-- 16px-optimised mt: 1px = 8 units, 1px inset, dot 13 units clear of the crossbar. -->
+  <path class="s" d="M16 112V72A16 16 0 0 1 48 72V112M48 72A16 16 0 0 1 64 56H88M80 24V100A12 12 0 0 0 92 112" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle class="d" cx="113" cy="56" r="8"/>
 </svg>

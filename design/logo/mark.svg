@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <style>
+    .s { stroke: #0F766E; }
+    .d { fill: #B45309; }
+    @media (prefers-color-scheme: dark) {
+      .s { stroke: #2DD4BF; }
+      .d { fill: #F59E0B; }
+    }
+  </style>
+  <!-- 128 grid, 1px at 16px = 8 units. Stroke 16 (2px at 16px), counters 16. -->
+  <path class="s" d="M16 104V64A16 16 0 0 1 48 64V104M48 64A16 16 0 0 1 64 48H88M80 24V92A12 12 0 0 0 92 104" stroke-width="16" stroke-linecap="round" stroke-linejoin="round"/>
+  <circle class="d" cx="116" cy="48" r="9"/>
+</svg>

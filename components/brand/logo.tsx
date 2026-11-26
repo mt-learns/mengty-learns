@@ -1,17 +1,21 @@
 import { cn } from '@/lib/utils';
 
-/** The "MT" monogram (same drawing as public/favicon.svg), in the jade accent. */
+/**
+ * The "mt" monogram (master: design/logo/mark.svg). A lowercase m whose second shoulder runs on as the
+ * t's crossbar, and an amber dot for progress. Stroke-based on a 128 grid, so it stays crisp at any size.
+ * Colours come from --primary and --highlight, so it follows the theme. Min size 16px; see DESIGN.md "Logo".
+ */
 export function LogoMark({ className }: { className?: string }) {
   return (
-    <svg viewBox="0 0 128 128" aria-hidden="true" className={cn('size-7 shrink-0', className)}>
+    <svg viewBox="0 0 128 128" fill="none" aria-hidden="true" className={cn('size-7 shrink-0', className)}>
       <path
-        fill="var(--primary)"
-        d="M64 4C99.5 4 124 28.5 124 64C124 99.5 99.5 124 64 124C28.5 124 4 99.5 4 64C4 28.5 28.5 4 64 4Z"
+        d="M16 104V64A16 16 0 0 1 48 64V104M48 64A16 16 0 0 1 64 48H88M80 24V92A12 12 0 0 0 92 104"
+        stroke="var(--primary)"
+        strokeWidth={16}
+        strokeLinecap="round"
+        strokeLinejoin="round"
       />
-      <path
-        fill="var(--primary-foreground)"
-        d="M27 88V40H37.5L51.5 64.5L65.5 40H76V88H66V57.5L54.5 77.5H48.5L37 57.5V88H27ZM83 49.5V40H107V49.5H100V88H90V49.5H83Z"
-      />
+      <circle cx={116} cy={48} r={9} fill="var(--highlight)" />
     </svg>
   );
 }
