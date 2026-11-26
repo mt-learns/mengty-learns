@@ -1,3 +1,4 @@
+import { Container } from '@/components/layout/container';
 import type { Metadata } from 'next';
 import { LargeTitle } from '@/components/ios/tile';
 import { Illustration } from '@/components/illustrations';
@@ -34,7 +35,7 @@ export default function RadarPage() {
     .sort((a, b) => a.title.localeCompare(b.title));
 
   return (
-    <div className="container max-w-screen-xl px-4 py-12">
+    <Container className="py-12 md:py-16">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-6 mb-4">
         <LargeTitle subtitle="Tools, platforms, techniques, and languages I actively track — grouped by ring.">
           Tech Radar
@@ -42,6 +43,6 @@ export default function RadarPage() {
         <Illustration name="radar-header" size={256} className="w-44 sm:w-52 h-auto shrink-0" decorative />
       </div>
       <RadarFilter entries={entries} />
-    </div>
+    </Container>
   );
 }

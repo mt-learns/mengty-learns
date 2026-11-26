@@ -2,7 +2,7 @@ import { type ReactNode } from 'react';
 
 export function Sidenote({ children }: { children: ReactNode }) {
   return (
-    <aside className="my-4 p-4 rounded-panel bg-muted text-muted-foreground border-l-4 border-primary text-sm">
+    <aside className="my-4 p-4 rounded-panel bg-muted text-muted-foreground border border-border text-sm">
       {children}
     </aside>
   );
