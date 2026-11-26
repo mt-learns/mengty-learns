@@ -24,6 +24,8 @@ export const FLOW_NODE_CATEGORIES = [
   'service',
   'data',
   'external',
+  'abstraction',
+  'concrete',
 ] as const;
 
 export const FlowNodeCategorySchema = z.enum(FLOW_NODE_CATEGORIES);

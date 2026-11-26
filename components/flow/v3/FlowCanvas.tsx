@@ -131,6 +131,8 @@ function FlowCanvasInner({
   );
 
   const { panMode, canvasHeight, direction, bounds } = graph.layout;
+  const hasHorizontalOverflow =
+    panMode && bounds.width * MIN_READABLE_ZOOM > containerWidth - 16;
 
   useEffect(() => {
     onLayoutChange?.({ canvasHeight, panMode });
@@ -221,10 +223,16 @@ function FlowCanvasInner({
         fitViewOptions={{ padding: FIT_PADDING, minZoom: MIN_READABLE_ZOOM }}
         proOptions={{ hideAttribution: true }}
       />
-      {panMode && (
-        <div className="pointer-events-none absolute right-2.5 bottom-2.5 rounded-pill border border-border bg-card/90 px-2.5 py-1 text-caption-1 font-medium text-muted-foreground shadow-xs">
-          Drag to see more →
-        </div>
+      {hasHorizontalOverflow && (
+        <>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-grouped to-transparent"
+          />
+          <div className="pointer-events-none absolute right-2.5 bottom-2.5 rounded-pill border border-border bg-card/90 px-2.5 py-1 text-caption-1 font-medium text-muted-foreground shadow-xs">
+            Drag to see more →
+          </div>
+        </>
       )}
     </div>
   );

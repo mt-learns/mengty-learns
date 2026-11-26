@@ -40,6 +40,8 @@ const CATEGORY_STYLE: Record<FlowNodeCategory, { bg: string; fg: string }> = {
   service: { bg: 'var(--flow-cat-service-bg)', fg: 'var(--flow-cat-service-fg)' },
   data: { bg: 'var(--flow-cat-data-bg)', fg: 'var(--flow-cat-data-fg)' },
   external: { bg: 'var(--flow-cat-external-bg)', fg: 'var(--flow-cat-external-fg)' },
+  abstraction: { bg: 'var(--flow-cat-abstraction-bg)', fg: 'var(--flow-cat-abstraction-fg)' },
+  concrete: { bg: 'var(--flow-cat-concrete-bg)', fg: 'var(--flow-cat-concrete-fg)' },
 };
 
 export interface IosNodeData extends Record<string, unknown> {
@@ -48,6 +50,7 @@ export interface IosNodeData extends Record<string, unknown> {
   icon: FlowIconName;
   category: FlowNodeCategory;
   variant: FlowNodeVariant;
+  compact?: boolean;
   isActive: boolean;
   isOverview: boolean;
   isError: boolean;
@@ -69,12 +72,15 @@ export function IosNode({ data }: NodeProps<IosFlowNode>) {
   const tint = CATEGORY_STYLE[data.category] ?? CATEGORY_STYLE.service;
   const isDimmed = !data.isOverview && !data.isActive;
   const isProblem = data.variant === 'problem';
+  const compact = data.compact ?? false;
 
   return (
     <div
       style={{ width: data.width, minHeight: data.height }}
+      title={compact && data.subtitle ? `${data.label}: ${data.subtitle}` : undefined}
       className={cn(
-        'relative flex items-center gap-2.5 rounded-panel px-3 py-2',
+        'relative flex items-center rounded-panel',
+        compact ? 'gap-2 px-2.5 py-1.5' : 'gap-2.5 px-3 py-2',
         'transition-[transform,box-shadow,background-color,border-color] duration-200 ease-[var(--ease-ios)]',
         'motion-reduce:transition-none motion-reduce:transform-none',
         isDimmed
@@ -100,20 +106,26 @@ export function IosNode({ data }: NodeProps<IosFlowNode>) {
 
       <div
         className={cn(
-          'flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]',
+          'flex shrink-0 items-center justify-center',
+          compact ? 'h-7 w-7 rounded-[8px]' : 'h-9 w-9 rounded-[10px]',
           isDimmed && 'saturate-50',
         )}
         style={{ backgroundColor: tint.bg, color: tint.fg }}
         aria-hidden="true"
       >
-        <Icon className="h-[18px] w-[18px]" strokeWidth={2} />
+        <Icon className={compact ? 'h-4 w-4' : 'h-[18px] w-[18px]'} strokeWidth={2} />
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="line-clamp-2 break-words text-[15px] font-semibold leading-[1.2] text-foreground">
+        <div
+          className={cn(
+            'line-clamp-2 break-words font-semibold leading-[1.2] text-foreground',
+            compact ? 'text-[14px]' : 'text-[15px]',
+          )}
+        >
           {data.label}
         </div>
-        {data.subtitle && (
+        {!compact && data.subtitle && (
           <div className="mt-0.5 line-clamp-1 break-words text-[13px] font-normal leading-tight text-muted-foreground">
             {data.subtitle}
           </div>
@@ -123,6 +135,7 @@ export function IosNode({ data }: NodeProps<IosFlowNode>) {
       {isProblem && (
         <span
           className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-pill border border-[var(--border-strong)] bg-secondary text-foreground"
+          role="img"
           aria-label="Problem"
         >
           <X className="h-3 w-3" strokeWidth={2.5} />

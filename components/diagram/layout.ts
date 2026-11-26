@@ -7,6 +7,8 @@ import type {
 } from './types';
 
 export const LR_CONTAINER_BREAKPOINT = 720;
+export const NO_PAN_CONTAINER_MIN = 640;
+export const STACKED_TREE_MAX_WIDTH = 480;
 export const FIT_PADDING = 0.12;
 export const MIN_READABLE_ZOOM = 0.87; // 15px * 0.87 = 13.05px >= 13px
 export const MIN_CANVAS_HEIGHT = 240;
@@ -17,8 +19,15 @@ export const NODE_MAX_WIDTH = 240;
 export const NODE_HEIGHT_SINGLE = 64;
 export const NODE_HEIGHT_DOUBLE = 80;
 
+export const COMPACT_NODE_MIN_WIDTH = 128;
+export const COMPACT_NODE_MAX_WIDTH = 160;
+export const COMPACT_NODE_HEIGHT_SINGLE = 52;
+export const COMPACT_NODE_HEIGHT_DOUBLE = 64;
+
 export const RANK_GAP = 72;
 export const NODE_GAP = 40;
+export const COMPACT_RANK_GAP = 52;
+export const COMPACT_NODE_GAP = 20;
 export const GROUP_PAD = 24;
 export const GROUP_LABEL_HEIGHT = 28;
 export const GROUP_PAD_TOP = GROUP_PAD + GROUP_LABEL_HEIGHT; // 52px
@@ -65,6 +74,7 @@ export interface EdgeRoute {
   offsetX: number;
   offsetY: number;
   isTreeEdge: boolean;
+  isStackedEdge: boolean;
   isStraight: boolean;
   /** Dedicated lane coordinate (Y in LR, X in TB) when skipping intermediate ranks (§5.9). */
   skipLaneCoord?: number;
@@ -72,6 +82,8 @@ export interface EdgeRoute {
 
 export interface ComputedDiagramLayout {
   direction: LayoutDirection;
+  compact: boolean;
+  stacked: boolean;
   nodes: Map<string, NodeBox>;
   groups: GroupBox[];
   edges: EdgeRoute[];
@@ -105,34 +117,42 @@ export function estimateTextWidth(text: string, fontSize = 15, semibold = true):
 }
 
 /**
- * Computes the uniform node width (160–240px) and per-node line count (1 or 2)
+ * Computes the uniform node width and per-node line count (1 or 2)
  * so labels never truncate with an ellipsis.
  */
-export function computeNodeDimensions(nodes: FlowNode[]): {
+export function computeNodeDimensions(
+  nodes: FlowNode[],
+  compact = false,
+): {
   nodeWidth: number;
   nodeLines: Map<string, 1 | 2>;
 } {
-  // 36px icon tile + 10px gap + 24px horizontal padding + 10px safety
-  const chromeWidth = 80;
-  let maxIdeal = NODE_MIN_WIDTH;
+  const minW = compact ? COMPACT_NODE_MIN_WIDTH : NODE_MIN_WIDTH;
+  const maxW = compact ? COMPACT_NODE_MAX_WIDTH : NODE_MAX_WIDTH;
+  const fontSize = compact ? 14 : 15;
+  // Normal: 36px icon + 10px gap + 24px pad + 10px safety = 80
+  // Compact: 28px icon + 8px gap + 20px pad + 6px safety = 62
+  const chromeWidth = compact ? 62 : 80;
+  let maxIdeal = minW;
 
   for (const node of nodes) {
-    const labelW = estimateTextWidth(node.label, 15, true);
-    const subW = node.subtitle ? estimateTextWidth(node.subtitle, 13, false) : 0;
-    const problemExtra = node.variant === 'problem' ? 20 : 0;
+    const labelW = estimateTextWidth(node.label, fontSize, true);
+    const subW =
+      !compact && node.subtitle ? estimateTextWidth(node.subtitle, 13, false) : 0;
+    const problemExtra = node.variant === 'problem' ? (compact ? 16 : 20) : 0;
     const ideal = Math.ceil(Math.max(labelW, subW) + chromeWidth + problemExtra);
     if (ideal > maxIdeal) {
       maxIdeal = ideal;
     }
   }
 
-  const nodeWidth = Math.max(NODE_MIN_WIDTH, Math.min(NODE_MAX_WIDTH, maxIdeal));
+  const nodeWidth = Math.max(minW, Math.min(maxW, maxIdeal));
   const nodeLines = new Map<string, 1 | 2>();
 
   for (const node of nodes) {
-    const problemExtra = node.variant === 'problem' ? 20 : 0;
+    const problemExtra = node.variant === 'problem' ? (compact ? 16 : 20) : 0;
     const availableTextW = nodeWidth - chromeWidth - problemExtra + 6;
-    const labelW = estimateTextWidth(node.label, 15, true);
+    const labelW = estimateTextWidth(node.label, fontSize, true);
     const needsTwoLines = labelW > availableTextW || node.label.includes('\n');
     nodeLines.set(node.id, needsTwoLines ? 2 : 1);
   }
@@ -140,154 +160,16 @@ export function computeNodeDimensions(nodes: FlowNode[]): {
   return { nodeWidth, nodeLines };
 }
 
-function runDagrePass(
-  nodes: FlowNode[],
-  edges: LayoutEdgeInput[],
+function normalizePass(
+  rawNodes: Map<string, NodeBox>,
   groups: FlowGroup[],
-  direction: LayoutDirection,
-  layoutMode: FlowLayoutMode,
-  nodeWidth: number,
-  nodeLines: Map<string, 1 | 2>,
+  groupPad: number,
+  groupPadTop: number,
 ): {
   nodeMap: Map<string, NodeBox>;
   groupBoxes: GroupBox[];
   bounds: { width: number; height: number };
 } {
-  const hasDisjointGroups = groups.length > 1;
-  const effectiveNodesep = hasDisjointGroups
-    ? Math.max(NODE_GAP, GROUP_PAD + GROUP_PAD_TOP + 16)
-    : NODE_GAP;
-
-  const g = new dagre.graphlib.Graph({ multigraph: false, compound: false });
-  g.setGraph({
-    rankdir: direction,
-    nodesep: effectiveNodesep,
-    ranksep: RANK_GAP,
-    marginx: 0,
-    marginy: 0,
-  });
-  g.setDefaultEdgeLabel(() => ({}));
-
-  const sortedNodes = [...nodes].sort(
-    (a, b) => (a.rank ?? 0) - (b.rank ?? 0) || (a.order ?? 0) - (b.order ?? 0),
-  );
-
-  const nodeById = new Map(sortedNodes.map((n) => [n.id, n]));
-
-  for (const node of sortedNodes) {
-    const lines = nodeLines.get(node.id) ?? 1;
-    const height = lines === 2 ? NODE_HEIGHT_DOUBLE : NODE_HEIGHT_SINGLE;
-    g.setNode(node.id, { width: nodeWidth, height });
-  }
-
-  const forwardPairs = new Set<string>();
-  const connectedNodes = new Set<string>();
-
-  for (const edge of edges) {
-    if (edge.from === edge.to) continue;
-    const pairKey = `${edge.from}->${edge.to}`;
-    const reverseKey = `${edge.to}->${edge.from}`;
-
-    const fromNode = nodeById.get(edge.from);
-    const toNode = nodeById.get(edge.to);
-    const isRankReversed =
-      fromNode?.rank !== undefined &&
-      toNode?.rank !== undefined &&
-      fromNode.rank > toNode.rank;
-
-    if ((edge.kind === 'response' && forwardPairs.has(reverseKey)) || isRankReversed) {
-      continue;
-    }
-
-    if (!forwardPairs.has(pairKey)) {
-      forwardPairs.add(pairKey);
-      connectedNodes.add(edge.from);
-      connectedNodes.add(edge.to);
-      const minlen =
-        fromNode?.rank !== undefined && toNode?.rank !== undefined
-          ? Math.max(1, toNode.rank - fromNode.rank)
-          : 1;
-      g.setEdge(edge.from, edge.to, { minlen });
-    }
-  }
-
-  // Anchor disconnected nodes that have explicit rank hints so they align on their rank
-  for (const node of sortedNodes) {
-    if (connectedNodes.has(node.id)) continue;
-    if (node.rank !== undefined && node.rank > 0) {
-      const anchor = sortedNodes.find(
-        (candidate) =>
-          candidate.id !== node.id &&
-          candidate.rank !== undefined &&
-          candidate.rank < node.rank!,
-      );
-      if (anchor) {
-        g.setEdge(anchor.id, node.id, {
-          minlen: Math.max(1, node.rank - (anchor.rank ?? 0)),
-          weight: 0,
-        });
-      }
-    }
-  }
-
-  dagre.layout(g);
-
-  const rawNodes = new Map<string, NodeBox>();
-  for (const node of sortedNodes) {
-    const pos = g.node(node.id);
-    const lines = nodeLines.get(node.id) ?? 1;
-    const height = lines === 2 ? NODE_HEIGHT_DOUBLE : NODE_HEIGHT_SINGLE;
-    const x = pos.x - nodeWidth / 2;
-    const y = pos.y - height / 2;
-    rawNodes.set(node.id, {
-      id: node.id,
-      x,
-      y,
-      width: nodeWidth,
-      height,
-      cx: pos.x,
-      cy: pos.y,
-      lines,
-    });
-  }
-
-  // Enforce tree parent centering over direct children when layout === 'tree'
-  if (layoutMode === 'tree' && direction === 'TB') {
-    const childrenByParent = new Map<string, string[]>();
-    for (const edge of edges) {
-      if (edge.from === edge.to) continue;
-      const list = childrenByParent.get(edge.from) ?? [];
-      if (!list.includes(edge.to)) list.push(edge.to);
-      childrenByParent.set(edge.from, list);
-    }
-
-    // Bottom-up adjustment by rank
-    const byY = [...rawNodes.values()].sort((a, b) => b.cy - a.cy);
-    for (const parentBox of byY) {
-      const children = childrenByParent.get(parentBox.id);
-      if (!children || children.length === 0) continue;
-      const childBoxes = children
-        .map((cid) => rawNodes.get(cid))
-        .filter((b): b is NodeBox => Boolean(b));
-      if (childBoxes.length === 0) continue;
-
-      const avgCx =
-        childBoxes.reduce((sum, b) => sum + b.cx, 0) / childBoxes.length;
-      const sameRankBoxes = [...rawNodes.values()].filter(
-        (b) => b.id !== parentBox.id && Math.abs(b.cy - parentBox.cy) < 1,
-      );
-      const wouldOverlap = sameRankBoxes.some(
-        (other) =>
-          Math.abs(avgCx - other.cx) < (parentBox.width + other.width) / 2 + NODE_GAP - 1,
-      );
-      if (!wouldOverlap) {
-        parentBox.cx = avgCx;
-        parentBox.x = avgCx - parentBox.width / 2;
-      }
-    }
-  }
-
-  // Compute group boxes (innermost first so nested groups wrap cleanly without label overlap)
   const sortedGroups = [...groups].sort(
     (a, b) => a.nodeIds.length - b.nodeIds.length,
   );
@@ -302,7 +184,6 @@ function runDagrePass(
       if (nb) memberRects.push(nb);
     }
 
-    // Include strictly nested child groups so outer group labels never collide with inner labels
     for (const prev of sortedGroups) {
       if (prev.id === group.id) continue;
       const prevBox = groupBoxById.get(prev.id);
@@ -322,22 +203,20 @@ function runDagrePass(
     const maxX = Math.max(...memberRects.map((r) => r.x + r.width));
     const maxY = Math.max(...memberRects.map((r) => r.y + r.height));
 
-    const box: GroupBox = {
+    groupBoxById.set(group.id, {
       id: group.id,
       label: group.label,
-      x: minX - GROUP_PAD,
-      y: minY - GROUP_PAD_TOP,
-      width: maxX - minX + GROUP_PAD * 2,
-      height: maxY - minY + GROUP_PAD_TOP + GROUP_PAD,
-    };
-    groupBoxById.set(group.id, box);
+      x: minX - groupPad,
+      y: minY - groupPadTop,
+      width: maxX - minX + groupPad * 2,
+      height: maxY - minY + groupPadTop + groupPad,
+    });
   }
 
   const groupBoxes = groups
     .map((gItem) => groupBoxById.get(gItem.id))
     .filter((b): b is GroupBox => Boolean(b));
 
-  // Normalize origin to (0, 0)
   const allRects = [...rawNodes.values(), ...groupBoxes];
   const originX = allRects.length > 0 ? Math.min(...allRects.map((r) => r.x)) : 0;
   const originY = allRects.length > 0 ? Math.min(...allRects.map((r) => r.y)) : 0;
@@ -378,11 +257,318 @@ function runDagrePass(
   };
 }
 
+function runDagrePass(
+  nodes: FlowNode[],
+  edges: LayoutEdgeInput[],
+  groups: FlowGroup[],
+  direction: LayoutDirection,
+  layoutMode: FlowLayoutMode,
+  compact: boolean,
+  wrapMaxPerRow: number | null,
+  nodeWidth: number,
+  nodeLines: Map<string, 1 | 2>,
+): {
+  nodeMap: Map<string, NodeBox>;
+  groupBoxes: GroupBox[];
+  bounds: { width: number; height: number };
+} {
+  const rankGap = compact ? COMPACT_RANK_GAP : RANK_GAP;
+  const baseNodeGap = compact ? COMPACT_NODE_GAP : NODE_GAP;
+  const hasDisjointGroups = groups.length > 1;
+  const effectiveNodesep = hasDisjointGroups
+    ? Math.max(baseNodeGap, GROUP_PAD + GROUP_PAD_TOP + 16)
+    : baseNodeGap;
+
+  const g = new dagre.graphlib.Graph({ multigraph: false, compound: false });
+  g.setGraph({
+    rankdir: direction,
+    nodesep: effectiveNodesep,
+    ranksep: rankGap,
+    marginx: 0,
+    marginy: 0,
+  });
+  g.setDefaultEdgeLabel(() => ({}));
+
+  const sortedNodes = [...nodes].sort(
+    (a, b) => (a.rank ?? 0) - (b.rank ?? 0) || (a.order ?? 0) - (b.order ?? 0),
+  );
+  const nodeById = new Map(sortedNodes.map((n) => [n.id, n]));
+
+  const singleH = compact ? COMPACT_NODE_HEIGHT_SINGLE : NODE_HEIGHT_SINGLE;
+  const doubleH = compact ? COMPACT_NODE_HEIGHT_DOUBLE : NODE_HEIGHT_DOUBLE;
+
+  for (const node of sortedNodes) {
+    const lines = nodeLines.get(node.id) ?? 1;
+    const height = lines === 2 ? doubleH : singleH;
+    g.setNode(node.id, { width: nodeWidth, height });
+  }
+
+  const forwardPairs = new Set<string>();
+  const connectedNodes = new Set<string>();
+
+  for (const edge of edges) {
+    if (edge.from === edge.to) continue;
+    const pairKey = `${edge.from}->${edge.to}`;
+    const reverseKey = `${edge.to}->${edge.from}`;
+
+    const fromNode = nodeById.get(edge.from);
+    const toNode = nodeById.get(edge.to);
+    const isRankReversed =
+      fromNode?.rank !== undefined &&
+      toNode?.rank !== undefined &&
+      fromNode.rank > toNode.rank;
+
+    if ((edge.kind === 'response' && forwardPairs.has(reverseKey)) || isRankReversed) {
+      continue;
+    }
+
+    if (!forwardPairs.has(pairKey)) {
+      forwardPairs.add(pairKey);
+      connectedNodes.add(edge.from);
+      connectedNodes.add(edge.to);
+      const minlen =
+        fromNode?.rank !== undefined && toNode?.rank !== undefined
+          ? Math.max(1, toNode.rank - fromNode.rank)
+          : 1;
+      g.setEdge(edge.from, edge.to, { minlen });
+    }
+  }
+
+  for (const node of sortedNodes) {
+    if (connectedNodes.has(node.id)) continue;
+    if (node.rank !== undefined && node.rank > 0) {
+      const anchor = sortedNodes.find(
+        (candidate) =>
+          candidate.id !== node.id &&
+          candidate.rank !== undefined &&
+          candidate.rank < node.rank!,
+      );
+      if (anchor) {
+        g.setEdge(anchor.id, node.id, {
+          minlen: Math.max(1, node.rank - (anchor.rank ?? 0)),
+          weight: 0,
+        });
+      }
+    }
+  }
+
+  dagre.layout(g);
+
+  const rawNodes = new Map<string, NodeBox>();
+  for (const node of sortedNodes) {
+    const pos = g.node(node.id);
+    const lines = nodeLines.get(node.id) ?? 1;
+    const height = lines === 2 ? doubleH : singleH;
+    const x = pos.x - nodeWidth / 2;
+    const y = pos.y - height / 2;
+    rawNodes.set(node.id, {
+      id: node.id,
+      x,
+      y,
+      width: nodeWidth,
+      height,
+      cx: pos.x,
+      cy: pos.y,
+      lines,
+    });
+  }
+
+  // §3.3(c): Wrap wide ranks into rows of wrapMaxPerRow in TB mode
+  if (wrapMaxPerRow !== null && direction === 'TB') {
+    const ranks = new Map<number, NodeBox[]>();
+    for (const box of rawNodes.values()) {
+      const key = Math.round(box.cy);
+      const list = ranks.get(key) ?? [];
+      list.push(box);
+      ranks.set(key, list);
+    }
+
+    const sortedRankKeys = [...ranks.keys()].sort((a, b) => a - b);
+    let cumulativeYShift = 0;
+
+    for (const rk of sortedRankKeys) {
+      const rowBoxes = ranks.get(rk)!.sort((a, b) => a.cx - b.cx);
+      for (const b of rowBoxes) {
+        b.y += cumulativeYShift;
+        b.cy += cumulativeYShift;
+      }
+
+      if (rowBoxes.length > wrapMaxPerRow) {
+        const numRows = Math.ceil(rowBoxes.length / wrapMaxPerRow);
+        const wrapRowGap = hasDisjointGroups ? GROUP_PAD + GROUP_PAD_TOP + 16 : 28;
+        const rowStride = Math.max(...rowBoxes.map((b) => b.height)) + wrapRowGap;
+        const firstRowCount = Math.min(wrapMaxPerRow, rowBoxes.length);
+        const firstRowSpan = firstRowCount * nodeWidth + (firstRowCount - 1) * baseNodeGap;
+        const startX = -firstRowSpan / 2;
+
+        for (let idx = 0; idx < rowBoxes.length; idx++) {
+          const r = Math.floor(idx / wrapMaxPerRow);
+          const c = idx % wrapMaxPerRow;
+          const b = rowBoxes[idx];
+          const rowItems = Math.min(wrapMaxPerRow, rowBoxes.length - r * wrapMaxPerRow);
+          const rowSpan = rowItems * nodeWidth + (rowItems - 1) * baseNodeGap;
+          const rowStartX = -rowSpan / 2;
+          b.x = (r === 0 ? startX : rowStartX) + c * (nodeWidth + baseNodeGap);
+          b.cx = b.x + b.width / 2;
+          b.y += r * rowStride;
+          b.cy += r * rowStride;
+        }
+        cumulativeYShift += (numRows - 1) * rowStride;
+      }
+    }
+
+    // Re-center parents over their children after wrapping
+    const childrenByParent = new Map<string, string[]>();
+    for (const edge of edges) {
+      if (edge.from === edge.to) continue;
+      const list = childrenByParent.get(edge.from) ?? [];
+      if (!list.includes(edge.to)) list.push(edge.to);
+      childrenByParent.set(edge.from, list);
+    }
+
+    const byYDesc = [...rawNodes.values()].sort((a, b) => b.cy - a.cy);
+    for (const parentBox of byYDesc) {
+      const children = childrenByParent.get(parentBox.id);
+      if (!children || children.length === 0) continue;
+      const childBoxes = children
+        .map((cid) => rawNodes.get(cid))
+        .filter((b): b is NodeBox => Boolean(b));
+      if (childBoxes.length === 0) continue;
+
+      const avgCx =
+        childBoxes.reduce((sum, b) => sum + b.cx, 0) / childBoxes.length;
+      const sameRankBoxes = [...rawNodes.values()].filter(
+        (b) => b.id !== parentBox.id && Math.abs(b.cy - parentBox.cy) < 1,
+      );
+      const wouldOverlap = sameRankBoxes.some(
+        (other) =>
+          Math.abs(avgCx - other.cx) < (parentBox.width + other.width) / 2 + baseNodeGap - 1,
+      );
+      if (!wouldOverlap) {
+        parentBox.cx = avgCx;
+        parentBox.x = avgCx - parentBox.width / 2;
+      }
+    }
+  } else if (layoutMode === 'tree' && direction === 'TB') {
+    const childrenByParent = new Map<string, string[]>();
+    for (const edge of edges) {
+      if (edge.from === edge.to) continue;
+      const list = childrenByParent.get(edge.from) ?? [];
+      if (!list.includes(edge.to)) list.push(edge.to);
+      childrenByParent.set(edge.from, list);
+    }
+
+    const byY = [...rawNodes.values()].sort((a, b) => b.cy - a.cy);
+    for (const parentBox of byY) {
+      const children = childrenByParent.get(parentBox.id);
+      if (!children || children.length === 0) continue;
+      const childBoxes = children
+        .map((cid) => rawNodes.get(cid))
+        .filter((b): b is NodeBox => Boolean(b));
+      if (childBoxes.length === 0) continue;
+
+      const avgCx =
+        childBoxes.reduce((sum, b) => sum + b.cx, 0) / childBoxes.length;
+      const sameRankBoxes = [...rawNodes.values()].filter(
+        (b) => b.id !== parentBox.id && Math.abs(b.cy - parentBox.cy) < 1,
+      );
+      const wouldOverlap = sameRankBoxes.some(
+        (other) =>
+          Math.abs(avgCx - other.cx) < (parentBox.width + other.width) / 2 + baseNodeGap - 1,
+      );
+      if (!wouldOverlap) {
+        parentBox.cx = avgCx;
+        parentBox.x = avgCx - parentBox.width / 2;
+      }
+    }
+  }
+
+  return normalizePass(rawNodes, groups, GROUP_PAD, GROUP_PAD_TOP);
+}
+
+/**
+ * §3.3(d): Indented stacked list layout for trees and class diagrams at < 480px.
+ */
+function runStackedTreePass(
+  nodes: FlowNode[],
+  edges: LayoutEdgeInput[],
+  groups: FlowGroup[],
+  compact: boolean,
+  nodeWidth: number,
+  nodeLines: Map<string, 1 | 2>,
+): {
+  nodeMap: Map<string, NodeBox>;
+  groupBoxes: GroupBox[];
+  bounds: { width: number; height: number };
+} {
+  const sortedNodes = [...nodes].sort(
+    (a, b) => (a.rank ?? 0) - (b.rank ?? 0) || (a.order ?? 0) - (b.order ?? 0),
+  );
+  const childrenMap = new Map<string, string[]>();
+  const hasParent = new Set<string>();
+
+  for (const edge of edges) {
+    if (edge.from === edge.to) continue;
+    const list = childrenMap.get(edge.from) ?? [];
+    if (!list.includes(edge.to)) list.push(edge.to);
+    childrenMap.set(edge.from, list);
+    hasParent.add(edge.to);
+  }
+
+  const roots = sortedNodes.filter((n) => !hasParent.has(n.id));
+  const ordered: { node: FlowNode; depth: number }[] = [];
+  const visited = new Set<string>();
+
+  function dfs(node: FlowNode, depth: number) {
+    if (visited.has(node.id)) return;
+    visited.add(node.id);
+    ordered.push({ node, depth });
+    const kids = childrenMap.get(node.id) ?? [];
+    for (const kidId of kids) {
+      const kid = sortedNodes.find((n) => n.id === kidId);
+      if (kid) dfs(kid, depth + 1);
+    }
+  }
+
+  for (const r of roots) dfs(r, 0);
+  for (const n of sortedNodes) {
+    if (!visited.has(n.id)) dfs(n, n.rank ?? 0);
+  }
+
+  const singleH = compact ? COMPACT_NODE_HEIGHT_SINGLE : NODE_HEIGHT_SINGLE;
+  const doubleH = compact ? COMPACT_NODE_HEIGHT_DOUBLE : NODE_HEIGHT_DOUBLE;
+  const indentStep = 24;
+  const rowGap = 16;
+
+  const rawNodes = new Map<string, NodeBox>();
+  let curY = 0;
+
+  for (const { node, depth } of ordered) {
+    const lines = nodeLines.get(node.id) ?? 1;
+    const height = lines === 2 ? doubleH : singleH;
+    const x = depth * indentStep;
+    rawNodes.set(node.id, {
+      id: node.id,
+      x,
+      y: curY,
+      width: nodeWidth,
+      height,
+      cx: x + nodeWidth / 2,
+      cy: curY + height / 2,
+      lines,
+    });
+    curY += height + rowGap;
+  }
+
+  return normalizePass(rawNodes, groups, GROUP_PAD, GROUP_PAD_TOP);
+}
+
 function buildEdgeRoutes(
   edges: LayoutEdgeInput[],
   nodeMap: Map<string, NodeBox>,
   direction: LayoutDirection,
   layoutMode: FlowLayoutMode,
+  stacked: boolean,
 ): EdgeRoute[] {
   const pairSet = new Set(edges.map((e) => `${e.from}->${e.to}`));
   const seen = new Set<string>();
@@ -398,7 +584,7 @@ function buildEdgeRoutes(
     if (!fromBox || !toBox) continue;
 
     const hasReverse = pairSet.has(`${edge.to}->${edge.from}`);
-    const isTreeEdge = layoutMode === 'tree';
+    const isTreeEdge = layoutMode === 'tree' && !stacked;
 
     let sourceHandle: EdgeRoute['sourceHandle'];
     let targetHandle: EdgeRoute['targetHandle'];
@@ -408,7 +594,10 @@ function buildEdgeRoutes(
     const dx = toBox.cx - fromBox.cx;
     const dy = toBox.cy - fromBox.cy;
 
-    if (isTreeEdge) {
+    if (stacked) {
+      sourceHandle = 'bottom-source';
+      targetHandle = 'left-target';
+    } else if (isTreeEdge) {
       sourceHandle = 'bottom-source';
       targetHandle = 'top-target';
     } else if (direction === 'LR') {
@@ -447,57 +636,57 @@ function buildEdgeRoutes(
 
     const isStraight =
       !isTreeEdge &&
+      !stacked &&
       !hasReverse &&
       ((direction === 'LR' && Math.abs(dy) < 1) ||
         (direction === 'TB' && Math.abs(dx) < 1));
 
-    // §5.9: Detect if this edge crosses over any intermediate node between source and target
+      // §5.9: Detect if this edge crosses over any intermediate node between source and target.
+    // A node only blocks when it sits strictly in the gap between source and target AND
+    // crosses the source/target centre line â€” same-rank siblings are not blocking.
     let skipLaneCoord: number | undefined;
-    if (!isTreeEdge) {
+    if (!isTreeEdge && !stacked) {
       const allBoxes = [...nodeMap.values()];
+      const eps = 0.5;
       if (direction === 'LR') {
-        const minX = Math.min(fromBox.x + fromBox.width, toBox.x + toBox.width);
-        const maxX = Math.max(fromBox.x, toBox.x);
-        const minY = Math.min(fromBox.y, toBox.y);
-        const maxY = Math.max(fromBox.y + fromBox.height, toBox.y + toBox.height);
+        // source right edge -> target left edge horizontal gap
+        const gapLeft = Math.min(fromBox.x + fromBox.width, toBox.x + toBox.width);
+        const gapRight = Math.max(fromBox.x, toBox.x);
+        const crossY = [fromBox.cy, toBox.cy];
         const blocking = allBoxes.filter(
           (b) =>
             b.id !== fromBox.id &&
             b.id !== toBox.id &&
-            b.x + b.width > minX &&
-            b.x < maxX &&
-            b.y + b.height > minY - 12 &&
-            b.y < maxY + 12,
+            b.x + b.width > gapLeft + eps &&
+            b.x < gapRight - eps &&
+            crossY.some((cy) => b.y + b.height > cy + eps && b.y < cy - eps),
         );
         if (blocking.length > 0) {
           const maxBlockingBottom = Math.max(
             ...blocking.map((b) => b.y + b.height),
-            fromBox.y + fromBox.height,
             toBox.y + toBox.height,
           );
-          skipLaneCoord = maxBlockingBottom + 32; // >= 24px clear (§5.9)
+          skipLaneCoord = maxBlockingBottom + 24;
         }
       } else {
-        const minY = Math.min(fromBox.y + fromBox.height, toBox.y + toBox.height);
-        const maxY = Math.max(fromBox.y, toBox.y);
-        const minX = Math.min(fromBox.x, toBox.x);
-        const maxX = Math.max(fromBox.x + fromBox.width, toBox.x + toBox.width);
+        // source bottom edge -> target top edge vertical gap
+        const gapTop = Math.min(fromBox.y + fromBox.height, toBox.y + toBox.height);
+        const gapBottom = Math.max(fromBox.y, toBox.y);
+        const crossX = [fromBox.cx, toBox.cx];
         const blocking = allBoxes.filter(
           (b) =>
             b.id !== fromBox.id &&
             b.id !== toBox.id &&
-            b.y + b.height > minY &&
-            b.y < maxY &&
-            b.x + b.width > minX - 12 &&
-            b.x < maxX + 12,
+            b.y + b.height > gapTop + eps &&
+            b.y < gapBottom - eps &&
+            crossX.some((cx) => b.x + b.width > cx + eps && b.x < cx - eps),
         );
         if (blocking.length > 0) {
           const maxBlockingRight = Math.max(
             ...blocking.map((b) => b.x + b.width),
-            fromBox.x + fromBox.width,
             toBox.x + toBox.width,
           );
-          skipLaneCoord = maxBlockingRight + 32; // >= 24px clear (§5.9)
+          skipLaneCoord = maxBlockingRight + 24;
         }
       }
     }
@@ -513,6 +702,7 @@ function buildEdgeRoutes(
       offsetX,
       offsetY,
       isTreeEdge,
+      isStackedEdge: stacked,
       isStraight,
       skipLaneCoord,
     });
@@ -523,7 +713,11 @@ function buildEdgeRoutes(
 
 /**
  * Computes the complete responsive layout for both <Flow> and <Diagram>
- * per DIAGRAM-RULES §2–§5.
+ * implementing the §3.3 fit-before-pan ladder:
+ *   (a) direction (LR >= 720, else TB)
+ *   (b) compact node variant (128-160px)
+ *   (c) wrap wide ranks into rows of N
+ *   (d) stacked list layout for trees at < 480px
  */
 export function computeDiagramLayout({
   nodes,
@@ -531,88 +725,178 @@ export function computeDiagramLayout({
   groups = [],
   layout = 'flow',
   containerWidth,
+  clampHeight = true,
 }: {
   nodes: FlowNode[];
   edges: LayoutEdgeInput[];
   groups?: FlowGroup[];
   layout?: FlowLayoutMode;
   containerWidth: number;
+  clampHeight?: boolean;
 }): ComputedDiagramLayout {
   const safeWidth = Math.max(320, containerWidth);
-  const { nodeWidth, nodeLines } = computeNodeDimensions(nodes);
+  const padFactor = 1 + FIT_PADDING;
+  const isTree = layout === 'tree';
 
-  let direction: LayoutDirection =
-    layout === 'tree'
-      ? 'TB'
-      : safeWidth >= LR_CONTAINER_BREAKPOINT
-        ? 'LR'
-        : 'TB';
-
-  let pass = runDagrePass(
-    nodes,
-    edges,
-    groups,
-    direction,
-    layout,
-    nodeWidth,
-    nodeLines,
-  );
-
-  const padFactor = 1 + FIT_PADDING * 2;
   const computeFitZoom = (b: { width: number; height: number }) => {
     const xZoom = b.width > 0 ? safeWidth / (b.width * padFactor) : 1;
-    const yZoom = b.height > 0 ? MAX_CANVAS_HEIGHT / (b.height * padFactor) : 1;
+    const yZoom =
+      clampHeight && b.height > 0 ? MAX_CANVAS_HEIGHT / (b.height * padFactor) : 1;
     return Math.min(1, xZoom, yZoom);
   };
+  type Pass = ReturnType<typeof runDagrePass>;
 
-  let fitZoom = computeFitZoom(pass.bounds);
+  // Route edges and expand bounds for skip-rank lanes (§5.9), exactly as rendered.
+  const applySkipLanes = (
+    p: Pass,
+    dir: LayoutDirection,
+    stk: boolean,
+  ): { edgeRoutes: EdgeRoute[]; finalBounds: { width: number; height: number } } => {
+    const edgeRoutes = buildEdgeRoutes(edges, p.nodeMap, dir, layout, stk);
+    let finalBounds = p.bounds;
+    for (const route of edgeRoutes) {
+      if (route.skipLaneCoord !== undefined) {
+        if (dir === 'LR') {
+          finalBounds = {
+            width: finalBounds.width,
+            height: Math.max(finalBounds.height, Math.ceil(route.skipLaneCoord + 16)),
+          };
+        } else {
+          finalBounds = {
+            width: Math.max(finalBounds.width, Math.ceil(route.skipLaneCoord + 16)),
+            height: finalBounds.height,
+          };
+        }
+      }
+    }
+    return { edgeRoutes, finalBounds };
+  };
 
-  // §3.3: If LR would shrink labels below 13px (zoom < 0.87), switch to TB first
-  if (direction === 'LR' && fitZoom < MIN_READABLE_ZOOM && layout !== 'tree') {
-    direction = 'TB';
-    pass = runDagrePass(
-      nodes,
-      edges,
-      groups,
-      direction,
-      layout,
-      nodeWidth,
-      nodeLines,
-    );
-    fitZoom = computeFitZoom(pass.bounds);
+  // Fit is evaluated against FINAL rendered bounds (nodes + skip lanes + groups), §3.3.
+  const finalFitFor = (p: Pass, dir: LayoutDirection, stk: boolean) =>
+    computeFitZoom(applySkipLanes(p, dir, stk).finalBounds);
+  const fitsAtReadable = (p: Pass, dir: LayoutDirection, stk: boolean) =>
+    finalFitFor(p, dir, stk) >= MIN_READABLE_ZOOM;
+
+  // ---- §3.3 fit-before-pan ladder ------------------------------------------
+  // (a) choose the LR/TB direction that fits best
+  let compact = false;
+  let stacked = false;
+  let dims = computeNodeDimensions(nodes, false);
+
+  const runDagre = (
+    dir: LayoutDirection,
+    compactMode: boolean,
+    wrapMaxPerRow: number | null,
+    d: { nodeWidth: number; nodeLines: Map<string, 1 | 2> },
+  ): Pass =>
+    runDagrePass(nodes, edges, groups, dir, layout, compactMode, wrapMaxPerRow, d.nodeWidth, d.nodeLines);
+
+  let direction: LayoutDirection = isTree
+    ? 'TB'
+    : safeWidth >= LR_CONTAINER_BREAKPOINT
+      ? 'LR'
+      : 'TB';
+
+  let pass = runDagre(direction, false, null, dims);
+
+  // (a) re-check the alternate direction; keep whichever fits best
+  if (!fitsAtReadable(pass, direction, stacked) && !isTree) {
+    const altDir: LayoutDirection = direction === 'LR' ? 'TB' : 'LR';
+    const altPass = runDagre(altDir, false, null, dims);
+    if (finalFitFor(altPass, altDir, stacked) > finalFitFor(pass, direction, stacked)) {
+      direction = altDir;
+      pass = altPass;
+    }
   }
 
-  const panMode = fitZoom < MIN_READABLE_ZOOM;
-  const zoom = panMode ? MIN_READABLE_ZOOM : fitZoom;
-  const canvasHeight = Math.round(
-    Math.max(
-      MIN_CANVAS_HEIGHT,
-      Math.min(MAX_CANVAS_HEIGHT, pass.bounds.height * zoom * padFactor),
-    ),
-  );
+  // (b) compact node variant (128-160px, 28px icon, 14px label) if still < 0.87
+  if (!fitsAtReadable(pass, direction, stacked)) {
+    compact = true;
+    dims = computeNodeDimensions(nodes, true);
+    pass = runDagre(direction, true, null, dims);
 
-  const edgeRoutes = buildEdgeRoutes(edges, pass.nodeMap, direction, layout);
-
-  // Expand bounds if any skip-rank lane extends beyond node bounds
-  let finalBounds = pass.bounds;
-  for (const route of edgeRoutes) {
-    if (route.skipLaneCoord !== undefined) {
-      if (direction === 'LR') {
-        finalBounds = {
-          width: finalBounds.width,
-          height: Math.max(finalBounds.height, Math.ceil(route.skipLaneCoord + 16)),
-        };
-      } else {
-        finalBounds = {
-          width: Math.max(finalBounds.width, Math.ceil(route.skipLaneCoord + 16)),
-          height: finalBounds.height,
-        };
+    // re-check direction choice with compact nodes
+    if (!fitsAtReadable(pass, direction, stacked) && !isTree) {
+      const altDir: LayoutDirection = direction === 'LR' ? 'TB' : 'LR';
+      const altPass = runDagre(altDir, true, null, dims);
+      if (finalFitFor(altPass, altDir, stacked) > finalFitFor(pass, direction, stacked)) {
+        direction = altDir;
+        pass = altPass;
       }
     }
   }
 
+  // (c) wrap wide ranks into rows of N; siblings under a tree bus wrap onto a second row
+  if (!fitsAtReadable(pass, direction, stacked)) {
+    const nodeGap = compact ? COMPACT_NODE_GAP : NODE_GAP;
+    const maxPerRowCap = Math.max(
+      1,
+      Math.floor(
+        (safeWidth / (MIN_READABLE_ZOOM * padFactor) + nodeGap) /
+          (dims.nodeWidth + nodeGap),
+      ),
+    );
+    // try wrapping, reducing N until it fits (single column always fits at any width >= 320)
+    for (let n = Math.min(maxPerRowCap, nodes.length - 1); n >= 1; n--) {
+      const wrapped = runDagre('TB', compact, n, dims);
+      if (fitsAtReadable(wrapped, 'TB', stacked)) {
+        direction = 'TB';
+        pass = wrapped;
+        break;
+      }
+      // keep the narrowest variant as fallback
+      if (wrapped.bounds.width < pass.bounds.width) {
+        direction = 'TB';
+        pass = wrapped;
+      }
+    }
+  }
+
+  // (d) stacked indented-list layout for trees and class diagrams under 480px
+  if (!fitsAtReadable(pass, direction, stacked) && isTree && safeWidth < STACKED_TREE_MAX_WIDTH) {
+    stacked = true;
+    direction = 'TB';
+
+    const normalDims = computeNodeDimensions(nodes, false);
+    const stackedNormal = runStackedTreePass(nodes, edges, groups, false, normalDims.nodeWidth, normalDims.nodeLines);
+    const compactDims = computeNodeDimensions(nodes, true);
+    const stackedCompact = runStackedTreePass(nodes, edges, groups, true, compactDims.nodeWidth, compactDims.nodeLines);
+
+    if (fitsAtReadable(stackedNormal, 'TB', true)) {
+      compact = false;
+      dims = normalDims;
+      pass = stackedNormal;
+    } else {
+      compact = true;
+      dims = compactDims;
+      pass = stackedCompact;
+    }
+  }
+
+  // ---- edge routing (may expand bounds for skip-rank lanes, §5.9) ----------
+  const { edgeRoutes, finalBounds } = applySkipLanes(pass, direction, stacked);
+
+  // Re-fit AFTER skip-lane expansion so nothing is clipped (§3.1/§3.3).
+  // If the expanded bounds no longer fit at readable zoom, drop to pan (never at >= 640px).
+  const finalFitZoom = computeFitZoom(finalBounds);
+  const canFit = finalFitZoom >= MIN_READABLE_ZOOM;
+
+  // §3.3: pan is the last resort and never allowed when container >= 640px wide
+  const panMode = !canFit && safeWidth < NO_PAN_CONTAINER_MIN;
+
+  // canFit -> render at fitZoom (>=0.87, <=1); otherwise readable pan zoom
+  const zoom = canFit ? Math.max(MIN_READABLE_ZOOM, finalFitZoom) : MIN_READABLE_ZOOM;
+
+  const rawHeight = finalBounds.height * zoom * padFactor;
+  const canvasHeight = clampHeight
+    ? Math.round(Math.max(MIN_CANVAS_HEIGHT, Math.min(MAX_CANVAS_HEIGHT, rawHeight)))
+    : Math.round(Math.max(MIN_CANVAS_HEIGHT, rawHeight));
+
   return {
     direction,
+    compact,
+    stacked,
     nodes: pass.nodeMap,
     groups: pass.groupBoxes,
     edges: edgeRoutes,
@@ -620,7 +904,7 @@ export function computeDiagramLayout({
     zoom,
     panMode,
     canvasHeight,
-    nodeWidth,
+    nodeWidth: dims.nodeWidth,
   };
 }
 
@@ -650,6 +934,31 @@ export function getHandleCoords(
 }
 
 /**
+ * Builds an orthogonal left-side elbow path for stacked list trees (§3.3d).
+ */
+export function buildStackedTreePath(
+  sx: number,
+  sy: number,
+  tx: number,
+  ty: number,
+  parentBox: NodeBox,
+): { path: string; labelX: number; labelY: number } {
+  const stemX = parentBox.x + 12;
+  const r = Math.min(EDGE_RADIUS, Math.abs(tx - stemX), Math.abs(ty - sy) / 2);
+  const path = [
+    `M ${stemX} ${sy}`,
+    `L ${stemX} ${ty - r}`,
+    `Q ${stemX} ${ty} ${stemX + r} ${ty}`,
+    `L ${tx} ${ty}`,
+  ].join(' ');
+  return {
+    path,
+    labelX: (stemX + tx) / 2,
+    labelY: ty,
+  };
+}
+
+/**
  * Builds an orthogonal elbow/bus SVG path for tree connectors (§5.4).
  */
 export function buildTreeBusPath(
@@ -666,7 +975,12 @@ export function buildTreeBusPath(
       labelY: busY,
     };
   }
-  const r = Math.min(EDGE_RADIUS, Math.abs(tx - sx) / 2, Math.abs(busY - sy), Math.abs(ty - busY));
+  const r = Math.min(
+    EDGE_RADIUS,
+    Math.abs(tx - sx) / 2,
+    Math.abs(busY - sy),
+    Math.abs(ty - busY),
+  );
   const dirX = tx > sx ? 1 : -1;
   const dirY1 = busY >= sy ? 1 : -1;
   const dirY2 = ty >= busY ? 1 : -1;
@@ -726,7 +1040,6 @@ export function buildSmoothStepSvgPath(
     return buildTreeBusPath(sx, sy, tx, ty);
   }
 
-  // L-bend when one is horizontal and one is vertical
   if (isSourceHorizontal) {
     const r = Math.min(EDGE_RADIUS, Math.abs(tx - sx), Math.abs(ty - sy));
     const dirX = tx >= sx ? 1 : -1;
@@ -805,3 +1118,5 @@ export function buildSkipRankPath(
   ].join(' ');
   return { path, labelX: laneCoord, labelY: midY };
 }
+
+

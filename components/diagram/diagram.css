@@ -31,6 +31,27 @@
   container-type: inline-size;
 }
 
+/* Static <Diagram> stage: never clip, always fit width. */
+.diagram-stage-wrap {
+  container-type: inline-size;
+  width: 100%;
+}
+
+.diagram-stage-slot {
+  width: min(100%, calc(var(--stage-rendered-w, 0px) * var(--s)));
+  height: calc(var(--stage-rendered-h, 0px) * var(--s));
+}
+
+.diagram-stage-inner {
+  transform-origin: top left;
+  /* scale to fit container, never upscale beyond computed zoom */
+  transform: scale(min(var(--stage-zoom, 1), calc(100cqi / var(--stage-w, 1px))));
+}
+
+.diagram-stage-slot {
+  --s: min(1, calc(100cqi / var(--stage-rendered-w, 1px)));
+}
+
 .diagram-view-lr {
   display: none;
 }

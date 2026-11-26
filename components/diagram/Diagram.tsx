@@ -1,4 +1,4 @@
-import './diagram.css';
+﻿import './diagram.css';
 
 import {
   Box,
@@ -17,6 +17,7 @@ import { cn } from '../../lib/utils';
 import {
   buildSkipRankPath,
   buildSmoothStepSvgPath,
+  buildStackedTreePath,
   buildTreeBusPath,
   computeDiagramLayout,
   getHandleCoords,
@@ -50,6 +51,8 @@ const CATEGORY_STYLE: Record<FlowNodeCategory, { bg: string; fg: string }> = {
   service: { bg: 'var(--flow-cat-service-bg)', fg: 'var(--flow-cat-service-fg)' },
   data: { bg: 'var(--flow-cat-data-bg)', fg: 'var(--flow-cat-data-fg)' },
   external: { bg: 'var(--flow-cat-external-bg)', fg: 'var(--flow-cat-external-fg)' },
+  abstraction: { bg: 'var(--flow-cat-abstraction-bg)', fg: 'var(--flow-cat-abstraction-fg)' },
+  concrete: { bg: 'var(--flow-cat-concrete-bg)', fg: 'var(--flow-cat-concrete-fg)' },
 };
 
 function getStaticEdgeStroke(kind: FlowEdgeKind): string {
@@ -76,32 +79,46 @@ function DiagramStage({
     groups: data.groups ?? [],
     layout: data.layout,
     containerWidth,
+    clampHeight: false,
   });
 
-  const pad = 20;
+  const pad = 8;
   const stageWidth = computed.bounds.width + pad * 2;
   const stageHeight = computed.bounds.height + pad * 2;
   const scaledWidth = Math.round(stageWidth * computed.zoom);
   const scaledHeight = Math.round(stageHeight * computed.zoom);
+  // §3.3a: measured overflow — only show pan hint + overflow when content really exceeds the container.
+  const hasHorizontalOverflow =
+    computed.panMode && scaledWidth > containerWidth + 1;
   const edgeMetaMap = new Map(
     data.edges.map((e) => [`${e.from}->${e.to}:${e.kind ?? 'request'}`, e]),
   );
 
   return (
-    <div className="relative w-full overflow-x-auto">
+    <div
+      className={cn(
+        'relative w-full',
+        hasHorizontalOverflow ? 'overflow-x-auto' : 'overflow-hidden',
+      )}
+    >
+      {/* container-query scale safety net: never clip, always fit width (§3.1/§3.3) */}
       <div
-        className="relative mx-auto"
+        className="diagram-stage-wrap"
         style={{
-          width: scaledWidth,
-          height: scaledHeight,
+          ['--stage-w' as string]: `${stageWidth}px`,
+          ['--stage-rendered-w' as string]: `${scaledWidth}px`,
+          ['--stage-rendered-h' as string]: `${scaledHeight}px`,
+          ['--stage-zoom' as string]: computed.zoom,
         }}
       >
+      <div
+        className="relative mx-auto diagram-stage-slot"
+      >
         <div
-          className="relative origin-top-left"
+          className="relative origin-top-left diagram-stage-inner"
           style={{
             width: stageWidth,
             height: stageHeight,
-            transform: computed.zoom < 1 ? `scale(${computed.zoom})` : undefined,
           }}
         >
         <svg
@@ -177,25 +194,27 @@ function DiagramStage({
                 route.offsetY,
               );
 
-              const geom = route.isTreeEdge
-                ? buildTreeBusPath(start.x, start.y, end.x, end.y)
-                : route.skipLaneCoord !== undefined
-                  ? buildSkipRankPath(
-                      start.x,
-                      start.y,
-                      end.x,
-                      end.y,
-                      computed.direction,
-                      route.skipLaneCoord,
-                    )
-                  : buildSmoothStepSvgPath(
-                      start.x,
-                      start.y,
-                      end.x,
-                      end.y,
-                      route.sourceHandle,
-                      route.targetHandle,
-                    );
+              const geom = route.isStackedEdge
+                ? buildStackedTreePath(start.x, start.y, end.x, end.y, fromBox)
+                : route.isTreeEdge
+                  ? buildTreeBusPath(start.x, start.y, end.x, end.y)
+                  : route.skipLaneCoord !== undefined
+                    ? buildSkipRankPath(
+                        start.x,
+                        start.y,
+                        end.x,
+                        end.y,
+                        computed.direction,
+                        route.skipLaneCoord,
+                      )
+                    : buildSmoothStepSvgPath(
+                        start.x,
+                        start.y,
+                        end.x,
+                        end.y,
+                        route.sourceHandle,
+                        route.targetHandle,
+                      );
 
               const rawEdge = edgeMetaMap.get(route.key);
               const isDashed =
@@ -253,10 +272,12 @@ function DiagramStage({
           const Icon = ICON_MAP[node.icon ?? 'service'] ?? Server;
           const tint = CATEGORY_STYLE[resolveNodeCategory(node)];
           const isProblem = node.variant === 'problem';
+          const compact = computed.compact;
 
           return (
             <div
               key={node.id}
+              title={compact && node.subtitle ? `${node.label}: ${node.subtitle}` : undefined}
               style={{
                 left: box.x + pad,
                 top: box.y + pad,
@@ -264,34 +285,44 @@ function DiagramStage({
                 minHeight: box.height,
               }}
               className={cn(
-                'absolute flex items-center gap-2.5 rounded-panel bg-card px-3 py-2 shadow-xs',
+                'absolute flex items-center rounded-panel bg-card shadow-xs',
+                compact ? 'gap-2 px-2.5 py-1.5' : 'gap-2.5 px-3 py-2',
                 isProblem
                   ? 'border border-dashed border-[var(--border-strong)]'
                   : 'border border-border',
               )}
             >
               <div
-                className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]"
+                className={cn(
+                  'flex shrink-0 items-center justify-center',
+                  compact ? 'h-7 w-7 rounded-[8px]' : 'h-9 w-9 rounded-[10px]',
+                )}
                 style={{ backgroundColor: tint.bg, color: tint.fg }}
                 aria-hidden="true"
               >
-                <Icon className="h-[18px] w-[18px]" strokeWidth={2} />
+                <Icon className={compact ? 'h-4 w-4' : 'h-[18px] w-[18px]'} strokeWidth={2} />
               </div>
 
               <div className="min-w-0 flex-1">
-                <div className="line-clamp-2 break-words text-[15px] font-semibold leading-[1.2] text-foreground">
+                <div
+                  className={cn(
+                    'line-clamp-2 break-words font-semibold leading-[1.2] text-foreground',
+                    compact ? 'text-[14px]' : 'text-[15px]',
+                  )}
+                >
                   {node.label}
                 </div>
-                {node.subtitle && (
+                {!compact && node.subtitle && (
                   <div className="mt-0.5 line-clamp-1 break-words text-[13px] font-normal leading-tight text-muted-foreground">
                     {node.subtitle}
                   </div>
                 )}
               </div>
 
-              {isProblem && (
+                {isProblem && (
                 <span
                   className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-pill border border-[var(--border-strong)] bg-secondary text-foreground"
+                  role="img"
                   aria-label="Problem"
                 >
                   <X className="h-3 w-3" strokeWidth={2.5} />
@@ -302,12 +333,19 @@ function DiagramStage({
         })}
         </div>
       </div>
-      {computed.panMode && (
-        <div className="pointer-events-none mt-2 flex justify-end">
-          <span className="rounded-pill border border-border bg-card px-2.5 py-1 text-caption-1 font-medium text-muted-foreground shadow-xs">
-            Drag to see more →
-          </span>
-        </div>
+      </div>
+      {hasHorizontalOverflow && (
+        <>
+          <div
+            aria-hidden="true"
+            className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-grouped to-transparent"
+          />
+          <div className="pointer-events-none mt-2 flex justify-end">
+            <span className="rounded-pill border border-border bg-card px-2.5 py-1 text-caption-1 font-medium text-muted-foreground shadow-xs">
+              Drag to see more â†’
+            </span>
+          </div>
+        </>
       )}
     </div>
   );
@@ -338,14 +376,21 @@ export function Diagram(props: DiagramProps) {
 
         <div className="rounded-panel bg-grouped p-2">
           {parsed.layout === 'tree' ? (
-            <DiagramStage data={parsed} containerWidth={760} />
+            <div className="diagram-container">
+              <div className="diagram-view-tb">
+                <DiagramStage data={parsed} containerWidth={320} />
+              </div>
+              <div className="diagram-view-lr">
+                <DiagramStage data={parsed} containerWidth={720} />
+              </div>
+            </div>
           ) : (
             <>
               <div className="diagram-view-tb">
-                <DiagramStage data={parsed} containerWidth={360} />
+                <DiagramStage data={parsed} containerWidth={320} />
               </div>
               <div className="diagram-view-lr">
-                <DiagramStage data={parsed} containerWidth={760} />
+                <DiagramStage data={parsed} containerWidth={720} />
               </div>
             </>
           )}

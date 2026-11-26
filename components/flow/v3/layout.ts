@@ -133,6 +133,7 @@ export function computeFlowGraph({
         icon: node.icon ?? 'service',
         category: resolveNodeCategory(node),
         variant: node.variant ?? 'default',
+        compact: computed.compact,
         isActive: activeNodeIds.has(node.id),
         isOverview,
         isError: activeStep?.kind === 'error',

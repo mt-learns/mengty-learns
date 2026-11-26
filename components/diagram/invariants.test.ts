@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 import {
   buildSkipRankPath,
   buildSmoothStepSvgPath,
+  buildStackedTreePath,
   buildTreeBusPath,
   computeDiagramLayout,
   getHandleCoords,
@@ -17,17 +18,32 @@ import {
 } from './types';
 
 const DOCS_DIR = path.resolve(process.cwd(), 'content/docs');
-const OWNED_MDX_FILES = [
-  'design/bridge.mdx',
-  'kubernetes/service-routing.mdx',
-  'architecture/layered.mdx',
-  'architecture/hexagonal.mdx',
-  'architecture/dependency-inversion.mdx',
-  'architecture/compare-styles.mdx',
-  'kitchen-sink.mdx',
-];
 
-const TEST_WIDTHS = [320, 360, 720, 1024] as const;
+// §3.3 / §9.1: EVERY flow and diagram in content is checked at these widths.
+const TEST_WIDTHS = [360, 720, 1024] as const;
+
+/** Recursively collects every .mdx file under content/docs that uses <Flow> or <Diagram>. */
+function collectContentMdx(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) {
+      out.push(...collectContentMdx(full));
+    } else if (entry.name.endsWith('.mdx')) {
+      out.push(full);
+    }
+  }
+  return out;
+}
+
+const CONTENT_MDX_FILES = collectContentMdx(DOCS_DIR)
+  .filter((f) => {
+    const src = fs.readFileSync(f, 'utf8');
+    return src.includes('<Flow') || src.includes('<Diagram');
+  })
+  .map((f) => path.relative(DOCS_DIR, f).split(path.sep).join('/'));
+
+const OWNED_MDX_FILES = CONTENT_MDX_FILES;
 
 /**
  * Extracts JSX prop objects from <Flow ... /> and <Diagram ... /> tags in MDX.
@@ -158,8 +174,30 @@ function assertLayoutInvariants(
   label: string,
   layoutResult: ReturnType<typeof computeDiagramLayout>,
   rawNodes: { id: string; rank?: number }[],
+  containerWidth: number,
+  isStaticDiagram = false,
 ) {
   const boxes = [...layoutResult.nodes.values()];
+
+  // 0. §3.3 Fit-before-pan: every diagram in content must fit without pan at 360, 720, 1024
+  if (containerWidth >= 360) {
+    expect(
+      layoutResult.panMode,
+      `${label} must fit without pan at ${containerWidth}px`,
+    ).toBe(false);
+  }
+  if (containerWidth >= 640) {
+    expect(
+      layoutResult.panMode,
+      `${label} pan is never allowed at >= 640px`,
+    ).toBe(false);
+  }
+  if (isStaticDiagram) {
+    expect(
+      layoutResult.bounds.width * layoutResult.zoom,
+      `${label} static diagram must fit containerWidth ${containerWidth}px`,
+    ).toBeLessThanOrEqual(containerWidth + 1);
+  }
 
   // 1. All nodes inside bounds
   for (const box of boxes) {
@@ -201,8 +239,9 @@ function assertLayoutInvariants(
     }
   }
 
-  // 4. No node-badge overlaps
-  for (const route of layoutResult.edges) {
+  // 4. No node-badge overlaps (for <Flow> which renders step badges)
+  if (!isStaticDiagram) {
+    for (const route of layoutResult.edges) {
     const fromBox = layoutResult.nodes.get(route.from)!;
     const toBox = layoutResult.nodes.get(route.to)!;
     const start = getHandleCoords(
@@ -217,25 +256,27 @@ function assertLayoutInvariants(
       route.offsetX,
       route.offsetY,
     );
-    const geom = route.isTreeEdge
-      ? buildTreeBusPath(start.x, start.y, end.x, end.y)
-      : route.skipLaneCoord !== undefined
-        ? buildSkipRankPath(
-            start.x,
-            start.y,
-            end.x,
-            end.y,
-            layoutResult.direction,
-            route.skipLaneCoord,
-          )
-        : buildSmoothStepSvgPath(
-            start.x,
-            start.y,
-            end.x,
-            end.y,
-            route.sourceHandle,
-            route.targetHandle,
-          );
+    const geom = route.isStackedEdge
+      ? buildStackedTreePath(start.x, start.y, end.x, end.y, fromBox)
+      : route.isTreeEdge
+        ? buildTreeBusPath(start.x, start.y, end.x, end.y)
+        : route.skipLaneCoord !== undefined
+          ? buildSkipRankPath(
+              start.x,
+              start.y,
+              end.x,
+              end.y,
+              layoutResult.direction,
+              route.skipLaneCoord,
+            )
+          : buildSmoothStepSvgPath(
+              start.x,
+              start.y,
+              end.x,
+              end.y,
+              route.sourceHandle,
+              route.targetHandle,
+            );
 
     const badgeX =
       geom.labelX + (layoutResult.direction === 'LR' ? 0 : 14);
@@ -254,27 +295,32 @@ function assertLayoutInvariants(
         `${label} badge on ${route.key} must not overlap node ${box.id}`,
       ).toBe(false);
     }
+    }
   }
 
-  // 5. Same-rank centres equal (±0.5px)
-  const byRank = new Map<number, NodeBox[]>();
-  for (const raw of rawNodes) {
-    if (raw.rank === undefined) continue;
-    const box = layoutResult.nodes.get(raw.id);
-    if (!box) continue;
-    const list = byRank.get(raw.rank) ?? [];
-    list.push(box);
-    byRank.set(raw.rank, list);
-  }
-  for (const [rank, rankBoxes] of byRank.entries()) {
-    if (rankBoxes.length < 2) continue;
-    const ref = layoutResult.direction === 'LR' ? rankBoxes[0].cx : rankBoxes[0].cy;
-    for (const b of rankBoxes) {
-      const val = layoutResult.direction === 'LR' ? b.cx : b.cy;
-      expect(
-        Math.abs(val - ref),
-        `${label} rank ${rank} node ${b.id} centre alignment`,
-      ).toBeLessThanOrEqual(0.5);
+  // 5. Same-rank centres equal (±0.5px) when not stacked or wrapped
+  if (!layoutResult.stacked) {
+    const byRank = new Map<number, NodeBox[]>();
+    for (const raw of rawNodes) {
+      if (raw.rank === undefined) continue;
+      const box = layoutResult.nodes.get(raw.id);
+      if (!box) continue;
+      const list = byRank.get(raw.rank) ?? [];
+      list.push(box);
+      byRank.set(raw.rank, list);
+    }
+    for (const [rank, rankBoxes] of byRank.entries()) {
+      if (rankBoxes.length < 2) continue;
+      const distinctRows = new Set(rankBoxes.map((b) => Math.round(b.cy)));
+      if (layoutResult.direction === 'TB' && distinctRows.size > 1) continue; // wrapped rank
+      const ref = layoutResult.direction === 'LR' ? rankBoxes[0].cx : rankBoxes[0].cy;
+      for (const b of rankBoxes) {
+        const val = layoutResult.direction === 'LR' ? b.cx : b.cy;
+        expect(
+          Math.abs(val - ref),
+          `${label} rank ${rank} node ${b.id} centre alignment`,
+        ).toBeLessThanOrEqual(0.5);
+      }
     }
   }
 
@@ -325,6 +371,8 @@ describe('DIAGRAM-RULES §9.1 layout invariants across all MDX flows and diagram
               `${parsed.id}:${variant.id}@${width}`,
               layoutResult,
               variant.nodes,
+              width,
+              false,
             );
           });
         }
@@ -346,12 +394,15 @@ describe('DIAGRAM-RULES §9.1 layout invariants across all MDX flows and diagram
             groups: parsed.groups ?? [],
             layout: parsed.layout,
             containerWidth: width,
+            clampHeight: false,
           });
 
           assertLayoutInvariants(
             `${parsed.id}@${width}`,
             layoutResult,
             parsed.nodes,
+            width,
+            true,
           );
         });
       }
