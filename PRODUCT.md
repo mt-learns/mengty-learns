@@ -9,7 +9,7 @@ web
 ## Users
 
 - **Lim Mengty (primary author and learner):** Uses the site daily to review flashcards (`/review`), write structured MDX notes fast (`pnpm new`), verify commands in runnable labs, and retrieve reference commands and architecture patterns.
-- **Peers, engineering managers, and recruiters:** Scan projects (`/projects`), technical depth (`/docs`), and engineering judgment (`/radar`, `/digest`, `/about`) in under 30 seconds, or read one deep-dive concept page end-to-end.
+- **Peers, engineering managers, and recruiters:** Scan technical depth (`/docs`), the learning system at work (`/review`, animated flows, CI-tested labs), and engineering judgment (`/radar`, `/digest`) in under 30 seconds, or read one deep-dive concept page end-to-end.
 
 ## Product Purpose
 
@@ -46,7 +46,7 @@ Unlike a chronological blog or a generic documentation site, Mengty Learns pairs
 
 ## Evidence on Hand
 
-- Production static build (`out/`) with 9 doc sections, interactive `<Flow>` v3 concept pages (`design/bridge`, `kubernetes/service-routing`, `architecture/*`), runnable labs (`labs/docker-multistage-next`, `labs/k8s-service-routing`, `labs/tofu-local-file`), `/radar` (12 entries), `/digest`, `/projects`, `/about`, and `/review` (21 generated flashcards).
+- Production static build (`out/`) with 9 doc sections, interactive `<Flow>` v3 concept pages (`design/bridge`, `kubernetes/service-routing`, `architecture/*`), runnable labs (`labs/docker-multistage-next`, `labs/k8s-service-routing`, `labs/tofu-local-file`), `/radar` (12 entries), `/digest` and `/review` (21 generated flashcards).
 
 ## Product Principles
 

@@ -1,10 +1,9 @@
 import Link from 'next/link';
-import { LargeTitle, Tile, SectionIcon as LegacySectionIcon } from '@/components/ios/tile';
+import { LargeTitle, Tile } from '@/components/ios/tile';
 import { Illustration, SectionIcon } from '@/components/illustrations';
 import { GroupedList, GroupedRow } from '@/components/ios/grouped-list';
 import { Button } from '@/components/ui/button';
 import { source } from '@/lib/source';
-import { projects } from '@/content/projects';
 
 export default function HomePage() {
   const pages = source.getPages().sort((a, b) => {
@@ -13,7 +12,6 @@ export default function HomePage() {
     return db - da;
   });
   const latest = pages.slice(0, 5);
-  const featuredProjects = projects.slice(0, 2);
 
   return (
     <div className="container max-w-screen-xl px-4 py-12">
@@ -27,7 +25,7 @@ export default function HomePage() {
               <Link href="/docs">Start learning</Link>
             </Button>
             <Button variant="outline" asChild className="min-h-tap rounded-control px-6">
-              <Link href="/projects">View projects</Link>
+              <Link href="/review">Today&apos;s review</Link>
             </Button>
           </div>
         </div>
@@ -75,21 +73,6 @@ export default function HomePage() {
         </GroupedList>
       </section>
 
-      <section className="my-12">
-        <h2 className="text-2xl font-bold mb-6 font-headline">Featured Projects</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {featuredProjects.map((project) => (
-            <Tile
-              key={project.title}
-              title={project.title}
-              description={project.description}
-              href={project.url}
-              badge={project.tags[0]}
-              icon={<LegacySectionIcon name="project" />}
-            />
-          ))}
-        </div>
-      </section>
     </div>
   );
 }
