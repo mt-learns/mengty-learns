@@ -12,3 +12,11 @@ Personal learning site for DevOps, architecture and security notes.
 | shadcn/ui | latest |
 | TypeScript | ^7.0.2 |
 | React | ^19.3.1 |
+| pnpm | 11.6.0 |
+
+## Cloudflare Pages
+
+- **Build command:** `pnpm build`
+- **Build output directory:** `out`
+- **Node version:** `22`
+- **Custom domain:** `mengtylearns.com` (apex). Redirect `www` to apex in Cloudflare rules.
