@@ -1515,6 +1515,7 @@ export function placeEdgeLabels(
       const half = (sg.vertical ? height : width) / 2 + EDGE_LABEL_CLEARANCE + 0.5;
       const fractions = [0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8, 0.1, 0.9];
       if (sg.len > 2 * half) fractions.push(half / sg.len, 1 - half / sg.len);
+      fractions.push(0, 1);
       for (const t of fractions) {
         const px = sg.p.x + (sg.q.x - sg.p.x) * t;
         const py = sg.p.y + (sg.q.y - sg.p.y) * t;
