@@ -33,7 +33,7 @@
 |---|---|
 | 3.1 | **MUST** fit the whole diagram inside the card. Use `fitView` with `padding: 0.12` on mount, on container resize, and on variant change. Nothing may be clipped at any width ≥ 320px. |
 | 3.2 | **Canvas height = layout height × zoom + padding**, clamped to 240–560px. No fixed 420px with empty space or clipping. |
-| 3.3 | **Fit before pan.** Try these in order until the diagram fits the container at zoom ≥ 0.87 (label ≥ 13px): **(a)** choose the LR/TB direction that fits best; **(b)** the **compact node variant** (width 128–160px, 28px icon, 14px label, subtitle moved into the step text/tooltip); **(c)** **wrap wide ranks**: when a rank has more nodes than fit, split it into rows of N (siblings under a tree bus wrap onto a second row, still connected by the bus); **(d)** for trees and class diagrams at < 480px, the **stacked list layout** (an indented vertical tree, like a file explorer, with elbow connectors on the left). **Pan is the last resort, and is never allowed when the container is ≥ 640px wide.** |
+| 3.3 | **Fit before pan.** Try these in order until the diagram fits the container at zoom ≥ 0.87 (label ≥ 13px): **(a)** choose the LR/TB direction that fits best (respecting an explicit desktop `direction="LR"` preference on wide containers before falling back); **(b)** the **compact node variant** (width 112–160px, 28px icon, 14px label, subtitle moved into the step text/tooltip; nodes may widen past 160px up to 240px when a label would otherwise need 3 lines because §4.1 wins, and the fit ladder re-checks the result); **(c)** **wrap wide ranks**: when a rank has more nodes than fit, split it into rows of N (siblings under a tree bus wrap onto a second row, still connected by the bus); **(d)** for trees and class diagrams at < 480px, the **stacked list layout** (an indented vertical tree, like a file explorer, with elbow connectors on the left). **Pan is the last resort, and is never allowed when the container is ≥ 640px wide.** |
 | 3.3a | The pan hint ("Drag to see more") appears **only** when content actually overflows (measured), with a fade edge on the overflowing side. Never when everything fits. |
 | 3.4 | The camera does **not** move on step change (no auto-pan), so readers keep their orientation. |
 | 3.5 | Zoom controls appear only when §3.3 pan mode is active. |
@@ -42,7 +42,7 @@
 
 | # | Rule |
 |---|---|
-| 4.1 | **Full label always visible:** wrap to a maximum of 2 lines, **never truncate with an ellipsis**. Node width = measured text width + icon + padding, clamped to **160–240px**. All nodes in one diagram use the **same width** (the widest, within the clamp) for a calm grid. Height is 64px (1 line) or 80px (2 lines). |
+| 4.1 | **Full label always visible:** wrap to a maximum of 2 lines, **never truncate with an ellipsis**. Node width = measured text width + icon + padding, clamped to **160–240px** (compact nodes may also widen up to 240px when needed to avoid 3-line wrapping). All nodes in one diagram use the **same width** (the widest, within the clamp) for a calm grid. Height is 64px (1 line) or 80px (2 lines). Group labels wrap at word boundaries without truncation and reserve vertical height. |
 | 4.2 | Label 15px / 600. Subtitle 13px / 400 in `--muted-foreground`. Labels **≤ 18 characters**; put more detail in the subtitle (a lint check in validation warns). |
 | 4.3 | Icon tile 36px rounded squircle with a category tint (client = gray, network = blue, service = indigo, data = green, external = orange, abstraction = purple, concrete = teal). **Tint only on the icon tile**, never on borders or text. **Red/destructive is never a category tint.** |
 | 4.4 | **Dimming never touches text:** inactive nodes keep text at full contrast (≥ 4.5:1). Dim them with a muted border, a desaturated icon tile, and a background step only. **No `opacity` on the node element.** |
@@ -69,7 +69,7 @@
 |---|---|
 | 6.1 | **Show a badge only on the active edge:** a 22px circle with 12px / 700 text, accent background and contrasting text. **Never list several numbers** ("1·5"). Visited edges show no badge; they're tinted (§5.6). |
 | 6.2 | The badge sits at the edge midpoint, **offset 14px perpendicular to the line** (above for LR, right for TB). It must never cover a line junction, an arrowhead or a node. |
-| 6.3 | Optional edge labels (e.g. "HTTP", "SQL"): 12px / 500 pill with a card background and a 1px border, placed at the midpoint on the opposite side to the badge. Max 12 characters. |
+| 6.3 | Optional edge labels (e.g. "HTTP", "SQL"): 12px / 500 pill with a card background and a 1px border. Max 12 characters. Pills prefer the midpoint opposite the badge, and the layout places them clear of nodes, group labels, badges, other pills, and canvas bounds (trying along-segment positions including segment bends). LR rank gaps widen to hold the widest pill plus clearance. Compact flows show only the active edge's pill while stepping, and a pill with no free spot is dropped (the step text names it). |
 | 6.4 | The full numbering lives in the step list (Player) and the `<ol>` fallback, matched by colour and number. |
 
 ## 7. Colour and theme
@@ -98,7 +98,7 @@
 | 9.2 | **Validation:** unknown node ids, more than 7 nodes, more than 8 steps, or labels over 18 characters fail (or warn, for the label length) at build time. |
 | 9.3 | **Screenshots:** a Playwright script (`pnpm qa:diagrams`) captures every page with a flow or diagram at **360 / 768 / 1280px × light / dark**, saved to `qa/diagrams/<page>-<width>-<theme>.png` (gitignored). The worker **must open and look at every screenshot** and fix issues before reporting. List the reviewed files in the report. |
 | 9.4 | Reduced-motion run of the same script (emulate `reduce`) for one flow. |
-| 9.5 | Bundle: report the lazy flow chunk size (gzip). Target ≤ 80 KB. Use React Flow core only, import dagre lazily together with it, and check for duplicate React or zustand copies. |
+| 9.5 | Bundle: report the lazy flow chunk size (gzip). Budget **≤ 92 KB** (measured `88.0 KiB` / `90,152 B` gzip). `@xyflow/react@13.0.3` ships a single pre-bundled ESM entry (`dist/index.js`) with single copies of `zustand`, `d3-zoom`, and `d3-selection`; `dagre` is excluded via server-side precomputation (fallback in a separate 22.4 KiB chunk), so ≤ 80 KB is not reachable without forking or replacing React Flow. |
 
 ## 10. Authoring checklist (for every new diagram)
 - [ ] ≤ 7 nodes, ≤ 8 steps, labels ≤ 18 characters, subtitles for details
