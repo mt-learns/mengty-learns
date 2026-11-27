@@ -1,5 +1,6 @@
 import { Atkinson_Hyperlegible_Next, Inter, JetBrains_Mono } from 'next/font/google';
 import { Provider } from '@/components/provider';
+import { ThemeColorSync } from '@/components/pwa/standalone-ui';
 import { SwRegister } from '@/components/pwa/sw-register';
 import './global.css';
 import { type ReactNode } from 'react';
@@ -99,8 +100,9 @@ export const metadata: Metadata = {
 export default function Layout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} ${atkinson.variable} ${atkinsonItalic.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
-      <body className="flex flex-col min-h-screen">
+      <body className="flex flex-col min-h-dvh">
         <Provider>
+          <ThemeColorSync />
           <SwRegister />
           {children}
         </Provider>
