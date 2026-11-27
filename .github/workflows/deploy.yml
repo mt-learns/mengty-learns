@@ -1,16 +1,19 @@
 name: Deploy
 
 # Cloudflare Workers via OpenNext (docs/deploy/CLOUDFLARE-WORKERS-PLAN.md).
-#   pull_request (same repo) -> new Worker *version* + preview URL, not live
-#   push to main / manual run on main -> production deploy (learn.limmengty.com)
+# RULE: every production deploy is a release (AGENTS.md section 8, RUNBOOK section 9).
+#   pull_request (same repo)  -> new Worker *version* + preview URL, not live
+#   push of a tag vX.Y.Z      -> checks -> production deploy (learn.limmengty.com)
+#                                -> GitHub Release vX.Y.Z with generated notes
+#   push to main              -> nothing here (ci.yml / quality.yml run the checks)
+# The tag must match package.json "version" and point at a commit on main.
 # Rollback: `pnpm exec wrangler rollback [<version-id>]` or dashboard ->
 # Workers & Pages -> mengty-learns -> Deployments. See docs/deploy/RUNBOOK.md.
 
 on:
-  push:
-    branches: [main]
   pull_request:
-  workflow_dispatch:
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
 
 permissions:
   contents: read
@@ -31,6 +34,21 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+          fetch-depth: 0
+
+      - name: Check release tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          version="v$(node -p "require('./package.json').version")"
+          if [ "$version" != "$GITHUB_REF_NAME" ]; then
+            echo "::error::Tag $GITHUB_REF_NAME does not match package.json version $version"
+            exit 1
+          fi
+          git fetch --no-tags origin main
+          if ! git merge-base --is-ancestor "$GITHUB_SHA" origin/main; then
+            echo "::error::Tag $GITHUB_REF_NAME points at a commit that is not on main"
+            exit 1
+          fi
 
       # pnpm version comes from package.json "packageManager"
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
@@ -69,15 +87,35 @@ jobs:
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Deploy to production
-        if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
+        if: startsWith(github.ref, 'refs/tags/v')
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -o pipefail
-          pnpm exec opennextjs-cloudflare deploy --tag "${GITHUB_SHA::7}" 2>&1 | tee deploy.log
+          pnpm exec opennextjs-cloudflare deploy --tag "$GITHUB_REF_NAME" --message "Release $GITHUB_REF_NAME (${GITHUB_SHA::7})" 2>&1 | tee deploy.log
           {
-            echo "### Production deploy"
+            echo "### Production deploy $GITHUB_REF_NAME"
             echo
             grep -E "https://|Current Version ID:" deploy.log | sed 's/^/- /' || true
           } >> "$GITHUB_STEP_SUMMARY"
+
+  release:
+    # Runs only after a successful production deploy of the same tag.
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "$GITHUB_REF_NAME" \
+            --repo "$GITHUB_REPOSITORY" \
+            --verify-tag \
+            --title "$GITHUB_REF_NAME" \
+            --generate-notes \
+            --notes "Deployed to https://learn.limmengty.com from ${GITHUB_SHA::7}. Rollback: docs/deploy/RUNBOOK.md."

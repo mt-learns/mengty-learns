@@ -45,6 +45,20 @@ pnpm lint && pnpm typecheck && pnpm test && pnpm build
 - Workers never push and never merge. The lead reviews, merges into `main`, then deletes the worktree.
 - "Done" means `git log` shows the commits and `git status` is clean.
 
+## 8. Releases and deploys (every deploy is a release)
+- **Production deploys happen only by pushing a SemVer tag `vX.Y.Z`.** `.github/workflows/deploy.yml` checks the tag, runs lint/typecheck/test/build, deploys to Cloudflare Workers (`learn.limmengty.com`), and then creates the GitHub Release `vX.Y.Z` with generated notes. Pushing to `main` never deploys.
+- **The tag must equal `package.json` `version`** and point at a commit that is already on `main`. CI rejects anything else.
+- **Bump the version in its own commit on `main`:** `chore(release): vX.Y.Z`. Use MAJOR for a breaking change to URLs or content structure, MINOR for new pages, sections or features, and PATCH for fixes only. While the version is 0.x, MINOR is a normal release.
+- **Release steps (lead only):**
+  1. `main` is green in CI and Quality Gates.
+  2. Bump the version and commit.
+  3. Push `main`.
+  4. Run `git tag -a vX.Y.Z -m "vX.Y.Z"` and `git push origin vX.Y.Z`.
+  5. Watch the Deploy run.
+  6. Check production (docs/deploy/RUNBOOK.md section 2) and that the release exists.
+- **Never** deploy from a laptop (`wrangler deploy`), never move or reuse a tag, and never delete a release. A bad release is fixed by rolling back (`wrangler rollback`, RUNBOOK section 3) and then shipping the next PATCH release.
+- Workers never tag, release or deploy.
+
 ---
 
 # Fumadocs

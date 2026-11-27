@@ -16,7 +16,7 @@ Prerequisites (owner tasks O1–O5 in the plan):
 
 Then:
 
-1. Push `main`. `deploy.yml` runs lint, typecheck, tests, `opennextjs-cloudflare build`, the static-route gate and the size gate, then `opennextjs-cloudflare deploy`.
+1. Push `main`, then push the release tag (section 9). On a `vX.Y.Z` tag, `deploy.yml` runs lint, typecheck, tests, `opennextjs-cloudflare build`, the static-route gate and the size gate, then `opennextjs-cloudflare deploy`.
 2. The first deploy creates the Worker, enables `mengty-learns.<account-subdomain>.workers.dev`, and attaches the custom domain. Cloudflare creates the DNS record and the certificate. The certificate can take a few minutes.
 3. Open the run's job summary: it lists the deployed URLs and the version ID.
 
@@ -148,8 +148,8 @@ Stop the preview: `pkill -f "opennextjs-cloudflare preview"; pkill -f workerd` (
 
 Do the owner prerequisites in §1 first (zone active, no DNS record on `learn.limmengty.com`, token and account-ID secrets in GitHub).
 
-1. **Push.** `git push -u origin main` (with the owner's OK).
-2. **Watch the Actions run.** `gh run watch $(gh run list --workflow deploy.yml --branch main --limit 1 --json databaseId -q '.[0].databaseId')`, or Actions → Deploy. Every step must be green: lint, typecheck, test, OpenNext build, static-route gate, size gate (about 31.7 MiB), deploy. The job summary lists the `workers.dev` URL and the version ID. Write the version ID down: it is your rollback target next time.
+1. **Release.** Follow section 9: bump the version, push `main`, then push the tag `vX.Y.Z`. Pushing `main` alone never deploys.
+2. **Watch the Actions run.** `gh run watch $(gh run list --workflow deploy.yml --limit 1 --json databaseId -q '.[0].databaseId')`, or Actions → Deploy. Every step must be green: lint, typecheck, test, OpenNext build, static-route gate, size gate (about 31.7 MiB), deploy. The job summary lists the `workers.dev` URL and the version ID. Write the version ID down: it is your rollback target next time.
 3. **workers.dev URL.** Open `https://mengty-learns.<account-subdomain>.workers.dev/`. Home, `/docs/`, `/docs/design/bridge/` (the flow plays), `/review/`, `/radar/`, `/digest/` all load. Ctrl+K returns results, and DevTools shows 0 console errors and no CSP reports.
 4. **Custom domain.** Dashboard → Workers & Pages → mengty-learns → Settings → Domains & Routes shows `learn.limmengty.com` as an active Custom domain. Then `https://learn.limmengty.com/` loads with a valid certificate (the certificate can take a few minutes on the first deploy).
 5. **Headers on production** (expected values in §2):
@@ -171,4 +171,26 @@ Do the owner prerequisites in §1 first (zone active, no DNS record on `learn.li
    pnpm exec lhci assert        # thresholds from lighthouserc.json: perf ≥ 0.90, a11y/best-practices/SEO ≥ 0.95
    ```
    Alternatively, use Chrome DevTools → Lighthouse (mobile, clean profile). Record the four scores in the release note.
-7. **If anything is wrong: roll back first, then fix forward** (§3): `pnpm exec wrangler deployments list`, then `pnpm exec wrangler rollback <last-good-version-id>`. On the very first deploy there is no older version: remove the custom domain in the dashboard (or leave it) and push a fix. After a rollback, revert the bad commit on `main`, because the next push redeploys whatever `main` holds.
+7. **If anything is wrong: roll back first, then fix forward** (§3): `pnpm exec wrangler deployments list`, then `pnpm exec wrangler rollback <last-good-version-id>`. On the very first deploy there is no older version: remove the custom domain in the dashboard (or leave it) and push a fix. After a rollback, revert the bad commit on `main`, then ship the fix as the next PATCH release (section 9). Only a new tag deploys.
+
+## 9. Releases (every deploy is a release)
+
+Rule: AGENTS.md section 8. Production changes only when a `vX.Y.Z` tag is pushed. The Deploy workflow then:
+1. Checks that the tag equals `package.json` `version` and that the tagged commit is on `main`.
+2. Runs lint, typecheck, test, the OpenNext build, the static-route gate and the size gate.
+3. Deploys with `--tag vX.Y.Z`, so the Worker version is labelled with the release.
+4. **Only if the deploy succeeded**, creates the GitHub Release `vX.Y.Z` with generated notes.
+
+```bash
+# on main, after CI and Quality Gates are green
+npm pkg set version=0.2.0                       # MAJOR.MINOR.PATCH, see AGENTS.md section 8
+git commit -am "chore(release): v0.2.0"
+git push origin main
+git tag -a v0.2.0 -m "v0.2.0"
+git push origin v0.2.0
+gh run watch $(gh run list --workflow deploy.yml --limit 1 --json databaseId -q '.[0].databaseId')
+gh release view v0.2.0                           # exists once the deploy is green
+```
+
+If the deploy fails, no release is created. Fix it on `main`, bump the PATCH version, and tag again. Never re-push or move an existing tag.
+If a released version is bad: `wrangler rollback` (section 3), then ship the fix as the next PATCH release.

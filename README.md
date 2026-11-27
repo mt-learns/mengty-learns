@@ -113,7 +113,7 @@ Pages whose `verified` date is more than 365 days old show a "May be outdated" b
 | Worker | `mengty-learns`, config in `wrangler.jsonc` |
 | Production | `https://learn.limmengty.com` (Workers custom domain; change the subdomain in `wrangler.jsonc` only) |
 | PR previews | each same-repo PR uploads a Worker *version* (not live); its preview URL is in the job summary |
-| Production deploys | every push to `main`, after lint, typecheck, tests, the static-route gate and the size gate |
+| Production deploys | only by pushing a release tag `vX.Y.Z` (= `package.json` version, on `main`): checks → deploy → GitHub Release. See AGENTS.md §8 and RUNBOOK §9 |
 | Secrets | GitHub Actions secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, never in the repo |
 | Cache | `open-next.config.ts`: read-only static-assets incremental cache (no R2/KV/D1/Queue) |
 | Headers | `lib/security-headers.mjs`, applied by `next.config.mjs` (Worker responses) and `public/_headers` (static assets) |
