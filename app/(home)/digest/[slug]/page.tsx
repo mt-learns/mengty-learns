@@ -6,14 +6,15 @@ import { ArrowLeft, ExternalLink } from 'lucide-react';
 import { LargeTitle } from '@/components/ios/tile';
 import { GroupedList } from '@/components/ios/grouped-list';
 import { getMDXComponents } from '@/components/mdx';
-import { digestSource } from '@/lib/source';
+import { digestSource, getPublishedDigests } from '@/lib/source';
 
 // Only the slugs from generateStaticParams exist; anything else is a static 404
-// instead of an on-demand render in the Worker.
+// instead of an on-demand render in the Worker. Drafts are not built in
+// production (they still render in `pnpm dev`, with the draft banner).
 export const dynamicParams = false;
 
 export function generateStaticParams() {
-  return digestSource.getPages().map((page) => ({
+  return getPublishedDigests().map((page) => ({
     slug: page.slugs[0],
   }));
 }
