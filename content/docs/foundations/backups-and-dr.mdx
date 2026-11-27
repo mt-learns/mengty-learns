@@ -45,6 +45,22 @@ RAID mirrors, database replication, and `git push` protect against a single disk
 - **RTO (Recovery Time Objective):** Maximum time from incident start until service is restored (e.g., `4h` for cold restore, `< 5m` for multi-region failover).
 - **3-2-1 rule:** **3** copies of data, on **2** separate systems/media, with **1** off-site (in a different cloud account/region with object-lock or immutable retention).
 
+<Diagram
+  id="backups-321"
+  layout="tree"
+  ariaLabel="3-2-1 backup strategy from Primary DB to local snapshot and immutable off-site object storage"
+  caption="3-2-1 rule: keep your primary DB plus two backup copies, with at least one off-site and immutable."
+  nodes={[
+    { id: 'db', label: 'Primary DB', subtitle: 'Live Postgres', icon: 'db', category: 'data', rank: 0, order: 0 },
+    { id: 'local', label: 'Same-Region Dump', subtitle: 'Fast RTO restore', icon: 'db', category: 'concrete', rank: 1, order: 0 },
+    { id: 'offsite', label: 'Off-Site Object', subtitle: 'Cross-account WORM', icon: 'gateway', category: 'external', rank: 1, order: 1 },
+  ]}
+  edges={[
+    { from: 'db', to: 'local', kind: 'request' },
+    { from: 'db', to: 'offsite', kind: 'request' },
+  ]}
+/>
+
 ### 2. Logical vs Physical backups (PostgreSQL)
 | Type | Tool | Pros | Cons |
 |---|---|---|---|

@@ -46,6 +46,24 @@ Writing inside a container's default writable layer ties data to that container'
 | **Bind mount** (`-v ./src:/app/src`) | Exact host path you specify | Host OS / user | Local dev hot-reload, single config files |
 | **tmpfs** (`--tmpfs /tmp:rw,noexec,nosuid`) | Host RAM (never persisted to disk) | Linux kernel | `/tmp` with `--read-only`, ephemeral secrets |
 
+<Diagram
+  id="docker-mount-types"
+  layout="tree"
+  ariaLabel="Container filesystem mounts: named volume for persistent DB data, bind mount for host dev files, tmpfs for RAM scratch"
+  caption="Choose mounts by lifecycle: named volumes for DB state, bind mounts for host dev files, tmpfs for /tmp."
+  nodes={[
+    { id: 'ctr', label: 'Container', subtitle: 'App process', icon: 'pod', category: 'service', rank: 0, order: 0 },
+    { id: 'vol', label: 'Named Volume', subtitle: 'Docker-managed', icon: 'db', category: 'data', rank: 1, order: 0 },
+    { id: 'bind', label: 'Bind Mount', subtitle: 'Host path', icon: 'gateway', category: 'concrete', rank: 1, order: 1 },
+    { id: 'tmpfs', label: 'tmpfs (RAM)', subtitle: 'Ephemeral /tmp', icon: 'service', category: 'external', rank: 1, order: 2 },
+  ]}
+  edges={[
+    { from: 'ctr', to: 'vol', kind: 'request' },
+    { from: 'ctr', to: 'bind', kind: 'request' },
+    { from: 'ctr', to: 'tmpfs', kind: 'request' },
+  ]}
+/>
+
 ### The UID / permissions pitfall
 - **Named volumes:** When you mount an *empty* named volume over a container directory that already has files (for example `/app/data` owned by UID `1001`), Docker copies the directory's contents and ownership into the volume on first start.
 - **Bind mounts:** Docker mounts the host directory *as-is* with the host's UID/GID. If your container runs as `USER 1001:1001` (`nextjs`) but your host folder is owned by UID `1000` (or `root`), the container gets `EACCES: permission denied`. On Linux, match the UID or use `chmod`/ACLs; on Docker Desktop (macOS/Windows), the VM file-sharing layer translates ownership differently, masking bugs that appear later on Linux CI/prod.

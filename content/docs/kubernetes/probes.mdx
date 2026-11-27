@@ -8,7 +8,7 @@ type: explanation
 level: intermediate
 tags: [kubernetes, probes, readiness, liveness, endpointslices]
 tested_with:
-  kubernetes: "1.37 (docs)"
+  kubernetes: "1.36 (docs)"
 cards:
   - q: "What does kubelet do when a container's readinessProbe fails?"
     a: "It keeps the container running and marks the Pod Ready=False, so the EndpointSlice removes the Pod's IP and the Service stops sending it traffic."

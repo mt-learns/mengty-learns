@@ -8,8 +8,8 @@ type: explanation
 level: intermediate
 tags: [kubernetes, kubectl, control-plane, scheduler, kubelet]
 tested_with:
-  kubectl: "1.36 (docs only)"
-  kubernetes: "1.36 (docs only)"
+  kubectl: "1.36 (docs)"
+  kubernetes: "1.36 (docs)"
 cards:
   - q: "Which Kubernetes component is the only one that reads and writes directly to etcd?"
     a: "kube-apiserver. All other control-plane components and node agents watch and update state through the API Server."
@@ -71,7 +71,7 @@ Kubernetes uses a **level-triggered reconciliation loop** centered on `kube-apis
 2. **API Server → `etcd`:** Once valid, the Deployment object is persisted in `etcd`.
 3. **Controllers (`kube-controller-manager`):** Watching Deployments, the Deployment controller creates or updates a **ReplicaSet**, whose controller creates **Pod** objects (still unscheduled, `nodeName: ""`).
 4. **Scheduler (`kube-scheduler`):** Watches unscheduled Pods, filters out nodes that lack CPU/memory or fail taints/affinities, scores the remaining nodes, and writes `spec.nodeName` via the API Server.
-5. **`kubelet` → CRI Runtime:** Watching Pods bound to its node, `kubelet` calls the **Container Runtime Interface (CRI)** (e.g., `containerd`) to pull the image, start the container, and report `Ready` status back to the API Server.
+5. **`kubelet` → CRI Runtime:** Watching Pods bound to its node, `kubelet` calls the **Container Runtime Interface (CRI)** (e.g., `containerd`) to pull the image and start the container, then `kubelet` runs readiness probes and reports `Ready` status back to the API Server.
 
 ## Real-world analogy
 <Analogy>
@@ -91,10 +91,11 @@ Think of a restaurant kitchen with a central order board (**API Server** + **etc
   ]}
   steps={[
     { edge: 'kubectl->apiserver', title: 'Send manifest & persist', text: 'kubectl sends YAML; API Server runs AuthN, AuthZ, Admission, and writes etcd.' },
-    { edge: 'apiserver->ctrl', title: 'Controller & Scheduler bind', text: 'Deployment controller creates ReplicaSet/Pod; kube-scheduler binds a Node.' },
-    { edge: 'ctrl->kubelet', title: 'kubelet sees bound Pod', text: 'kubelet watches Pods assigned to its node via the API Server.' },
+    { edge: 'apiserver->ctrl', title: 'Controller creates Pod', text: 'Deployment controller creates ReplicaSet and unscheduled Pod; scheduler watches.' },
+    { edge: 'ctrl->apiserver', title: 'Scheduler binds spec.nodeName', text: 'kube-scheduler picks a Node and writes spec.nodeName via the API Server.' },
+    { edge: 'apiserver->kubelet', title: 'kubelet watches bound Pod', text: 'kubelet sees its nodeName on the API Server watch stream and claims the Pod.' },
     { edge: 'kubelet->cri', title: 'CRI pulls image and starts', text: 'kubelet calls the CRI runtime to pull the container image and start it.' },
-    { edge: 'cri->kubelet', title: 'Container reports running', text: 'CRI reports the container started and passing readiness probes.', kind: 'response' },
+    { edge: 'cri->kubelet', title: 'Container reports running', text: 'CRI reports the container started; kubelet runs readiness probes.', kind: 'response' },
     { edge: 'kubelet->apiserver', title: 'Report Pod status Ready', text: 'kubelet updates Pod status to Ready in the API Server.', kind: 'response' },
   ]}
 />
@@ -106,7 +107,7 @@ You can validate a Deployment manifest locally with `kubectl apply --dry-run=cli
 # Client-side validation without mutating a cluster (not run against a live cluster)
 kubectl apply -f deployment.yaml --dry-run=client -o yaml
 
-# Apply and watch the reconciliation stages
+# Apply and watch the reconciliation stages (not run against a live cluster)
 kubectl apply -f deployment.yaml
 kubectl get deployment,rs,pods -w
 ```

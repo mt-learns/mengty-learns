@@ -104,7 +104,7 @@ await svc.promote('v2.1.0');
 A Service Locator looks convenient at first because constructors stay empty, but it hides dependencies and breaks at runtime:
 
 ```ts
-// Anti-pattern: caller has no idea DeployService needs 'auditLog'
+// Anti-pattern (not run): caller has no idea DeployService needs 'auditLog'
 class BadDeployService {
   async promote(version: string): Promise<void> {
     const audit = ServiceLocator.get<AuditLog>('auditLog'); // throws if unregistered!

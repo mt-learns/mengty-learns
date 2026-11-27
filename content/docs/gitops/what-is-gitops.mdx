@@ -88,8 +88,7 @@ Think of a thermostat (**GitOps agent**) mounted inside your living room (**clus
     { edge: 'agent->api', title: 'Agent syncs to API Server', text: 'In-cluster controller applies the updated manifests to kube-apiserver.' },
     { edge: 'api->cluster', title: 'Cluster converges to Git', text: 'Kubernetes controllers roll out Pods until live state matches Git.' },
     { edge: 'cluster->api', title: 'Report Pod Ready status', text: 'Nodes update Pod status to Ready in the Kubernetes API Server.', kind: 'response' },
-    { edge: 'api->agent', title: 'Agent observes Healthy', text: 'GitOps agent confirms the live resources match the target Git revision.', kind: 'response' },
-    { edge: 'agent->git', title: 'Update commit sync status', text: 'Agent posts Synced/Healthy status back to the Git commit or PR.', kind: 'response' },
+    { edge: 'api->agent', title: 'Agent observes Synced/Healthy', text: 'GitOps agent confirms live resources match the target Git SHA (Git access stays read-only).', kind: 'response' },
   ]}
 />
 

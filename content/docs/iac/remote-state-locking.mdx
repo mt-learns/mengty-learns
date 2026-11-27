@@ -29,6 +29,8 @@ sources:
     url: https://opentofu.org/docs/language/settings/backends/s3/
   - title: "OpenTofu Docs: State Encryption"
     url: https://opentofu.org/docs/language/state/encryption/
+  - title: "OpenTofu Docs: Early Variable/Local Evaluation"
+    url: https://opentofu.org/docs/language/expressions/early-evaluation/
 ---
 
 ## TL;DR
@@ -63,6 +65,7 @@ terraform {
     key_provider "aws_kms" "state" {
       kms_key_id = "alias/tofu-state-key"
       region     = "us-east-1"
+      key_spec   = "AES_256"
     }
     method "aes_gcm" "encrypted" {
       keys = key_provider.aws_kms.state
@@ -78,7 +81,7 @@ terraform {
 For **GCS**, locking is built into the bucket automatically via object generation preconditions (`backend "gcs" { bucket = "..." prefix = "..." }`).
 
 ## Gotchas
-- **No variables in `backend {}`:** standard backend blocks cannot reference `var.*` or `local.*`—pass environment-specific keys via `-backend-config=prod.s3.tfbackend` (or separate root directories).
+- **Variables in `backend {}` (Terraform / OpenTofu < 1.8):** Terraform and OpenTofu prior to 1.8 cannot reference `var.*` or `local.*` inside `backend {}`—pass environment-specific keys via `-backend-config=prod.s3.tfbackend` (or use OpenTofu 1.8+ [early variable evaluation](/docs/iac/terraform-vs-opentofu)).
 - **Stale locks after a killed CI job:** if a runner is `SIGKILL`ed mid-apply, the lock stays held. Verify no run is actually active before running `tofu force-unlock <LOCK_ID>`.
 - **DynamoDB deprecation path:** older guides require a `dynamodb_table` for S3 locking; modern OpenTofu (1.10+) and Terraform (1.10+) support native S3 conditional-write locking with `use_lockfile = true`.
 - **Bucket versioning is non-negotiable:** encryption protects confidentiality, but S3 versioning is what lets you roll back a corrupted state file.
@@ -114,3 +117,4 @@ For **GCS**, locking is built into the bucket automatically via object generatio
 - [OpenTofu Docs: Backends — State Storage and Locking](https://opentofu.org/docs/language/settings/backends/configuration/)
 - [OpenTofu Docs: S3 Backend](https://opentofu.org/docs/language/settings/backends/s3/)
 - [OpenTofu Docs: State Encryption](https://opentofu.org/docs/language/state/encryption/)
+- [OpenTofu Docs: Early Variable/Local Evaluation](https://opentofu.org/docs/language/expressions/early-evaluation/)

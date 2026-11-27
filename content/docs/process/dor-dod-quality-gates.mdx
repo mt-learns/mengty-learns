@@ -1,6 +1,6 @@
 ---
 title: "DoR, DoD, and Quality Gates"
-description: Practical Definition of Ready, Definition of Done, and measurable quality gates from PR to production—using Mengty Learns' real CI, labs, and Lighthouse/axe gates.
+description: Definition of Ready, Definition of Done, and measurable quality gates from PR to production—using Mengty Learns' CI, labs, and Lighthouse/axe gates.
 updated: "2026-11-27"
 verified: "2026-11-27"
 kind: cheatsheet
@@ -97,9 +97,9 @@ If you are starting a new repo today, set up just **three gates**:
     ]
   },
   {
-    question: "Which workflow in Mengty Learns runs Lighthouse CI and @axe-core/playwright against the built out/ directory?",
+    question: "Which workflow in Mengty Learns runs Lighthouse CI and @axe-core/playwright against the opennextjs-cloudflare preview server on port 8787?",
     options: [
-      { label: ".github/workflows/quality.yml", description: "quality.yml builds the site, runs lhci autorun, and scans key routes with @axe-core/playwright.", correct: true },
+      { label: ".github/workflows/quality.yml", description: "quality.yml builds the site, starts opennextjs-cloudflare preview on port 8787, runs lhci autorun, and scans key routes with @axe-core/playwright.", correct: true },
       { label: ".github/workflows/labs.yml", description: "labs.yml validates Dockerfiles, OpenTofu, Kubernetes manifests, and GitHub Actions workflows." },
       { label: ".github/workflows/inbox.yml", description: "inbox.yml fetches RSS feeds into a private GitHub Issue." }
     ]

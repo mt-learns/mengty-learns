@@ -18,7 +18,7 @@
 ### Definition of done (a page)
 - [ ] TL;DR, `type`, `kind`, `level`, `tags`
 - [ ] `tested_with` + `verified`, and the commands actually ran
-- [ ] At least 1 diagram or `<Flow>` (concept pages: a `<Flow>` is required)
+- [ ] At least 1 `<Diagram>` or `<Flow>` on `concept` and `note` pages (`concept` pages require a `<Flow>`; `cheatsheet` and `decision` pages are exempt when tables/matrices are clearer)
 - [ ] Gotchas + production checklist (notes) or Pros/Cons + Relations (concepts)
 - [ ] 3–5 `cards` and a "Check yourself" `<Quiz>`
 - [ ] `sources` with official docs and `related` with ≥ 2 slugs

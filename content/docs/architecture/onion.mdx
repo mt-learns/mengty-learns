@@ -88,7 +88,7 @@ Think of an onion or a medieval fortress: the **Domain Model** is the inner keep
     { edge: 'appsvc->domain', title: 'Enforce Domain invariants', text: 'Application Service creates an Order and validates non-empty items.' },
     { edge: 'appsvc->domsvc', title: 'Persist via Domain interface', text: 'Application Service calls OrderRepository defined in the core.' },
     { edge: 'domsvc->ui', title: 'Infrastructure executes SQL', text: 'PostgresOrderRepository (outer ring) implements the interface and saves.', label: 'DIP' },
-    { edge: 'ui->appsvc', title: 'Return saved Order', text: 'Repository returns the persisted Order to Application Service.', kind: 'response' },
+    { edge: 'ui->appsvc', title: 'Return saved Order via DIP', text: 'At runtime, PostgresOrderRepository returns the saved Order directly to Application Service.', kind: 'response' },
     { edge: 'appsvc->ui', title: 'Return result to Controller', text: 'Application Service hands the completed Order back to the UI ring.', kind: 'response' },
     { edge: 'ui->http', title: 'Reply 201 Created', text: 'Controller serializes the response DTO and returns 201 to HTTP Client.', kind: 'response' },
   ]}

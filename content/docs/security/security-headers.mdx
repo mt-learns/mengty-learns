@@ -1,6 +1,6 @@
 ---
 title: "HTTP Security Headers Cheatsheet"
-description: Practical reference for CSP, HSTS (and preload caveats), X-Content-Type-Options, Referrer-Policy, Permissions-Policy, frame-ancestors, and COOP/COEP using Cloudflare Pages _headers.
+description: Reference for CSP, HSTS, X-Content-Type-Options, Referrer-Policy, Permissions-Policy, and frame-ancestors using Next.js headers() and Workers _headers.
 updated: "2026-11-26"
 verified: "2026-11-26"
 kind: cheatsheet
@@ -26,14 +26,16 @@ sources:
     url: https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html
   - title: "OWASP ASVS 5.0: V3 Web Frontend Security & V12 Secure Communication"
     url: https://github.com/OWASP/ASVS
-  - title: "Cloudflare Pages: Headers"
-    url: https://developers.cloudflare.com/pages/configuration/headers/
+  - title: "Cloudflare Workers: Static Assets Headers"
+    url: https://developers.cloudflare.com/workers/static-assets/headers/
+  - title: "Next.js Docs: headers()"
+    url: https://nextjs.org/docs/app/api-reference/config/next-config-js/headers
   - title: "MDN: Strict-Transport-Security"
     url: https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Strict-Transport-Security
 ---
 
 ## TL;DR
-HTTP security headers instruct browsers to lock down framing, MIME sniffing, downgrades to HTTP, referrer leaks, and script execution. On Cloudflare Pages, you ship them via `public/_headers`—and **this repo does not have a `public/_headers` file yet** (checked `public/`), so the example below is the target config to add before deploying.
+HTTP security headers instruct browsers to lock down framing, MIME sniffing, downgrades to HTTP, referrer leaks, and script execution. In this repo (Next.js on **Cloudflare Workers** via OpenNext), `lib/security-headers.mjs` is the single source of truth for both `next.config.mjs` `headers()` (Worker-rendered routes) and `public/_headers` (Workers Static Assets).
 
 ## Header reference
 
@@ -47,25 +49,28 @@ HTTP security headers instruct browsers to lock down framing, MIME sniffing, dow
 | `Cross-Origin-Opener-Policy` | `same-origin` | Isolates top-level browsing context from cross-origin popups (Spectre/XS-Leak mitigation). |
 | `Cross-Origin-Embedder-Policy` | `require-corp` | Opts into cross-origin isolation (`SharedArrayBuffer`); only enable if all subresources send CORP/CORS. |
 
-## Cloudflare Pages `_headers` example
+## Cloudflare Workers `_headers` & `next.config.mjs` (this repo)
 
-> **Repo status:** Checked `public/` in this repository—**no `public/_headers` file exists yet**. Add the file below (after testing CSP in `Content-Security-Policy-Report-Only` first) when deploying to Cloudflare Pages.
+> **Repo status:** In this repository, `lib/security-headers.mjs` defines the shared `securityHeaders` array used by `next.config.mjs` `headers()` (for HTML, RSC, and route handler responses built by the Worker) and mirrored in `public/_headers` (for static assets served from `.open-next/assets`, enforced by `lib/security-headers.test.ts`).
 
 ```text
-# public/_headers (example — not yet present in this repo)
+# public/_headers (actual file in this repo, synced with lib/security-headers.mjs)
+/_next/static/*
+  Cache-Control: public, max-age=31536000, immutable
+
 /*
+  Content-Security-Policy: default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self' blob:; manifest-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
   Strict-Transport-Security: max-age=31536000; includeSubDomains
   X-Content-Type-Options: nosniff
   Referrer-Policy: strict-origin-when-cross-origin
-  Permissions-Policy: camera=(), microphone=(), geolocation=()
-  Cross-Origin-Opener-Policy: same-origin
-  Content-Security-Policy: default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; object-src 'none'; frame-ancestors 'none'; base-uri 'self'
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=()
+  X-Frame-Options: DENY
 ```
 
 ## Gotchas
 - **HSTS `preload` is hard to undo:** Submitting to the HSTS preload list bakes your domain into browser binaries. If a legacy internal subdomain still uses plain HTTP, `includeSubDomains` + `preload` will break it for months.
 - **COEP breaks third-party embeds:** Adding `Cross-Origin-Embedder-Policy: require-corp` blocks third-party images/iframes that lack `Cross-Origin-Resource-Policy: cross-origin` or CORS headers.
-- **`_headers` does not apply to Next.js `next dev`:** Cloudflare Pages `_headers` is only read by Cloudflare's edge on deployed static assets—verify headers in staging with `curl -I`.
+- **`_headers` does not apply to Worker-rendered routes or `next dev`:** On Cloudflare Workers with Static Assets, `public/_headers` only applies to static asset responses—Worker-rendered HTML/RSC routes must also return headers from `next.config.mjs` `headers()`. Verify both with `curl -I`.
 
 ## Production checklist
 - [ ] `X-Content-Type-Options: nosniff` and `Referrer-Policy` are set on all responses.
@@ -97,5 +102,6 @@ HTTP security headers instruct browsers to lock down framing, MIME sniffing, dow
 ## Sources
 - [OWASP HTTP Headers Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html)
 - [OWASP ASVS 5.0 (GitHub)](https://github.com/OWASP/ASVS)
-- [Cloudflare Pages: Headers](https://developers.cloudflare.com/pages/configuration/headers/)
+- [Cloudflare Workers: Static Assets Headers](https://developers.cloudflare.com/workers/static-assets/headers/)
+- [Next.js Docs: headers()](https://nextjs.org/docs/app/api-reference/config/next-config-js/headers)
 - [MDN: Strict-Transport-Security](https://developer.mozilla.org/en-US/docs/Web/HTTP/Reference/Headers/Strict-Transport-Security)
