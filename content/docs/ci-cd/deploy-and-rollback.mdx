@@ -19,6 +19,8 @@ cards:
     a: "App binaries are stateless, whereas dropping a column or mutating rows destroys data or breaks the previous app version's queries."
   - q: "What is the difference between a release (deployment) and a feature flag?"
     a: "A deployment puts new code onto servers; a feature flag toggles whether users execute that code path at runtime without redeploying."
+  - q: "What makes a canary rollout automated rather than manual?"
+    a: "An AnalysisTemplate (such as in Argo Rollouts) queries Prometheus error rates or latency at each weight step and automatically aborts and rolls back if thresholds breach."
 related:
   - ci-cd/pipeline-anatomy
   - ci-cd/this-site-pipeline
@@ -30,6 +32,8 @@ sources:
     url: https://kubernetes.io/docs/concepts/workloads/controllers/deployment/
   - title: "Martin Fowler: Canary Release"
     url: https://martinfowler.com/bliki/CanaryRelease.html
+  - title: "learn-devops: CI/CD & GitOps Cheat Sheet (author's notes)"
+    url: https://github.com/limme-learning/learn-devops/blob/main/cheatsheets/10-cicd-gitops/README.md
 ---
 
 ## TL;DR
