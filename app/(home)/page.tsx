@@ -3,6 +3,7 @@ import { ArrowRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Illustration, SectionIcon } from '@/components/illustrations';
 import { Container } from '@/components/layout/container';
+import { CountUp } from '@/components/home/count-up';
 import { HeroIllustration } from '@/components/home/hero-illustration';
 import { K8sRequestFlow } from '@/components/home/k8s-flow';
 import { PathProgress } from '@/components/home/path-progress';
@@ -123,7 +124,7 @@ export default function HomePage() {
               >
                 <dt className="text-footnote font-medium uppercase tracking-[0.06em] text-muted-foreground">{item.label}</dt>
                 <dd className="text-stat tabular-nums md:text-stat-lg">
-                  {item.value}
+                  <CountUp value={item.value} />
                 </dd>
               </div>
             ))}
