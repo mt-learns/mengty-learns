@@ -3,15 +3,20 @@
   "pages": [
     "oop-pillars",
     "solid",
+    "yagni-kiss-dry",
     "composition-vs-inheritance",
     "dependency-injection",
     "factory-method",
     "adapter",
     "bridge",
     "decorator",
+    "proxy",
     "observer",
+    "mediator",
     "strategy",
-    "pattern-relations"
+    "state-machines",
+    "pattern-relations",
+    "anti-patterns"
   ],
   "icon": "design"
 }
