@@ -1,0 +1,119 @@
+---
+title: "VPN & Private Access: WireGuard, Split-Horizon DNS & Zero Trust"
+description: Why network reachability is not authorization—how to combine WireGuard or IPsec VPNs, split-horizon DNS, bastions, and per-app OIDC without creating a flat internal trust zone.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: explanation
+level: intermediate
+tags: [vpn, wireguard, dns, bastion, zero-trust, networking]
+tested_with:
+  wireguard: "kernel 6.x / wg-quick (docs)"
+cards:
+  - q: "Why is 'network reachability is not authorization' the core rule of private access?"
+    a: "A VPN only answers whether packets can reach an IP; every internal application still needs OIDC/RBAC at the gateway and default-deny NetworkPolicies so one VPN credential cannot browse everything."
+  - q: "What two roles does `AllowedIPs` serve in WireGuard?"
+    a: "Outbound it acts as a routing table (which destination CIDRs enter the tunnel); inbound it acts as an ACL/filter (which source IPs are accepted from that peer)."
+  - q: "What is split-horizon DNS, and why is it the #1 cause of 'VPN connected but nothing resolves'?"
+    a: "Internal names must resolve only via internal DNS servers pushed over the tunnel; if the client keeps public resolvers or lacks suffix routing, internal hostnames return NXDOMAIN."
+  - q: "Why should you always keep an out-of-band admin path (console or separate bastion) when managing a VPN concentrator?"
+    a: "If the only way to fix a broken VPN config is over the VPN itself, a bad firewall or WireGuard change locks everyone—including the operator—out."
+related:
+  - foundations/networking-basics
+  - foundations/firewall-basics
+  - security/oauth21-oidc-pkce
+sources:
+  - title: "WireGuard Docs: Quick Start & Conceptual Overview"
+    url: https://www.wireguard.com/quickstart/
+  - title: "NIST SP 800-207: Zero Trust Architecture"
+    url: https://csrc.nist.gov/publications/detail/sp/800-207/final
+  - title: "OpenSSH Docs: ssh_config (ProxyJump)"
+    url: https://man.openbsd.org/ssh_config#ProxyJump
+  - title: "learn-devops: VPN & Private Access Cheat Sheet (author's notes)"
+    url: https://github.com/limme-learning/learn-devops/blob/main/cheatsheets/12-vpn-private-access/README.md
+---
+
+## TL;DR
+**Network reachability is not authorization.** Use a VPN (WireGuard or IKEv2) to shrink who can *attempt* a connection, then enforce **OIDC + group claims** at the internal gateway and **short-lived SSH certs** on bastions. Always configure **split-horizon DNS** and keep an **out-of-band** admin path so a bad VPN change never locks you out.
+
+## Why it exists
+A classic flat-network VPN lets any connected laptop reach every internal dashboard, database, and Kubernetes API. Zero-trust private access treats the VPN as network hygiene only: per-device keys tied to your IdP lifecycle, split-tunnel routes, and per-app authentication.
+
+## Mental model
+
+1. **Access layers:**
+   - **Internal web apps:** VPN (split tunnel) → Internal Ingress/Gateway + **OIDC group check** → `NetworkPolicy`.
+   - **Host/break-glass admin:** Hardware-backed SSH key or short-lived **Vault SSH certificate** → `ProxyJump` bastion with MFA and session recording.
+   - **Kubernetes API:** Private API endpoint reachable over VPN + `kubectl` OIDC login (never a static admin token in `~/.kube/config`).
+2. **WireGuard `AllowedIPs`:** On the server, `AllowedIPs = 10.90.4.17/32` restricts which IP that peer may spoof. On the client, `AllowedIPs = 10.30.0.0/16` enables **split tunneling** so personal internet traffic stays off the corporate concentrator (use `0.0.0.0/0` only when policy mandates full-tunnel DLP inspection).
+3. **Split-horizon DNS:** Push internal resolvers over the tunnel and route only your internal domain suffix (e.g. `~internal.example`) so internal names never leak into public DNS or Certificate Transparency logs.
+
+## Do it
+
+Inspect WireGuard handshakes, split-DNS resolution, and MTU on Linux:
+
+```bash
+# Check active WireGuard peers and last handshake age (not run)
+wg show wg0 latest-handshakes
+
+# Verify split-horizon DNS uses the internal resolver (not run)
+resolvectl status
+dig api.internal.example @10.30.0.10
+
+# Test Path MTU if small requests succeed but large payloads hang (not run)
+ping -M do -s 1392 10.30.10.20
+```
+
+Connect to private hosts cleanly via `ProxyJump` without agent forwarding:
+
+```text
+# ~/.ssh/config (not run)
+Host bastion
+  HostName bastion.mgmt.example
+  User ops
+  IdentityFile ~/.ssh/id_ed25519_sk
+
+Host 10.30.*
+  ProxyJump bastion
+  StrictHostKeyChecking yes
+```
+
+## Gotchas
+- **PMTU / MTU black holes:** Tunnel headers reduce effective MTU; if small health checks work but TLS handshakes or large responses hang, set WireGuard `MTU = 1420` (or `1280`) and clamp TCP MSS.
+- **Overlapping RFC1918 CIDRs:** Home routers (`192.168.1.0/24`) colliding with office/VPC subnets silently break routing—plan non-overlapping internal CIDRs (`10.x.0.0/16`) early.
+- **Public wildcards for internal names:** Issuing a public Let's Encrypt cert for `*.internal.example` publishes your internal hostnames to public Certificate Transparency logs; use an internal CA (Vault PKI) instead.
+- **No out-of-band rollback:** Never manage the VPN concentrator *only* through the VPN tunnel itself.
+
+## Production checklist
+- [ ] Every private app enforces OIDC + group entitlement at the gateway (reachability alone is never enough).
+- [ ] One VPN key/certificate per **device**, tied to IdP offboarding (short TTL).
+- [ ] Split-horizon DNS resolves internal zones internally without publishing them to public DNS.
+- [ ] Bastion uses `ProxyJump` (no SSH agent forwarding), MFA, and session recording.
+- [ ] Automated check verifies internal LoadBalancers retain RFC1918 private IPs after chart upgrades.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "A WireGuard client connects and completes the handshake, small `curl` requests work, but large API responses hang indefinitely. What is the most likely cause?",
+    options: [
+      { label: "MTU / Path MTU black hole caused by tunnel encapsulation overhead", description: "Lowering WireGuard MTU (e.g. to 1420 or 1280) and clamping MSS fixes fragmented packet drops.", correct: true },
+      { label: "Split-horizon DNS is disabled", description: "DNS failure prevents connecting at all, rather than hanging only on large payloads." },
+      { label: "OIDC tokens expired mid-request", description: "Expired tokens return 401/403 immediately, not a TCP hang." }
+    ]
+  },
+  {
+    question: "Why should you use `ProxyJump bastion` instead of `ssh -A` (SSH agent forwarding) when hopping through a bastion?",
+    options: [
+      { label: "ProxyJump tunnels the SSH connection end-to-end without exposing your local SSH agent socket on the bastion host", description: "With agent forwarding, a compromised bastion could use your forwarded agent to authenticate elsewhere.", correct: true },
+      { label: "ProxyJump disables host key checking automatically", description: "ProxyJump preserves StrictHostKeyChecking for the target host." },
+      { label: "ProxyJump works without TCP connectivity to the bastion", description: "ProxyJump still connects through the bastion over SSH." }
+    ]
+  }
+]} />
+
+## Sources
+- [WireGuard Docs: Quick Start](https://www.wireguard.com/quickstart/)
+- [NIST SP 800-207: Zero Trust Architecture](https://csrc.nist.gov/publications/detail/sp/800-207/final)
+- [OpenSSH `ssh_config`: `ProxyJump`](https://man.openbsd.org/ssh_config#ProxyJump)
+- [learn-devops: VPN & Private Access Cheat Sheet (author's notes)](https://github.com/limme-learning/learn-devops/blob/main/cheatsheets/12-vpn-private-access/README.md)
