@@ -1,11 +1,18 @@
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { Illustration, SectionIcon } from '@/components/illustrations';
 import { Container } from '@/components/layout/container';
+import { CountUp } from '@/components/home/count-up';
+import { DemoDo } from '@/components/home/demo-do';
+import { DemoRead } from '@/components/home/demo-read';
+import { DemoRemember } from '@/components/home/demo-remember';
+import { HeroIllustration } from '@/components/home/hero-illustration';
 import { K8sRequestFlow } from '@/components/home/k8s-flow';
 import { PathProgress } from '@/components/home/path-progress';
+import { RadarPulse } from '@/components/home/radar-pulse';
 import { ReviewCta } from '@/components/home/review-cta';
+import { StaggerGrid } from '@/components/home/stagger-grid';
 import {
   getLatestNotes,
   getLearningPaths,
@@ -72,11 +79,14 @@ export default function HomePage() {
             >
               See how infrastructure really works.
             </h1>
-            <p className="mt-5 max-w-[34rem] text-lede text-muted-foreground md:text-lede-lg">
+            <p className="mt-hero-rise mt-5 max-w-[34rem] text-lede text-muted-foreground md:text-lede-lg">
               Notes, animated flows, labs that CI actually runs, and flashcards that make it stick. DevOps, architecture
               and security, by Lim Mengty.
             </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <div
+              className="mt-hero-rise mt-8 flex flex-col gap-3 sm:flex-row"
+              style={{ animationDelay: '60ms' }}
+            >
               <Link
                 href="/docs"
                 className="inline-flex min-h-tap items-center justify-center gap-2 whitespace-nowrap rounded-control bg-primary px-6 text-headline text-primary-foreground shadow-[0_1px_2px_rgb(var(--shadow-color)/0.12),0_4px_12px_-4px_rgb(var(--shadow-color)/0.25)] transition-colors hover:bg-primary-hover motion-reduce:transition-none"
@@ -87,13 +97,18 @@ export default function HomePage() {
               <ReviewCta />
             </div>
           </div>
-          <div className="flex justify-center lg:col-span-5 lg:justify-end">
-            <Illustration
-              name="hero-desk"
-              size={256}
-              decorative
-              className="h-auto max-h-[240px] w-auto max-w-full lg:max-h-none lg:w-full lg:max-w-[440px]"
-            />
+          <div
+            className="mt-hero-rise flex justify-center lg:col-span-5 lg:justify-end"
+            style={{ animationDelay: '120ms' }}
+          >
+            <HeroIllustration>
+              <Illustration
+                name="hero-desk"
+                size={256}
+                decorative
+                className="h-auto max-h-[240px] w-auto max-w-full lg:max-h-none lg:w-full lg:max-w-[440px]"
+              />
+            </HeroIllustration>
           </div>
         </Container>
       </section>
@@ -114,7 +129,7 @@ export default function HomePage() {
               >
                 <dt className="text-footnote font-medium uppercase tracking-[0.06em] text-muted-foreground">{item.label}</dt>
                 <dd className="text-stat tabular-nums md:text-stat-lg">
-                  {item.value}
+                  <CountUp value={item.value} />
                 </dd>
               </div>
             ))}
@@ -136,14 +151,7 @@ export default function HomePage() {
               <p className="mt-2 text-subheadline leading-relaxed text-muted-foreground">
                 Concept pages explain one idea each, with an animated flow you can step through.
               </p>
-              <div aria-hidden="true" className="mt-5 flex flex-wrap items-center gap-1 rounded-panel bg-grouped p-4 text-caption-1 font-medium">
-                {['User', 'Ingress', 'Service', 'Pod'].map((node, i) => (
-                  <span key={node} className="inline-flex items-center gap-1">
-                    {i > 0 && <ArrowRight className="size-4 shrink-0 text-primary" strokeWidth={1.75} />}
-                    <span className="rounded-control border border-border bg-card px-2 py-1">{node}</span>
-                  </span>
-                ))}
-              </div>
+              <DemoRead />
               <div className="mt-auto pt-5">
                 <TextLink href="/docs/kubernetes/service-routing">Open a concept page</TextLink>
               </div>
@@ -153,16 +161,7 @@ export default function HomePage() {
               <p className="mt-2 text-subheadline leading-relaxed text-muted-foreground">
                 Labs are real files in the repo. CI lints, builds and validates them on every change.
               </p>
-              <pre
-                aria-label="Checks CI runs on the labs"
-                className="mt-5 overflow-x-auto rounded-panel bg-code p-4 font-mono text-caption-1 leading-relaxed text-foreground"
-              >
-                <code>
-                  <span className="text-muted-foreground">$ </span>hadolint labs/*/Dockerfile{'\n'}
-                  <span className="text-muted-foreground">$ </span>tofu validate{'\n'}
-                  <span className="text-muted-foreground">$ </span>kubeconform -strict labs/*/k8s
-                </code>
-              </pre>
+              <DemoDo />
               <div className="mt-auto pt-5">
                 <TextLink href="/docs/containers/multi-stage-nextjs">Try a lab</TextLink>
               </div>
@@ -172,12 +171,7 @@ export default function HomePage() {
               <p className="mt-2 text-subheadline leading-relaxed text-muted-foreground">
                 Notes end with flashcards. Spaced repetition (FSRS) schedules them, right in your browser.
               </p>
-              {card && (
-                <figure className="mt-5 rounded-panel border border-border bg-grouped p-4">
-                  <blockquote className="text-subheadline font-medium leading-snug text-foreground">{card.q}</blockquote>
-                  <figcaption className="mt-2 text-footnote text-label-tertiary">Flashcard from {card.title}</figcaption>
-                </figure>
-              )}
+              {card && <DemoRemember question={card.q} answer={card.a} title={card.title} />}
               <div className="mt-auto pt-5">
                 <TextLink href="/review">Start today&apos;s review</TextLink>
               </div>
@@ -194,11 +188,15 @@ export default function HomePage() {
             title="Learning paths"
             lede={`${paths.length} sections, from Git basics to architecture. Progress is saved in this browser.`}
           />
-          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-            {paths.map((path) => {
+          {/* 10 sections: 1 column, then 2 (5 rows), then 5 (2 rows) once the
+              1200px container is full width, so no row ends on an orphan card. */}
+          <StaggerGrid className="grid gap-4 sm:grid-cols-2 min-[75rem]:grid-cols-5">
+            {paths.map((path, index) => {
               const body = (
                 <>
-                  <SectionIcon name={path.id} size={48} decorative />
+                  <span className="inline-flex w-fit transition-transform duration-200 ease-[var(--ease-ios)] group-hover:-rotate-3 group-hover:scale-105 group-focus-visible:-rotate-3 group-focus-visible:scale-105 motion-reduce:transition-none motion-reduce:transform-none">
+                    <SectionIcon name={path.id} size={48} decorative />
+                  </span>
                   <h3 className="mt-4 text-headline font-semibold">{path.title}</h3>
                   <p className="mt-1 text-subheadline leading-relaxed text-muted-foreground">{path.blurb}</p>
                   <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-5 text-footnote">
@@ -216,21 +214,25 @@ export default function HomePage() {
                 </>
               );
               return (
-                <li key={path.id} className="flex">
+                <li
+                  key={path.id}
+                  className="flex"
+                  style={{ '--stagger-i': index } as CSSProperties}
+                >
                   {path.href ? (
                     <Link
                       href={path.href}
-                      className="flex w-full flex-col rounded-card border border-border bg-card p-6 transition-[border-color,box-shadow] hover:border-primary/40 hover:shadow-[0_2px_4px_rgb(var(--shadow-color)/0.04),0_12px_24px_-12px_rgb(var(--shadow-color)/0.18)] motion-reduce:transition-none"
+                      className="group flex w-full flex-col rounded-card border border-border bg-card p-6 transition-[transform,border-color,box-shadow] duration-200 ease-[var(--ease-ios)] min-[75rem]:p-5 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_2px_4px_rgb(var(--shadow-color)/0.04),0_12px_24px_-12px_rgb(var(--shadow-color)/0.18)] focus-visible:-translate-y-0.5 motion-reduce:transition-none motion-reduce:transform-none"
                     >
                       {body}
                     </Link>
                   ) : (
-                    <div className="flex w-full flex-col rounded-card border border-dashed border-border bg-transparent p-6">{body}</div>
+                    <div className="flex w-full flex-col rounded-card border border-dashed border-border bg-transparent p-6 min-[75rem]:p-5">{body}</div>
                   )}
                 </li>
               );
             })}
-          </ul>
+          </StaggerGrid>
         </Container>
       </section>
 
@@ -264,7 +266,7 @@ export default function HomePage() {
               <li key={note.url}>
                 <Link
                   href={note.url}
-                  className="flex min-h-tap flex-col gap-1.5 px-5 py-4 transition-colors hover:bg-accent sm:flex-row sm:items-center sm:gap-4 motion-reduce:transition-none"
+                  className="group flex min-h-tap flex-col gap-1.5 px-5 py-4 transition-colors hover:bg-accent sm:flex-row sm:items-center sm:gap-4 motion-reduce:transition-none"
                 >
                   <span className="min-w-0 flex-1 font-medium text-foreground">{note.title}</span>
                   <span className="flex shrink-0 items-center gap-3 text-footnote text-muted-foreground">
@@ -275,6 +277,11 @@ export default function HomePage() {
                         {note.dateLabel}
                       </time>
                     )}
+                    <ArrowRight
+                      className="hidden size-4 shrink-0 text-muted-foreground transition-transform duration-200 ease-[var(--ease-ios)] group-hover:translate-x-0.5 group-hover:text-foreground sm:inline-block motion-reduce:transition-none motion-reduce:transform-none"
+                      strokeWidth={1.75}
+                      aria-hidden="true"
+                    />
                   </span>
                 </Link>
               </li>
@@ -298,9 +305,9 @@ export default function HomePage() {
                   <h3 id={`ring-${ring.ring}`} className="text-headline font-semibold">
                     {ring.label}
                   </h3>
-                  <span className="rounded-pill bg-highlight-soft px-2.5 py-0.5 text-footnote font-semibold tabular-nums text-highlight-text">
+                  <RadarPulse className="rounded-pill bg-highlight-soft px-2.5 py-0.5 text-footnote font-semibold tabular-nums text-highlight-text">
                     {ring.count} {ring.count === 1 ? 'entry' : 'entries'}
-                  </span>
+                  </RadarPulse>
                 </div>
                 {ring.top.length > 0 ? (
                   <ul className="mt-4 flex flex-col gap-3">

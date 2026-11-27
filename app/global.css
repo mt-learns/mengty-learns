@@ -261,9 +261,89 @@ figure.shiki pre {
   background-color: var(--sidebar-active-foreground);
 }
 
+@keyframes mt-rise {
+  0% {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  30% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes mt-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+.mt-hero-rise {
+  animation: mt-rise var(--duration-entrance) var(--ease-ios) both;
+}
+
+.mt-hero-float {
+  animation: mt-float 5.5s ease-in-out infinite;
+}
+
+@keyframes mt-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.mt-cursor-blink {
+  animation: mt-blink 1s step-end infinite;
+}
+
+.mt-stagger-grid[data-stagger='armed'] > li {
+  opacity: 0;
+}
+
+.mt-stagger-grid[data-stagger='revealed'] > li {
+  animation: mt-rise 380ms var(--ease-ios) calc(var(--stagger-i, 0) * 40ms) both;
+}
+
+@keyframes mt-pulse-once {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+.mt-pulse-once {
+  animation: mt-pulse-once 420ms var(--ease-ios) 1 both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .prose a:not([data-card]) {
     transition: none;
+  }
+  .mt-hero-rise,
+  .mt-hero-float,
+  .mt-cursor-blink,
+  .mt-pulse-once {
+    animation: none !important;
+  }
+  .mt-stagger-grid[data-stagger='armed'] > li,
+  .mt-stagger-grid[data-stagger='revealed'] > li {
+    opacity: 1;
+    animation: none !important;
   }
 }
 

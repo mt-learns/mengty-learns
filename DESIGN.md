@@ -281,6 +281,32 @@ Surfaces rely primarily on **tonal layering** (page `#FAFAF8` vs card `#FFFFFF`)
 - **Easing (`--ease-ios`):** `cubic-bezier(0.32, 0.72, 0, 1)` for all transitions, hover lifts, and `<Flow>` active node scaling (`scale(1.04)`).
 - **Reduced Motion:** All transitions, spring lifts, and `<Flow>` travelling dots must disable under `prefers-reduced-motion: reduce`, preserving instant state highlights.
 
+## Motion
+
+Motion is purposeful, physical, quick, and interruptible. It explains the product loop (**notes → flows → labs → review**) without decorative noise.
+
+### Tokens (`app/tokens.css`)
+- **Easing:** `--ease-ios: cubic-bezier(0.32, 0.72, 0, 1)`
+- **Durations:**
+  - `--duration-fast: 150ms` — immediate control feedback, arrow nudges, hover states
+  - `--duration-base: 260ms` — routine state changes, card lifts, icon tilts
+  - `--duration-entrance: 420ms` — hero supporting entrance (60ms stagger, < 600ms total), grid reveals (40ms stagger, once)
+  - **Extended sequences:** 900ms cubic ease-out for proof strip count-up; 480ms `--ease-ios` for 3D flashcard flip; 5.5s idle float on the hero illustration (paused offscreen).
+
+### What animates
+- **Composited properties only:** `transform` (translate, scale, rotate, `rotateY`, `scaleX` for progress fills) and `opacity`.
+- **Landing page focal sequences:** Hero supporting elements (subtitle, CTAs, illustration), proof strip count-up (once on reveal), Read/Do/Remember mini demos (once on reveal, replay on hover/focus), Learning paths stagger (once) + hover lift + `scaleX` progress pill fill, `<Flow>` autoplay at 50% viewport (pauses offscreen), and subtle row hover arrow nudges.
+
+### What never animates
+- **The Hero `<h1>` (LCP element):** always visible at `opacity: 1` on first paint.
+- **Layout-thrashing properties:** never animate `width`, `height`, `top`, `left`, `margin`, or `padding`. Reserve dimensions (`tabular-nums`, `ch` widths, grid-stacked spacers) so hydration and state changes produce zero CLS.
+- **Scroll-jacking or text parallax:** never hijack scroll or move body text out of flow.
+- **Infinite attention loops:** only the 2–4px hero illustration float loops, and it pauses when offscreen. Nothing flashes > 3 times per second.
+
+### Reduced Motion (`prefers-reduced-motion: reduce`)
+- All entrances, staggers, count-ups, typing animations, 3D flips, idle floats, and `<Flow>` autoplays disable immediately.
+- Content renders in its final settled state; interactive controls (such as flipping the sample flashcard) fall back to instant opacity/visibility swaps without spatial movement.
+
 ### Named Rules
 **The Single-Frame Rule.** Every code block, callout, tab container, and card must have at most **one** border/frame—never nest bordered `pre` elements inside bordered Fumadocs `figure` containers.
 

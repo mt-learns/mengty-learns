@@ -81,6 +81,9 @@
   --control-h: 2.5rem;
   --control-h-touch: 2.75rem;
 
+  --duration-fast: 150ms;
+  --duration-base: 260ms;
+  --duration-entrance: 420ms;
   --ease-ios: cubic-bezier(0.32, 0.72, 0, 1);
 }
 

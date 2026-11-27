@@ -17,14 +17,23 @@ export function PathProgress({ urls }: { urls: string[] }) {
     setDone(urls.filter((url) => completed[url]).length);
   }, [urls]);
 
+  const ratio = done !== null && urls.length > 0 ? Math.min(1, done / urls.length) : 0;
+
   return (
     <span
       className={cn(
-        'rounded-pill bg-primary-soft px-2.5 py-0.5 text-footnote font-medium tabular-nums text-primary',
-        done === null && 'invisible'
+        'relative inline-flex overflow-hidden rounded-pill bg-primary-soft px-2.5 py-0.5 text-footnote font-medium tabular-nums text-primary',
+        done === null && 'invisible',
       )}
     >
-      {done ?? 0} / {urls.length} done
+      <span
+        aria-hidden="true"
+        className="pointer-events-none absolute inset-0 origin-left bg-primary/15 transition-transform duration-500 ease-[var(--ease-ios)] motion-reduce:transition-none"
+        style={{ transform: `scaleX(${ratio})` }}
+      />
+      <span className="relative">
+        {done ?? 0} / {urls.length} done
+      </span>
     </span>
   );
 }

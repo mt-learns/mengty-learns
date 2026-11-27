@@ -53,6 +53,7 @@ const SECTION_COPY: Record<SectionIconName, { title: string; blurb: string }> = 
   design: { title: 'Design', blurb: 'OOP, SOLID and patterns, shown with TypeScript.' },
   architecture: { title: 'Architecture', blurb: 'Layered, hexagonal and how dependencies should point.' },
   security: { title: 'Security', blurb: 'The common web risks and the habits that prevent them.' },
+  process: { title: 'Process', blurb: 'Idea to production, ADRs, quality gates, and retros for small teams.' },
 };
 
 export interface LearningPath {
@@ -168,12 +169,12 @@ export function getRadarSnapshot(perRing = 2): RadarRingSnapshot[] {
   });
 }
 
-/** One real flashcard question for the "Remember" preview. */
-export function getSampleCard(preferSection = 'kubernetes'): { q: string; title: string; url: string } | null {
+/** One real flashcard question and answer for the "Remember" preview. */
+export function getSampleCard(preferSection = 'kubernetes'): { q: string; a: string; title: string; url: string } | null {
   const pages = notePages().sort((a, b) => Number(b.slugs[0] === preferSection) - Number(a.slugs[0] === preferSection));
   for (const page of pages) {
     const card = page.data.cards?.[0];
-    if (card) return { q: card.q, title: page.data.title, url: page.url };
+    if (card) return { q: card.q, a: card.a, title: page.data.title, url: page.url };
   }
   return null;
 }

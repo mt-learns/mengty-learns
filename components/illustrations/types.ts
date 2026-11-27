@@ -8,6 +8,7 @@ export const SECTION_ICON_NAMES = [
   'design',
   'architecture',
   'security',
+  'process',
 ] as const;
 
 export type SectionIconName = (typeof SECTION_ICON_NAMES)[number];

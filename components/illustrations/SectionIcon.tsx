@@ -19,6 +19,7 @@ const DEFAULT_TITLES: Record<SectionIconName, string> = {
   design: 'Design patterns section icon',
   architecture: 'Architecture section icon',
   security: 'Security section icon',
+  process: 'Process section icon',
 };
 
 const SECTION_TINTS: Record<SectionIconName, { glow: string; rim: string }> = {
@@ -31,10 +32,11 @@ const SECTION_TINTS: Record<SectionIconName, { glow: string; rim: string }> = {
   design: { glow: '#ec4899', rim: '#f472b6' },
   architecture: { glow: '#6366f1', rim: '#818cf8' },
   security: { glow: '#10b981', rim: '#34d399' },
+  process: { glow: '#0ea5e9', rim: '#38bdf8' },
 };
 
 /**
- * Soft 3D clay app-icon squircle for each of the 9 learning sections.
+ * Soft 3D clay app-icon squircle for each of the 10 learning sections.
  */
 export function SectionIcon({
   name,
@@ -260,6 +262,23 @@ export function SectionIcon({
             />
             <rect x="38" y="45" width="20" height="16" rx="5" fill={`url(#${uid}-clay-amber)`} />
             <circle cx="48" cy="53" r="2.5" fill="#78350f" />
+          </g>
+        )}
+        {name === 'process' && (
+          <g>
+            {/* Clay clipboard with a half-done checklist */}
+            <rect x="25" y="25" width="46" height="49" rx="9" fill={`url(#${uid}-clay-blue)`} />
+            <rect x="31" y="32" width="34" height="36" rx="5" fill="#f8fafc" />
+            <rect x="38" y="20" width="20" height="10" rx="5" fill={`url(#${uid}-clay-amber)`} />
+            <rect x="42" y="22.5" width="8" height="2.5" rx="1.25" fill="#ffffff" fillOpacity="0.85" />
+            <circle cx="38" cy="41" r="3.75" fill={`url(#${uid}-clay-mint)`} />
+            <path d="M 36.3 41 L 37.6 42.3 L 39.9 39.8" fill="none" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="38" cy="50" r="3.75" fill={`url(#${uid}-clay-mint)`} />
+            <path d="M 36.3 50 L 37.6 51.3 L 39.9 48.8" fill="none" stroke="#ffffff" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="38" cy="59" r="3.25" fill="none" stroke="#94a3b8" strokeWidth="1.5" />
+            <rect x="45" y="39.5" width="15" height="3" rx="1.5" fill="#94a3b8" />
+            <rect x="45" y="48.5" width="12" height="3" rx="1.5" fill="#94a3b8" />
+            <rect x="45" y="57.5" width="14" height="3" rx="1.5" fill={`url(#${uid}-clay-lavender)`} />
           </g>
         )}
       </g>
