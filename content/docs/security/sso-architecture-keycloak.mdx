@@ -1,0 +1,249 @@
+---
+title: SSO Architecture & Token Propagation
+description: Run Keycloak as a Tier-0 identity dependency—local JWKS validation, per-app audiences, RFC 8693 Token Exchange across hops, and back-channel logout.
+kind: concept
+type: explanation
+level: advanced
+tags: [security, sso, keycloak, jwt, token-exchange, zero-trust]
+tested_with:
+  keycloak: "26.x (docs)"
+status: stable
+updated: "2026-11-27"
+verified: "2026-11-27"
+cards:
+  - q: "Why should resource servers validate JWT signatures against a cached JWKS rather than calling the IdP on every API request?"
+    a: "Local JWKS validation avoids turning every API call into an IdP round trip and keeps existing valid tokens working briefly if the IdP restarts."
+  - q: "What security risk happens when Service A forwards the user's original broad access token to Service B?"
+    a: "If Service B is compromised, the attacker holds a token with Service A's broader audience and scopes, enabling lateral movement."
+  - q: "How does OAuth 2.0 Token Exchange (RFC 8693) solve downstream service calls?"
+    a: "Service A exchanges the user's token at the IdP for a new token preserving the user's identity (sub) but narrowed to Service B's specific audience and minimal scope."
+  - q: "Why is Back-Channel Logout more reliable than Front-Channel Logout?"
+    a: "Back-channel logout sends a server-to-server logout token directly to each client, whereas front-channel logout relies on browser iframes and third-party cookies that modern browsers block."
+related:
+  - security/keycloak-realms-clients-roles
+  - security/oauth21-oidc-pkce
+  - security/internal-vs-external-apis
+sources:
+  - title: "RFC 8693: OAuth 2.0 Token Exchange"
+    url: https://www.rfc-editor.org/rfc/rfc8693.html
+  - title: "OpenID Connect Back-Channel Logout 1.0"
+    url: https://openid.net/specs/openid-connect-backchannel-1_0.html
+  - title: "software-engineering: Keycloak in a Banking SSO Architecture (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/04-security-and-authentication/05-keycloak-in-a-banking-sso-architecture.md
+---
+
+## TL;DR
+Centralizing SSO does not mean every app shares one token. Validate JWTs **locally via cached JWKS** with strict **`aud` checks**, use **RFC 8693 Token Exchange** to narrow audience/scope across trust boundaries, implement **back-channel logout**, and treat your IdP as **Tier-0 HA infrastructure**.
+
+## 1. Intent
+
+<Intent>
+Provide seamless single sign-on across multiple applications while isolating token blast radius per service and keeping APIs resilient during IdP maintenance.
+</Intent>
+
+## 2. Problem
+
+When organizations consolidate 5–10 apps onto one Identity Provider (IdP), three operational flaws often hide underneath:
+1. **Shared audience:** Every API accepts any valid token from the realm without checking `aud`, so a low-privilege reporting app token can call a payment or admin API.
+2. **Unbounded token forwarding:** Internal services forward the user's full-scope token across 4 hops, turning one compromised pod into full lateral access.
+3. **Single-point-of-failure IdP:** Fetching JWKS per request or running a single IdP database instance causes a total outage whenever the IdP fails over.
+
+<Diagram
+  id="sso-problem"
+  ariaLabel="Forwarding a broad token across services without audience validation allows a compromised downstream service to call privileged APIs"
+  caption="Without audience checks and token narrowing, one compromised hop can replay broad tokens."
+  nodes={[
+    { id: 'app', label: 'Portal App', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'svcA', label: 'Orders API', subtitle: 'Forwards broad JWT', icon: 'service', category: 'service', rank: 1, order: 0, variant: 'problem' },
+    { id: 'svcB', label: 'PDF Renderer', subtitle: 'Compromised pod', icon: 'pod', category: 'external', rank: 2, order: 0, variant: 'problem' },
+    { id: 'ledger', label: 'Billing API', subtitle: 'No aud check!', icon: 'db', category: 'external', rank: 3, order: 0, variant: 'problem' },
+  ]}
+  edges={[
+    { from: 'app', to: 'svcA' },
+    { from: 'svcA', to: 'svcB', label: 'broad JWT' },
+    { from: 'svcB', to: 'ledger', label: 'replays', kind: 'error' },
+  ]}
+/>
+
+## 3. Solution
+
+Combine four controls:
+1. **Local JWKS validation + strict `aud`:** Every resource server caches the IdP's JWKS keys and rejects any token whose `aud` does not match its own `client_id`.
+2. **Short access-token lifetimes (3–5 min):** Bounds the window after revocation.
+3. **Token Exchange (RFC 8693):** Before crossing a trust boundary, Service A exchanges the incoming token for a down-scoped token (`aud: service-b`, minimal `scope`) while keeping `sub` for the audit trail.
+4. **Back-channel logout + HA IdP:** Server-to-server logout notifications revoke BFF sessions; IdP runs multi-AZ with a circuit breaker and quarterly failover drills.
+
+## 4. Real-world analogy
+
+<Analogy>
+Think of **visitor badges at a secure campus**. At reception (**the IdP**), you show your passport once to prove who you are (**SSO session**). To enter the server room, reception issues a temporary badge valid *only* for Door B for 15 minutes (**Token Exchange**)—if someone steals that badge, it still cannot open the finance vault.
+</Analogy>
+
+## 5. Flow: watch it work
+
+<Flow
+  id="sso-architecture-keycloak"
+  title="SSO, Local JWKS Check & Token Exchange"
+  nodes={[
+    { id: 'bff', label: 'Web BFF', subtitle: 'Confidential client', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'idp', label: 'Keycloak IdP', subtitle: 'JWKS + Token Exch', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+    { id: 'orders', label: 'Orders API', subtitle: 'aud: orders-api', icon: 'service', category: 'service', rank: 2, order: 0 },
+    { id: 'docs', label: 'Docs API', subtitle: 'aud: docs-api', icon: 'db', category: 'data', rank: 3, order: 0 },
+  ]}
+  steps={[
+    { edge: 'bff->idp', title: 'Authenticate user', text: 'BFF completes OIDC Auth Code + PKCE login and stores session' },
+    { edge: 'idp->bff', title: 'Issue orders-api token', text: 'Keycloak returns short-lived JWT with aud=orders-api', kind: 'response' },
+    { edge: 'bff->orders', title: 'Call Orders API', text: 'BFF sends Bearer token; Orders API verifies locally via cached JWKS' },
+    { edge: 'orders->idp', title: 'Exchange token for Docs', text: 'Orders API calls RFC 8693 Token Exchange for aud=docs-api' },
+    { edge: 'idp->orders', title: 'Return narrowed JWT', text: 'Keycloak returns token keeping sub but scoped only to docs.render', kind: 'response' },
+    { edge: 'orders->docs', title: 'Call Docs API', text: 'Docs API verifies narrowed aud=docs-api and renders receipt' },
+    { edge: 'docs->orders', title: 'Return document', text: 'Docs API returns PDF stream to Orders API', kind: 'response' },
+    { edge: 'orders->bff', title: 'Return order receipt', text: 'Orders API returns completed response to Web BFF', kind: 'response' },
+  ]}
+/>
+
+## 6. Structure
+
+<Diagram
+  id="sso-propagation-options"
+  ariaLabel="Comparison of Token Exchange, Client Credentials, and Token Forwarding across downstream hops"
+  caption="Token Exchange preserves the user identity (sub) while narrowing audience and scope."
+  nodes={[
+    { id: 'in', label: 'Incoming JWT', subtitle: 'sub=user, aud=A', icon: 'interface', category: 'abstraction', rank: 0, order: 0 },
+    { id: 'ex', label: 'Token Exchange', subtitle: 'sub=user, aud=B', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+    { id: 'cc', label: 'Client Creds', subtitle: 'No user sub', icon: 'service', category: 'external', rank: 1, order: 1 },
+  ]}
+  edges={[
+    { from: 'in', to: 'ex', label: 'user hop' },
+    { from: 'in', to: 'cc', label: 'batch job' },
+  ]}
+/>
+
+## 7. Code
+
+```ts
+// RFC 8693 Token Exchange from Service A -> Service B
+export async function exchangeToken(params: {
+  tokenEndpoint: string;
+  clientId: string;
+  clientSecret: string;
+  subjectToken: string;
+  targetAudience: string;
+  scope: string;
+}): Promise<string> {
+  const body = new URLSearchParams({
+    grant_type: 'urn:ietf:params:oauth:grant-type:token-exchange',
+    client_id: params.clientId,
+    client_secret: params.clientSecret,
+    subject_token: params.subjectToken,
+    subject_token_type: 'urn:ietf:params:oauth:token-type:access_token',
+    audience: params.targetAudience,
+    scope: params.scope,
+  });
+
+  const res = await fetch(params.tokenEndpoint, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body,
+    signal: AbortSignal.timeout(2000),
+  });
+
+  if (!res.ok) throw new Error(`Token exchange failed: ${res.status}`);
+  const data = (await res.json()) as { access_token: string };
+  return data.access_token;
+}
+```
+
+## 8. When to use / when to avoid
+
+<Checklist
+  use={[
+    "Use cached JWKS validation on every resource server with strict iss, aud, and exp checks.",
+    "Use RFC 8693 Token Exchange when crossing trust boundaries while needing user attribution in audit logs.",
+    "Use Client Credentials only for genuine user-less background jobs (nightly reconciliation, batch reports).",
+  ]}
+  avoid={[
+    "Do not fetch JWKS synchronously on every incoming API request—cache keys with background refresh.",
+    "Do not rely solely on Front-Channel Logout; modern browsers block third-party cookies.",
+  ]}
+/>
+
+## 9. How to implement
+
+<Steps>
+  <Step>
+    ### Configure per-service clients and audiences
+    Ensure every backend API has its own client ID and audience mapper in Keycloak.
+  </Step>
+  <Step>
+    ### Enforce local JWKS + audience validation
+    Cache JWKS keys with a 2-second timeout on refresh and reject mismatched `aud` claims.
+  </Step>
+  <Step>
+    ### Enable Token Exchange for cross-boundary hops
+    Exchange incoming tokens for narrow downstream tokens instead of forwarding broad tokens.
+  </Step>
+  <Step>
+    ### Wire back-channel logout and HA failover tests
+    Configure back-channel logout URLs on BFF clients and run regular IdP failover drills.
+  </Step>
+</Steps>
+
+## 10. Pros / Cons
+
+<ProsCons
+  pros={[
+    "User identity (sub) stays intact in downstream audit logs while blast radius shrinks per hop.",
+    "Local JWKS validation keeps existing sessions running during brief IdP restarts.",
+    "Back-channel logout terminates BFF sessions deterministically.",
+  ]}
+  cons={[
+    "Token Exchange adds an IdP round trip unless short-lived exchanged tokens are cached per user+audience.",
+    "Operating an HA IdP (database replication, session cache, upgrades) requires dedicated runbooks.",
+  ]}
+/>
+
+## 11. Relations
+
+<Relations
+  items={[
+    {
+      name: "Keycloak Realms, Clients & Roles",
+      summary: "Covers the realm, client, and client-role hierarchy behind SSO.",
+      href: "/docs/security/keycloak-realms-clients-roles",
+    },
+    {
+      name: "OAuth 2.1, OIDC & PKCE",
+      summary: "Details the login handshake executed at the start of an SSO session.",
+      href: "/docs/security/oauth21-oidc-pkce",
+    },
+    {
+      name: "Internal vs External APIs",
+      summary: "Combines JWT audience narrowing with workload mTLS for zero-trust service meshes.",
+      href: "/docs/security/internal-vs-external-apis",
+    },
+  ]}
+/>
+
+## 12. Check yourself
+
+<Quiz
+  questions={[
+    {
+      question: "What happens if an internal service validates JWT signatures locally with a cached JWKS and the IdP goes down for 3 minutes?",
+      options: [
+        { label: "All active API requests immediately fail", description: "Cached JWKS lets resource servers continue verifying valid tokens locally." },
+        { label: "Existing valid access tokens keep working until expiry, while new logins and token refreshes fail", description: "Local JWKS validation decouples API request verification from live IdP availability.", correct: true },
+        { label: "Users are automatically logged in as admins", description: "Signatures and claims are still strictly verified against the cached public keys." },
+      ],
+    },
+    {
+      question: "Why prefer RFC 8693 Token Exchange over Client Credentials when Service A calls Service B on a user's behalf?",
+      options: [
+        { label: "Token Exchange preserves the user's identity (sub) in the audit trail while narrowing audience and scope", description: "Client Credentials loses user attribution, whereas Token Exchange keeps the user identity with minimal permissions.", correct: true },
+        { label: "Token Exchange eliminates HTTPS", description: "Token Exchange still requires TLS." },
+        { label: "Client Credentials cannot be used by backend services", description: "Client Credentials is meant for user-less machine-to-machine batch jobs." },
+      ],
+    },
+  ]}
+/>
