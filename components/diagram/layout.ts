@@ -108,25 +108,63 @@ export interface ComputedDiagramLayout {
 }
 
 /**
- * Deterministic character-width estimator for Inter 15px/600 and 13px/400
- * so layout math is identical in Node (SSR/Vitest) and browser.
+ * Inter advance widths (em) for ASCII 32-126, measured in Chromium from the
+ * self-hosted Inter variable font this site ships (weights 400 and 600, no
+ * letter-spacing). Kerning only narrows real text, so summing advances is a
+ * safe upper bound.
+ */
+// prettier-ignore
+const INTER_400 = [
+  0.281, 0.288, 0.466, 0.633, 0.642, 0.982, 0.644, 0.3, 0.365, 0.365, 0.501, 0.662, 0.288, 0.46, 0.288, 0.36,
+  0.631, 0.407, 0.61, 0.618, 0.646, 0.593, 0.62, 0.584, 0.619, 0.62, 0.288, 0.302, 0.662, 0.662, 0.662, 0.511,
+  0.966, 0.703, 0.654, 0.73, 0.722, 0.601, 0.59, 0.746, 0.743, 0.269, 0.571, 0.672, 0.565, 0.903, 0.753, 0.765,
+  0.639, 0.765, 0.644, 0.642, 0.646, 0.744, 0.703, 1.007, 0.682, 0.679, 0.629, 0.365, 0.316, 0.365, 0.471, 0.456,
+  0.323, 0.562, 0.612, 0.571, 0.612, 0.583, 0.335, 0.613, 0.591, 0.242, 0.242, 0.549, 0.242, 0.876, 0.591, 0.6,
+  0.612, 0.612, 0.391, 0.528, 0.327, 0.591, 0.562, 0.818, 0.546, 0.562, 0.552, 0.426, 0.333, 0.426, 0.662,
+];
+// prettier-ignore
+const INTER_600 = [
+  0.252, 0.321, 0.523, 0.644, 0.65, 1.004, 0.663, 0.326, 0.373, 0.373, 0.54, 0.673, 0.319, 0.465, 0.319, 0.379,
+  0.66, 0.423, 0.623, 0.636, 0.666, 0.612, 0.64, 0.594, 0.64, 0.64, 0.319, 0.329, 0.673, 0.673, 0.673, 0.543,
+  0.999, 0.741, 0.659, 0.737, 0.722, 0.605, 0.588, 0.749, 0.746, 0.277, 0.58, 0.703, 0.565, 0.922, 0.759, 0.769,
+  0.645, 0.773, 0.652, 0.65, 0.66, 0.736, 0.741, 1.04, 0.72, 0.713, 0.652, 0.373, 0.335, 0.373, 0.481, 0.469,
+  0.351, 0.574, 0.624, 0.583, 0.624, 0.591, 0.352, 0.625, 0.612, 0.262, 0.262, 0.569, 0.262, 0.9, 0.612, 0.609,
+  0.624, 0.624, 0.406, 0.549, 0.347, 0.612, 0.587, 0.839, 0.569, 0.588, 0.566, 0.455, 0.359, 0.455, 0.673,
+];
+/** Measured non-ASCII glyphs used in labels, [400, 600] em. */
+const INTER_EXTRA: Record<string, [number, number]> = {
+  '→': [1.071, 1.071], // →
+  '«': [0.583, 0.634], // «
+  '»': [0.583, 0.634], // »
+  '·': [0.288, 0.319], // ·
+};
+/** Any other non-ASCII glyph counts as wider than the widest measured one. */
+const NON_ASCII_EM = 1.1;
+/** Headroom for hinting and sub-pixel rounding across browsers. */
+const TEXT_SAFETY = 1.02;
+
+/**
+ * Deterministic text width for Inter (semibold = 600, else 400) at `fontSize`,
+ * from measured advance widths, so layout math is identical in Node (SSR/Vitest)
+ * and the browser and never narrower than the rendered text.
  */
 export function estimateTextWidth(text: string, fontSize = 15, semibold = true): number {
-  let units = 0;
-  for (let i = 0; i < text.length; i++) {
-    const ch = text[i];
-    if ('ilIjtfr.,:;!| '.includes(ch)) {
-      units += 0.34;
-    } else if ('mwMW@%'.includes(ch)) {
-      units += 0.84;
-    } else if (ch >= 'A' && ch <= 'Z') {
-      units += 0.66;
-    } else {
-      units += 0.54;
-    }
+  return advanceWidth(text, fontSize, semibold) * TEXT_SAFETY;
+}
+
+/** Plain sum of Inter advances (no safety margin): the natural one-line width. */
+function advanceWidth(text: string, fontSize: number, semibold: boolean): number {
+  const table = semibold ? INTER_600 : INTER_400;
+  let em = 0;
+  for (const ch of text) {
+    const code = ch.codePointAt(0)!;
+    if (code === 0x200b) continue;
+    em +=
+      code >= 32 && code <= 126
+        ? table[code - 32]
+        : (INTER_EXTRA[ch]?.[semibold ? 1 : 0] ?? NON_ASCII_EM);
   }
-  const weightFactor = semibold ? 1.04 : 0.96;
-  return units * fontSize * weightFactor;
+  return em * fontSize;
 }
 
 /**
@@ -141,8 +179,62 @@ export function splitLabelTokens(label: string): string[] {
 }
 
 /**
- * Computes the uniform node width and per-node line count (1 or 2)
- * so labels never truncate with an ellipsis or break mid-word.
+ * Lines a node label needs at `availWidth`, wrapping greedily the way the node
+ * renders it: at spaces and at camelCase boundaries (the zero-width spaces the
+ * nodes insert). Other break chances (after "/" or "-") are ignored, so the
+ * count is never lower than the browser's. A token wider than the line returns
+ * Infinity: it could only be cut.
+ */
+export function labelLineCount(label: string, fontSize: number, availWidth: number): number {
+  const space = estimateTextWidth(' ', fontSize, true);
+  let lines = 0;
+  for (const paragraph of label.split('\n')) {
+    let lineW = -1;
+    lines += 1;
+    for (const word of paragraph.trim().split(/\s+/).filter(Boolean)) {
+      const parts = word.replace(/([a-z0-9])([A-Z])/g, '$1\u200B$2').split('\u200B');
+      for (let i = 0; i < parts.length; i++) {
+        const w = estimateTextWidth(parts[i], fontSize, true);
+        if (w > availWidth) return Infinity;
+        if (lineW < 0) {
+          lineW = w;
+          continue;
+        }
+        const join = i === 0 ? space : 0;
+        if (lineW + join + w > availWidth) {
+          lines += 1;
+          lineW = w;
+        } else {
+          lineW += join + w;
+        }
+      }
+    }
+  }
+  return lines;
+}
+
+/**
+ * Horizontal space a node spends on everything but its label: padding, border,
+ * icon tile and gap (<Flow>'s IosNode and <Diagram>'s node share these), plus
+ * the "problem" badge and its gap.
+ */
+export function nodeLabelChrome(compact: boolean, problem: boolean): number {
+  // Full: 12px padding x2 + 1px border x2 + 36px icon + 10px gap = 72.
+  // Compact: 8px padding x2 + 1px border x2 + 28px icon + 6px gap = 52.
+  const base = compact ? 52 : 72;
+  // Problem badge: 20px + the row gap.
+  return base + (problem ? (compact ? 26 : 30) : 0);
+}
+
+
+/**
+ * Computes the uniform node width and per-node line count (1 or 2) so every
+ * label fits in at most two lines at its real width: never clamped with an
+ * ellipsis, never cut mid-word (§4.1). When the rung's width cap (two compact
+ * nodes per row, or the 160px compact maximum) is too narrow for that, the nodes
+ * widen just enough, up to the 240px node maximum, and the ladder re-checks the
+ * fit. The font never shrinks: §4.1 (full label visible) wins over §3.3b's
+ * compact width.
  */
 export function computeNodeDimensions(
   nodes: FlowNode[],
@@ -158,44 +250,56 @@ export function computeNodeDimensions(
     maxWidthOverride ?? Infinity,
   );
   const fontSize = compact ? 14 : 15;
-  // Normal: 36px icon + 10px gap + 24px pad + 10px safety = 80
-  // Compact: 28px icon + 6px gap + 16px pad + 4px safety = 54
-  const chromeWidth = compact ? 54 : 80;
+  // Width at which label and subtitle sit on one line: the natural advance sum
+  // (kerning only shortens it) plus the real chrome. Only the two-line check
+  // below needs the safety margin.
   let maxIdeal = minW;
-  let minWordWidth = minW;
 
   for (const node of nodes) {
-    const labelW = estimateTextWidth(node.label, fontSize, true);
-    const subW =
-      !compact && node.subtitle ? estimateTextWidth(node.subtitle, 13, false) : 0;
-    const problemExtra = node.variant === 'problem' ? (compact ? 16 : 20) : 0;
-    const ideal = Math.ceil(Math.max(labelW, subW) + chromeWidth + problemExtra);
+    const labelW = advanceWidth(node.label, fontSize, true);
+    const subW = !compact && node.subtitle ? advanceWidth(node.subtitle, 13, false) : 0;
+    const chrome = nodeLabelChrome(compact, node.variant === 'problem');
+    const ideal = Math.ceil(Math.max(labelW, subW) + chrome);
     if (ideal > maxIdeal) {
       maxIdeal = ideal;
     }
-    for (const token of splitLabelTokens(node.label)) {
-      const tokenNeeded = Math.ceil(
-        estimateTextWidth(token, fontSize, true) + chromeWidth + problemExtra,
-      );
-      if (tokenNeeded > minWordWidth) {
-        minWordWidth = tokenNeeded;
-      }
-    }
   }
 
-  const nodeWidth = Math.max(
-    minW,
-    minWordWidth,
-    Math.min(maxW, maxIdeal),
-  );
-  const nodeLines = new Map<string, 1 | 2>();
+  const fitsTwoLines = (w: number) =>
+    nodes.every(
+      (node) =>
+        labelLineCount(
+          node.label,
+          fontSize,
+          w - nodeLabelChrome(compact, node.variant === 'problem'),
+        ) <= 2,
+    );
 
+  let nodeWidth = Math.max(minW, Math.min(maxW, maxIdeal));
+  // Widen until every label wraps into two lines (past the rung cap if needed,
+  // up to the node maximum; beyond that the longest token decides).
+  while (!fitsTwoLines(nodeWidth) && nodeWidth < NODE_MAX_WIDTH) nodeWidth += 1;
+  if (!fitsTwoLines(nodeWidth)) {
+    let longestToken = 0;
+    for (const node of nodes) {
+      for (const token of splitLabelTokens(node.label)) {
+        longestToken = Math.max(
+          longestToken,
+          Math.ceil(
+            estimateTextWidth(token, fontSize, true) +
+              nodeLabelChrome(compact, node.variant === 'problem'),
+          ),
+        );
+      }
+    }
+    nodeWidth = Math.max(nodeWidth, longestToken);
+  }
+
+  const nodeLines = new Map<string, 1 | 2>();
   for (const node of nodes) {
-    const problemExtra = node.variant === 'problem' ? (compact ? 16 : 20) : 0;
-    const availableTextW = nodeWidth - chromeWidth - problemExtra + 6;
-    const labelW = estimateTextWidth(node.label, fontSize, true);
-    const needsTwoLines = labelW > availableTextW || node.label.includes('\n');
-    nodeLines.set(node.id, needsTwoLines ? 2 : 1);
+    const avail = nodeWidth - nodeLabelChrome(compact, node.variant === 'problem');
+    const lines = labelLineCount(node.label, fontSize, avail);
+    nodeLines.set(node.id, lines > 1 || node.label.includes('\n') ? 2 : 1);
   }
 
   return { nodeWidth, nodeLines };

@@ -277,7 +277,7 @@ function DiagramStage({
               }}
               className={cn(
                 'absolute flex items-center rounded-panel bg-card shadow-xs',
-                compact ? 'gap-2 px-2.5 py-1.5' : 'gap-2.5 px-3 py-2',
+                compact ? 'gap-1.5 px-2 py-1.5' : 'gap-2.5 px-3 py-2',
                 isProblem
                   ? 'border border-dashed border-[var(--border-strong)]'
                   : 'border border-border',

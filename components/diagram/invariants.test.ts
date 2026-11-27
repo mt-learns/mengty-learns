@@ -13,6 +13,8 @@ import {
   edgeGeometry,
   getHandleCoords,
   GROUP_LABEL_HEIGHT,
+  labelLineCount,
+  nodeLabelChrome,
   splitLabelTokens,
   stepBadgeRect,
   type NodeBox,
@@ -338,12 +340,13 @@ function assertLayoutInvariants(
     `${label} rendered label size >= 14px`,
   ).toBeGreaterThanOrEqual(14);
 
-  // 6a. §4.1: No label wraps inside a word (longest word/camelCase token fits nodeWidth)
-  const chromeW = layoutResult.compact ? 54 : 80;
+  // 6a. §4.1: No label wraps inside a word (longest word/camelCase token fits the
+  // node's text width: box width minus padding, border, icon, gap and problem badge)
   for (const raw of rawNodes) {
     const box = layoutResult.nodes.get(raw.id);
     if (!box || !('label' in raw) || typeof raw.label !== 'string') continue;
-    const availW = box.width - chromeW + 4;
+    const isProblem = 'variant' in raw && raw.variant === 'problem';
+    const availW = box.width - nodeLabelChrome(layoutResult.compact, isProblem);
     for (const token of splitLabelTokens(raw.label)) {
       expect(
         estimateTextWidth(token, baseFontSize, true),
@@ -459,6 +462,32 @@ function assertEdgeLabelInvariants(
   }
 }
 
+/**
+ * §4.1 + Typography: every node label fits in at most 2 lines at the node's real
+ * text width, so `line-clamp-2` never clips it with an ellipsis and no token is
+ * cut. Runs at the rendered size (15px, or 14px compact), never smaller.
+ */
+function assertNodeLabelsUnclamped(
+  label: string,
+  layoutResult: ReturnType<typeof computeDiagramLayout>,
+  rawNodes: { id: string; label: string; variant?: string }[],
+) {
+  const fontSize = layoutResult.compact ? 14 : 15;
+  for (const raw of rawNodes) {
+    const box = layoutResult.nodes.get(raw.id);
+    if (!box) continue;
+    const avail = box.width - nodeLabelChrome(layoutResult.compact, raw.variant === 'problem');
+    const lines = labelLineCount(raw.label, fontSize, avail);
+    expect(
+      lines,
+      `${label} node ${raw.id} "${raw.label}" needs ${lines} lines in ${avail}px (clamped or cut)`,
+    ).toBeLessThanOrEqual(2);
+    expect(box.lines, `${label} node ${raw.id} height matches its line count`).toBe(
+      lines > 1 || raw.label.includes('\n') ? 2 : 1,
+    );
+  }
+}
+
 /** The edge list exactly as FlowServer builds it (one route per from->to:kind, first label wins). */
 function flowEdgeInputs(steps: Parameters<typeof buildEdgeBuckets>[0]) {
   return Array.from(buildEdgeBuckets(steps).values()).map((b) => ({
@@ -529,6 +558,17 @@ describe('DIAGRAM-RULES §9.1 layout invariants across all MDX flows and diagram
               requireAllPlaced: width >= 720,
             });
           });
+
+          it(`${relPath} <Flow id="${parsed.id}" variant="${variant.id}"> node labels fit in 2 lines (never clamped) @ ${width}px`, () => {
+            const layoutResult = computeDiagramLayout({
+              nodes: variant.nodes,
+              edges: flowEdgeInputs(variant.steps),
+              groups: variant.groups ?? [],
+              layout: variant.layout ?? parsed.layout,
+              containerWidth: width,
+            });
+            assertNodeLabelsUnclamped(`${parsed.id}:${variant.id}@${width}`, layoutResult, variant.nodes);
+          });
         }
       }
     }
@@ -563,6 +603,7 @@ describe('DIAGRAM-RULES §9.1 layout invariants across all MDX flows and diagram
             isStaticDiagram: true,
             requireAllPlaced: false,
           });
+          assertNodeLabelsUnclamped(`${parsed.id}@${width}`, layoutResult, parsed.nodes);
         });
       }
     }
@@ -604,6 +645,44 @@ describe('DIAGRAM-RULES §9.1 layout invariants across all MDX flows and diagram
         isStaticDiagram: false,
         requireAllPlaced: width >= 720,
       });
+      assertNodeLabelsUnclamped(`${parsed.id}:shared@${width}`, layoutResult, parsed.nodes ?? []);
     });
   }
+});
+
+describe('Inter text-width estimator stays at or above the rendered width', () => {
+  // Natural single-line widths of real node labels in Inter 600 at 14px / 15px,
+  // measured in Chromium on the built site (2026-11-27). The layout sizes nodes
+  // from estimateTextWidth, so an estimate below these would let a label clamp.
+  const MEASURED: Array<[string, number, number]> = [
+    ['PlaceOrderPort', 104.19, 111.63],
+    ['OrderRepoPort', 101.5, 108.75],
+    ['Push / PR Trigger', 117.03, 125.39],
+    ['API Server + etcd', 118.03, 126.47],
+    ['PlaceOrderCmd', 107.42, 115.09],
+    ['FetchHttpClient', 106.19, 113.78],
+    ['GH Actions Job', 104.88, 112.36],
+    ['Cloud STS / IAM', 110.0, 117.84],
+    ['Worker', 49.38, 52.91],
+    ['CacheWrapper', 101.25, 108.48],
+    ['LoggingWrapper', 113.53, 121.64],
+    ['Order Aggregate', 113.02, 121.08],
+    ['Dead-letter queue', 123.22, 132.02],
+  ];
+  for (const [text, w14, w15] of MEASURED) {
+    it(`"${text}" estimate >= measured Inter width at 14px and 15px`, () => {
+      expect(estimateTextWidth(text, 14, true)).toBeGreaterThanOrEqual(w14);
+      expect(estimateTextWidth(text, 15, true)).toBeGreaterThanOrEqual(w15);
+      // and not wildly above it, which would waste node width
+      expect(estimateTextWidth(text, 14, true)).toBeLessThanOrEqual(w14 * 1.06);
+    });
+  }
+
+  it('wraps at camelCase and spaces only, and reports a too-wide token as cut', () => {
+    const w = estimateTextWidth('PlaceOrder', 14, true);
+    expect(labelLineCount('PlaceOrderPort', 14, w + 1)).toBe(2);
+    expect(labelLineCount('PlaceOrderPort', 14, estimateTextWidth('Order', 14, true) + 1)).toBe(3);
+    expect(labelLineCount('PlaceOrderPort', 14, 10)).toBe(Infinity);
+    expect(labelLineCount('Work Queue', 14, 500)).toBe(1);
+  });
 });
