@@ -402,3 +402,42 @@ footer {
   overscroll-behavior: contain;
   touch-action: none;
 }
+
+/* 5-minute version mode: keep TL;DR, OnePicture, KeyTakeaways, and cards. */
+html[data-five-min-mode='on'] .prose > *:not([data-five-min='keep']) {
+  display: none;
+}
+
+/* Print stylesheet for cheatsheet and lesson pages: hide chrome, keep content & cards printable. */
+@media print {
+  #nd-nav,
+  #nd-subnav,
+  #nd-sidebar,
+  #nd-toc,
+  #nd-tocnav,
+  footer,
+  [data-print='hide'] {
+    display: none !important;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+
+  #nd-page,
+  main,
+  .prose {
+    max-width: none !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  .prose pre,
+  .prose table,
+  .prose section,
+  [data-print='cards'] li {
+    break-inside: avoid;
+  }
+}
