@@ -1,0 +1,142 @@
+---
+title: Software Design Anti-Patterns
+description: Recognize common structural and process anti-patterns—God Service, Spaghetti Code, Golden Hammer, Distributed Monolith, and Speculative Generality—and refactor them incrementally.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: explanation
+level: intermediate
+tags: [design-patterns, anti-patterns, refactoring, architecture, code-quality]
+tested_with:
+  typescript: "7.0.2"
+cards:
+  - q: "What is Speculative Generality and how do you spot it in a codebase?"
+    a: "Building abstractions (factories, strategies, visitors) for hypothetical future requirements; the clearest tell is an interface with only one production implementation and no committed second variant."
+  - q: "What is a Distributed Monolith?"
+    a: "A system split into separate microservices that are still tightly coupled in data, synchronous call chains, or lockstep deployments—paying distributed-system latency without independent deployability."
+  - q: "Why is the Golden Hammer anti-pattern harmful?"
+    a: "Applying one familiar tool or pattern to every problem forces awkward workarounds where a simpler or purpose-built approach would fit better."
+  - q: "What is the safest way to pay down an entrenched anti-pattern like a God Service?"
+    a: "Refactor incrementally by extracting one cohesive module or seam at a time under test coverage, rather than halting feature delivery for a big-bang rewrite."
+related:
+  - design/yagni-kiss-dry
+  - design/pattern-relations
+  - architecture/monolith-vs-microservices
+  - process/tech-debt-tracking
+sources:
+  - title: "Martin Fowler: Anemic Domain Model & Refactoring Catalog"
+    url: https://martinfowler.com/bliki/AnemicDomainModel.html
+  - title: "Refactoring.Guru: Code Smells"
+    url: https://refactoring.guru/refactoring/smells
+  - title: "key-learning: anti-patterns (author's notes)"
+    url: https://github.com/limme-learning/key-learning/blob/main/software-design/03-design-patterns/09-anti-patterns.md
+  - title: "software-engineering: when not to use a pattern (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/02-design-patterns/04-when-not-to-use-a-pattern.md
+---
+
+## TL;DR
+An **anti-pattern** is a tempting shortcut or over-engineered structure that feels productive at first but slows every future change. Spot the big ones—**God Service**, **Speculative Generality**, **Golden Hammer**, and **Distributed Monolith**—and refactor them incrementally instead of attempting a big-bang rewrite.
+
+## Why it exists
+Anti-patterns rarely come from carelessness. They usually appear when teams either **skip boundaries** under deadline pressure (creating a God Service or Big Ball of Mud) or **over-apply patterns** after reading a book (creating 17 files of single-implementation interfaces to save one record).
+
+## Mental model
+Every design choice trades **indirection** against **coupling**. Too little structure creates tangles; too much unmotivated structure creates maze-like indirection.
+
+<Diagram
+  id="anti-patterns-spectrum"
+  ariaLabel="Both under-structured God Services and over-abstracted Speculative Generality slow delivery"
+  caption="Healthy design sits between under-structured tangles and over-engineered indirection."
+  nodes={[
+    { id: 'mud', label: 'Big Ball of Mud', subtitle: 'No boundaries', icon: 'service', category: 'external', rank: 0, order: 0, variant: 'problem' },
+    { id: 'sweet', label: 'Cohesive Modules', subtitle: 'Clear seams', icon: 'interface', category: 'service', rank: 1, order: 0 },
+    { id: 'spec', label: 'Over-Engineered', subtitle: 'Unused layers', icon: 'class', category: 'external', rank: 2, order: 0, variant: 'problem' },
+  ]}
+  edges={[
+    { from: 'mud', to: 'sweet', label: 'Extract' },
+    { from: 'spec', to: 'sweet', label: 'Inline' },
+  ]}
+/>
+
+## Do it
+
+### Common anti-patterns and their fixes
+
+| Anti-pattern | Symptom in the codebase | Root cause | Practical fix |
+|---|---|---|---|
+| **God Object / God Service** | One 2,000-line class owns billing, auth, notifications, and exports | New features kept getting appended to the nearest service | Extract one cohesive responsibility at a time behind a narrow function or module |
+| **Speculative Generality** | 30+ interfaces with exactly one `Default*` implementation each | Designing for hypothetical future variants ("for testability") | Inline single-use abstractions; wait for the third real variant before abstracting |
+| **Spaghetti Code** | Deep `if/else` nesting, hidden side effects, global state mutations | Missing pure functions and early returns | Flatten with guard clauses, isolate I/O at the edges |
+| **Golden Hammer** | Every problem solved with the same hammer (e.g. Kafka or microservices for a 2-table CRUD app) | Familiarity bias instead of fitness for purpose | Write a short ADR comparing the boring default against the specialized tool |
+| **Distributed Monolith** | 12 microservices that must all deploy together or share one database | Splitting by technical layer instead of bounded context | Merge tightly coupled services back into a modular monolith or decouple via async contracts |
+| **Premature Optimization** | Custom bit-packing or hand-rolled caches with zero profiling data | Optimizing guessed bottlenecks | Measure with a profiler or benchmark first; optimize only the measured hot path |
+
+### Concrete tell: single-implementation interfaces
+You don't need a complex static analyzer to spot speculative generality. In a TypeScript or Java codebase, look for interfaces that only have one production class implementing them (excluding genuine external-port seams like payment gateways or databases).
+
+```ts
+// Anti-pattern: 4 layers of indirection for 1 implementation
+interface OrderIntakeStrategy {
+  execute(input: CreateOrderInput): Promise<string>;
+}
+class DefaultOrderIntakeStrategy implements OrderIntakeStrategy {
+  async execute(input: CreateOrderInput): Promise<string> {
+    return saveOrder(input);
+  }
+}
+
+// Clearer: plain function or single service until a real second variant arrives
+export async function createOrder(
+  repo: OrderRepo,
+  input: CreateOrderInput,
+): Promise<string> {
+  return repo.save(input);
+}
+```
+
+### Incremental recovery plan
+1. **Measure the pain:** track lead time for small changes, bug hotspots, and onboarding time.
+2. **Wrap with characterization tests** around the messy boundary before moving code.
+3. **Refactor one seam per PR**—never freeze feature delivery for a multi-month rewrite.
+
+## Gotchas
+- **Deleting abstractions without tests:** Inlining a 5-deep decorator stack without checking what each layer did can silently drop audit logging or validation.
+- **Replacing a Monolith with a Distributed Monolith:** Splitting code over HTTP without decoupling data ownership makes incidents harder to debug, not easier.
+- **Confusing "clean" with "more files":** Splitting a 60-line module into 8 files of one-line interfaces lowers readability.
+
+## Production checklist
+- [ ] Review PRs for single-implementation interfaces that have no second variant on the roadmap.
+- [ ] Check service boundaries: if two services always deploy together, they belong in one deployable unit.
+- [ ] Require profiling or latency metrics before accepting complex caching or concurrency optimizations.
+- [ ] Schedule incremental debt paydown alongside feature work instead of waiting for a rewrite.
+
+## Check yourself
+
+<Quiz
+  questions={[
+    {
+      question: "What is the most reliable tell for Speculative Generality in a codebase?",
+      options: [
+        { label: "Functions that are shorter than 15 lines", description: "Short, cohesive functions are generally a sign of good readability." },
+        { label: "Many interfaces that each have only one implementation and no committed second variant", description: "An interface with a single implementation and no planned second variant adds navigation and change cost without delivering flexibility.", correct: true },
+        { label: "Using TypeScript strict mode", description: "Strict mode catches type bugs at compile time and does not force extra abstractions." },
+      ],
+    },
+    {
+      question: "Why is a Distributed Monolith often worse than a single-process monolith?",
+      options: [
+        { label: "It forces teams to use TypeScript", description: "Architecture style is independent of language choice." },
+        { label: "It adds network latency and partial-failure modes while still requiring lockstep deployments", description: "A distributed monolith pays the operational cost of microservices without achieving independent deployment or isolation.", correct: true },
+        { label: "It prevents using a relational database", description: "Many distributed monoliths actually share a single relational database." },
+      ],
+    },
+    {
+      question: "What is the recommended way to refactor a God Service in production?",
+      options: [
+        { label: "Freeze all product work for 6 months and rewrite from scratch", description: "Big-bang rewrites carry high delivery risk and often stall." },
+        { label: "Add characterization tests and extract one cohesive responsibility at a time", description: "Incremental extraction under test coverage reduces risk and delivers value continuously without stalling the team.", correct: true },
+        { label: "Wrap the God Service in a Singleton", description: "A Singleton wrapper hides global coupling without fixing the God Service." },
+      ],
+    },
+  ]}
+/>
