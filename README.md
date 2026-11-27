@@ -3,7 +3,7 @@
 > Learning DevOps, architecture and security, one note at a time.
 > **mengtylearns.com** · a static, personal learning site by Lim Mengty
 
-A learning system, not a blog: structured notes, animated process flows, hands-on labs that CI actually runs, flashcards with spaced repetition, and a personal tech radar. Everything is static (no backend, no database) and deployed as plain files.
+A learning system, not a blog: structured notes, animated process flows, hands-on labs that CI actually runs, flashcards with spaced repetition, and a personal tech radar. Everything is pre-rendered at build time (no backend, no database) and served from a Cloudflare Worker.
 
 ## What's inside
 
@@ -19,7 +19,8 @@ A learning system, not a blog: structured notes, animated process flows, hands-o
 
 | Layer | Choice |
 |---|---|
-| Framework | Next.js 16 App Router, **static export** (`output: 'export'`) to `out/` |
+| Framework | Next.js 16 App Router, every route pre-rendered (SSG), `output: 'standalone'` |
+| Hosting | Cloudflare Workers via OpenNext (`@opennextjs/cloudflare`), static assets + read-only cache, no bindings to pay for |
 | Docs shell | Fumadocs 16 (sidebar, TOC, static search, MDX) |
 | Styling | Tailwind CSS v4 + shadcn/ui + design tokens in `app/tokens.css` (see `DESIGN.md`) |
 | Diagrams | `<Flow>` (animated, React Flow, lazy-loaded) and `<Diagram>` (static), both following `DIAGRAM-RULES.md` |
@@ -38,10 +39,12 @@ pnpm dev            # http://localhost:3000
 | Script | Does |
 |---|---|
 | `pnpm dev` | Local dev server |
-| `pnpm build` | Builds `public/cards.json`, then exports the static site to `out/` |
-| `pnpm start` | Serves `out/` locally |
+| `pnpm build` | Builds `public/cards.json`, runs `next build`, then fails if any route is not static (`scripts/check-static-routes.mjs`) |
+| `pnpm preview` | OpenNext build, then the Worker locally in wrangler dev at http://localhost:8787 (Linux/macOS/WSL; see Deploy) |
+| `pnpm start` | `next start` on the Node build (no Worker) |
 | `pnpm lint` / `pnpm typecheck` / `pnpm test` | ESLint / `tsc --noEmit` / Vitest |
-| `pnpm qa:diagrams` | Screenshots every page with a diagram at 360/768/1280 × light/dark into `qa/diagrams/` |
+| `pnpm qa:diagrams` | Screenshots every page with a diagram at 360/768/1280 × light/dark into `qa/diagrams/` (needs `pnpm preview` running, or `--url`) |
+| `node scripts/qa-shots.mjs` / `node scripts/qa-axe.mjs` | Page screenshots + edge report / axe scan, against `pnpm preview` (or `--url <base>`) |
 | `pnpm new <kind> <section>/<slug>` | New page from a template (`note`, `concept`, …) |
 | `node scripts/inbox.mjs --dry-run` | Preview this week's RSS inbox |
 
@@ -98,11 +101,28 @@ Pages whose `verified` date is more than 365 days old show a "May be outdated" b
 |---|---|
 | `ci.yml` | install, lint, typecheck, build |
 | `labs.yml` | lab linting and validation |
-| `quality.yml` | Lighthouse (perf ≥ 0.9, a11y/best-practices/SEO ≥ 0.95) + axe (no serious/critical violations) |
+| `quality.yml` | Lighthouse (perf ≥ 0.9, a11y/best-practices/SEO ≥ 0.95) + axe (no serious/critical violations), against the Worker in wrangler dev |
+| `deploy.yml` | lint, typecheck, test, OpenNext build, static-route and size gates, then PR preview version or production deploy |
 
 ## Deploy
 
-Cloudflare Pages, from `out/`: build command `pnpm build`, output directory `out`, Node 22. Custom domain `mengtylearns.com` (apex), with `www` redirected to the apex.
+**Cloudflare Workers with OpenNext**, deployed from GitHub Actions (`.github/workflows/deploy.yml`). Decisions: `docs/deploy/CLOUDFLARE-WORKERS-PLAN.md`. Operations (first deploy, domain check, rollback, token rotation, logs, size): `docs/deploy/RUNBOOK.md`.
+
+| What | Where |
+|---|---|
+| Worker | `mengty-learns`, config in `wrangler.jsonc` |
+| Production | `https://learn.limmengty.com` (Workers custom domain; change the subdomain in `wrangler.jsonc` only) |
+| PR previews | each same-repo PR uploads a Worker *version* (not live); its preview URL is in the job summary |
+| Production deploys | every push to `main`, after lint, typecheck, tests, the static-route gate and the size gate |
+| Secrets | GitHub Actions secrets `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, never in the repo |
+| Cache | `open-next.config.ts`: read-only static-assets incremental cache (no R2/KV/D1/Queue) |
+| Headers | `lib/security-headers.mjs`, applied by `next.config.mjs` (Worker responses) and `public/_headers` (static assets) |
+
+How it works: `opennextjs-cloudflare build` runs `pnpm build`, then bundles `.open-next/worker.js` plus `.open-next/assets`. Assets (`/_next/static/*`, `public/`) are served by Workers Static Assets without running the Worker; pages come from the Worker, which reads their pre-rendered HTML/RSC from the assets cache (`x-opennext-cache: HIT`).
+
+Locally on Windows, `opennextjs-cloudflare build` fails (`EPERM ... symlink`: OpenNext copies pnpm's symlinked `node_modules`, and Windows needs Developer Mode or admin for symlinks). Use WSL (clone into the Linux filesystem, not `/mnt/c`), or rely on CI. `pnpm dev`, `pnpm build`, lint, typecheck and tests work on Windows.
+
+Never run `pnpm deploy` or `pnpm upload` from a laptop: deploys go through CI so they are tested and logged.
 
 ## Tested with
 
@@ -114,6 +134,9 @@ Cloudflare Pages, from `out/`: build command `pnpm build`, output directory `out
 | React | 19.3.x |
 | TypeScript | 7.0.x |
 | Node / pnpm | 22 / 11.6.0 |
+| @opennextjs/cloudflare | 1.20.18 |
+| Wrangler | 4.168.0 |
+| Cloudflare compatibility date | 2026-11-23 |
 
 ## License
 

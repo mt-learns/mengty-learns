@@ -91,6 +91,10 @@ export default async function Page({ params }: { params: Promise<{ slug?: string
   );
 }
 
+// Only the slugs from generateStaticParams exist; anything else is a static 404
+// instead of an on-demand render in the Worker.
+export const dynamicParams = false;
+
 export async function generateStaticParams() {
   return source.generateParams();
 }
