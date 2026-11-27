@@ -1,0 +1,104 @@
+---
+title: "Stakeholder Communication and Translation"
+description: How engineering leads translate technical risks, debt, and estimates into cost, risk, and customer impact for PMs, POs, Operations, and executives.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: how-to
+level: intermediate
+tags: [leadership, stakeholders, communication, estimation, translation]
+tested_with:
+  rework_guide: "Google re:Work (Manager Communication)"
+cards:
+  - q: "What three framings translate any technical concern into stakeholder language?"
+    a: "Cost (days, budget, payback), Risk (likelihood, consequence, control), and Customer Impact (before/after experience and affected users)."
+  - q: "Why should you never give a Product Manager a single-point estimate like 'three weeks'?"
+    a: "A single number gets repeated without its caveats as a hard commitment; give a range with 2–3 named assumptions and a date when you will resolve the biggest unknown."
+  - q: "What is the 'BLUF' rule for written updates?"
+    a: "Bottom Line Up Front: state whether the release or goal is at risk in sentence one, then give the cause, fix, and decision needed."
+  - q: "How do you say 'no' to an urgent stakeholder request constructively?"
+    a: "Offer a concrete trade-off: trade (displace X), split (ship the core slice first), defer with a trigger, or propose a lightweight manual substitute."
+related:
+  - process/estimation-and-prioritization
+  - leadership/communication-and-listening
+  - leadership/clarity-and-alignment
+sources:
+  - title: "Google re:Work: Guide to Developing and Supporting Your Team"
+    url: https://rework.withgoogle.com/en/guides/managers-develop-and-support-your-team
+  - title: "software-engineering: Technical-to-Business Translation Table (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/11-stakeholder-communication/04-technical-to-business-translation-table.md
+  - title: "software-engineering: Talking to Product Managers (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/11-stakeholder-communication/01-talking-to-pm.md
+  - title: "software-engineering: Golden Rules of Confident Communication (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/11-stakeholder-communication/06-golden-rules-confident-communication.md
+---
+
+## TL;DR
+Non-engineers optimize for **cost, risk, and customer outcomes**—not code mechanisms. Lead with the **consequence and a number** (BLUF), frame estimates as **ranges with named assumptions**, and offer **trade-offs** instead of a flat "no."
+
+## Why it exists
+An accurate technical warning—*"we have an N+1 query and technical debt"*—often gets ignored for months because non-technical leaders hear *"engineering wants time to tidy up."* Translating the mechanism into business impact lets stakeholders fund fixes before a peak-traffic outage hits.
+
+## Mental model: Pick one framing by audience
+
+| Audience | What they are measured on | Framing that lands |
+|---|---|---|
+| **Finance / Budget** | Cost, unit economics, payback | *"X costs 8 days per feature today; 5 days of cleanup halves the next four features."* |
+| **Risk / Compliance / Ops** | Likelihood, consequence, control | *"Concurrent edits can overwrite settlement totals silently; 4 days adds optimistic locking."* |
+| **PM / PO / Commercial** | Customer impact, dates, scope | *"At 40x peak volume, checkout slows to 25s and misses our SLA window for 10,000 orders."* |
+
+## Do it: Technical-to-business translation table
+
+| What engineers say | What stakeholders hear | Say instead |
+|---|---|---|
+| *"We have technical debt."* | *"You want time to tidy up."* | *"Every new rule costs 8 days instead of 3 because the logic is duplicated in three services."* |
+| *"There's an N+1 query."* | *(Nothing actionable)* | *"One order triggers 40 DB reads instead of 1. Fine today; at peak sale volume it stalls the batch past 09:00."* |
+| *"We need a 2-day spike."* | *"You want to research instead of ship."* | *"Two days to confirm if the vendor supports batching—that answer separates a 2-week build from a 6-week build."* |
+| *"That test is flaky."* | *"Your tests don't work."* | *"One test fails 5% of the time unrelated to changes, training people to ignore real CI failures. One day fixes it."* |
+| *"We'll roll back if needed."* | *"Press undo and nothing breaks."* | *"We can revert code in 60 seconds, but records already written under the new rule still need a manual check."* |
+| *"Probably three weeks."* | *"Three weeks—committed."* | *"Two to four weeks: two if the API supports batches, four if we build a queue. I'll confirm by Thursday."* |
+
+### Saying "no" with options
+Never hand a PM a dead end. Offer one of four paths:
+1. **Trade:** *"Yes, and it pushes the CSV export out by one sprint. Your call."*
+2. **Split:** *"The core flow for the two waiting accounts takes 1 week; bulk automation takes 4."*
+3. **Defer with a trigger:** *"Not now—revisit when daily volume crosses 1,000 orders."*
+4. **Manual bridge:** *"A supported admin script solves this by Friday while we evaluate full automation."*
+
+## Gotchas
+- **Leading with the mechanism:** Put the customer/business consequence in sentence one; offer the technical mechanism only if asked.
+- **Hedging words without dates:** *"Maybe," "probably,"* and *"kind of"* erode credibility. Replace them with a range, confidence level, or *"I'll confirm by [date]."*
+- **Mixing all three framings:** Pick the one framing (cost, risk, or customer impact) that matches the decision-maker's mandate.
+
+## Production checklist
+- [ ] Estimates to PM/PO always state a **range**, **2–3 key assumptions**, and a **date to resolve the main unknown**.
+- [ ] Risk or tech-debt proposals open with **BLUF** (ask + date + business impact), not implementation jargon.
+- [ ] Every "not now" includes a **trade, split, trigger, or workaround**.
+- [ ] Rollback caveats (e.g., irreversible data writes) are stated explicitly before release.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "You need 4 days to fix an N+1 query before a major seasonal traffic spike. Which message is most likely to get approved?",
+    options: [
+      { label: "\"At 40x peak volume, checkout slows from 400ms to 25s and misses our SLA; 4 days fixes it before the 1 Oct launch.\"", description: "It leads with the condition, quantified customer impact, and a clear ask before the launch date.", correct: true },
+      { label: "\"We have an N+1 query in the ORM benefits-lookup layer that violates clean architecture.\"", description: "Technical jargon without volume, date, or business consequence is usually deprioritized." },
+      { label: "\"We should probably refactor the query layer sometime soon.\"", description: "Hedged timing with no impact gives stakeholders no reason to prioritize it." }
+    ]
+  },
+  {
+    question: "A PM asks for an estimate on an integration whose third-party API limits are unknown. How should you answer?",
+    options: [
+      { label: "Give a range with named assumptions and the exact date you will confirm the unknown", description: "Ranges plus a resolution date give PMs honest planning input without creating a false promise.", correct: true },
+      { label: "Give your best-case number so the team looks fast", description: "Optimistic single-point estimates turn into broken roadmap commitments." },
+      { label: "Refuse to estimate until every line of code is designed", description: "A bounded range + short spike date balances honesty and planning." }
+    ]
+  }
+]} />
+
+## Sources
+- [Google re:Work: Guide to Developing and Supporting Your Team](https://rework.withgoogle.com/en/guides/managers-develop-and-support-your-team)
+- [software-engineering: Technical-to-Business Translation Table (author's notes)](https://github.com/limme-learning/software-engineering/blob/main/11-stakeholder-communication/04-technical-to-business-translation-table.md)
+- [software-engineering: Talking to Product Managers (author's notes)](https://github.com/limme-learning/software-engineering/blob/main/11-stakeholder-communication/01-talking-to-pm.md)
+- [software-engineering: Golden Rules of Confident Communication (author's notes)](https://github.com/limme-learning/software-engineering/blob/main/11-stakeholder-communication/06-golden-rules-confident-communication.md)
