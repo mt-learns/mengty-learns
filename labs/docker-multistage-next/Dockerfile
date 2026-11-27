@@ -21,7 +21,7 @@ COPY --from=deps --chown=nextjs:nodejs /app/package.json ./
 COPY --from=deps --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --chown=nextjs:nodejs server.mjs ./
 
-USER nextjs
+USER 1001:1001
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \

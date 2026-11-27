@@ -84,7 +84,7 @@ RUN addgroup -g 1001 -S nodejs \
   && adduser -S nextjs -u 1001 -G nodejs
 COPY --from=deps --chown=nextjs:nodejs /app/node_modules ./node_modules
 COPY --chown=nextjs:nodejs server.mjs ./
-USER nextjs
+USER 1001:1001
 ```
 
 ### 5. Add a `HEALTHCHECK`
