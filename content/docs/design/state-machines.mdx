@@ -1,0 +1,303 @@
+---
+title: State Machines & Lifecycle Modeling
+description: Model object lifecycles explicitly with states, events, transitions, guards, and actions so illegal state changes become impossible.
+kind: concept
+type: explanation
+level: intermediate
+tags: [design-patterns, state-machine, typescript, domain-modeling, behavioral]
+tested_with:
+  typescript: "7.0.2"
+status: stable
+updated: "2026-11-27"
+verified: "2026-11-27"
+cards:
+  - q: "What are the five core elements of a finite state machine?"
+    a: "States (valid conditions), Events (triggers), Transitions (allowed moves between states), Guards (boolean preconditions), and Actions (side effects executed during or after a transition)."
+  - q: "Why model an order or deployment lifecycle as a state machine instead of boolean flags like isPaid and isCancelled?"
+    a: "Independent booleans allow contradictory combinations (e.g. isPaid=true and isCancelled=true at once), whereas an explicit state machine enforces that only legal transitions between mutually exclusive states can occur."
+  - q: "What is a Guard in a state machine transition?"
+    a: "A predicate evaluated before a transition fires (such as checking user permission or stock availability); if the guard returns false, the transition is rejected and the state does not change."
+  - q: "How does TypeScript enforce exhaustive handling of state machine states at compile time?"
+    a: "Represent states as a discriminated union and handle them in a switch statement whose default branch assigns the state to never, causing a compile error if any state is unhandled."
+related:
+  - design/strategy
+  - design/pattern-relations
+  - architecture/ddd-tactical
+sources:
+  - title: "TypeScript Handbook: Narrowing & Discriminated Unions"
+    url: https://www.typescriptlang.org/docs/handbook/2/narrowing.html#discriminated-unions
+  - title: "Refactoring.Guru: State Pattern"
+    url: https://refactoring.guru/design-patterns/state
+  - title: "XState Docs: State Machines and Statecharts"
+    url: https://stately.ai/docs/state-machines-and-statecharts
+  - title: "key-learning: state machine diagrams (author's notes)"
+    url: https://github.com/limme-learning/key-learning/blob/main/software-design/02-state-machine-diagrams/01-concepts.md
+---
+
+## TL;DR
+A **finite state machine** models an entity's lifecycle using mutually exclusive **states**, **events**, **guards**, and **actions**—making illegal transitions (like shipping a cancelled order) unrepresentable in code.
+
+## 1. Intent
+
+<Intent>
+Make every valid lifecycle state and allowed transition explicit, so an entity can never enter an inconsistent state or skip required business checks.
+</Intent>
+
+## 2. Problem
+
+When workflows start simple, teams often track lifecycle with loose boolean flags or nullable timestamps: `isSubmitted`, `isApproved`, `isCancelled`, `refundedAt`. With 4 booleans, there are $2^4 = 16$ possible combinations, even when only 5 are valid.
+
+Without an explicit transition table, every endpoint has to remember which flags to check. One missed `if (order.isCancelled)` check allows a refund on an unpaid order or a deploy promotion after a rollback has started.
+
+<Diagram
+  id="state-machine-problem"
+  layout="tree"
+  ariaLabel="Loose boolean flags allow contradictory state combinations"
+  caption="Independent booleans create impossible states like paid and cancelled at the same time."
+  nodes={[
+    { id: 'order', label: 'Order Record', subtitle: '4 boolean flags', icon: 'service', category: 'service', rank: 0, order: 0, variant: 'problem' },
+    { id: 'b1', label: 'isPaid = true', icon: 'db', category: 'external', rank: 1, order: 0, variant: 'problem' },
+    { id: 'b2', label: 'isCancelled = true', icon: 'db', category: 'external', rank: 1, order: 1, variant: 'problem' },
+    { id: 'b3', label: 'isRefunded = false', icon: 'db', category: 'external', rank: 1, order: 2, variant: 'problem' },
+  ]}
+  edges={[
+    { from: 'order', to: 'b1' },
+    { from: 'order', to: 'b2' },
+    { from: 'order', to: 'b3' },
+  ]}
+/>
+
+## 3. Solution
+
+Replace loose flags with a single **state** field and an explicit **transition function** `(currentState, event) -> nextState`:
+
+- **State**: One mutually exclusive condition (`Draft`, `Issued`, `Paid`, `Cancelled`, `Refunded`).
+- **Event**: The command or external signal (`issue`, `pay`, `cancel`, `refund`).
+- **Guard**: A precondition that must hold before the transition fires (e.g., `amount > 0` or `actor.role === 'manager'`).
+- **Action**: Side effects tied to the transition (e.g., emit audit event, release reserved stock).
+- **Terminal state**: A final state (`Refunded`, `Discarded`) with no outgoing transitions.
+
+## 4. Real-world analogy
+
+<Analogy>
+Think of a CI/CD deployment pipeline. A release cannot jump directly from `Queued` to `Promoted` without passing `Building` and `Verified`. Each gate (tests passing, manual approval) acts as a **guard**, and once a release is `RolledBack`, it cannot be `Promoted` again—you must start a new release.
+</Analogy>
+
+## 5. Flow: watch it work
+
+<Flow
+  id="state-machines"
+  title="Order Lifecycle State Machine"
+  nodes={[
+    { id: 'draft', label: 'Draft', subtitle: 'Editable items', icon: 'class', category: 'client', rank: 0, order: 0 },
+    { id: 'issued', label: 'Issued', subtitle: 'Awaiting payment', icon: 'service', category: 'service', rank: 1, order: 0 },
+    { id: 'paid', label: 'Paid', subtitle: 'Payment confirmed', icon: 'db', category: 'data', rank: 2, order: 0 },
+    { id: 'cancelled', label: 'Cancelled', subtitle: 'Terminal state', icon: 'gateway', category: 'external', rank: 2, order: 1 },
+    { id: 'refunded', label: 'Refunded', subtitle: 'Terminal state', icon: 'interface', category: 'abstraction', rank: 3, order: 0 },
+  ]}
+  steps={[
+    { edge: 'draft->issued', title: 'Issue order', text: 'Event issue() passes guard (items > 0) and locks line items' },
+    { edge: 'issued->paid', title: 'Confirm payment', text: 'Event pay() verifies payment receipt and marks order Paid' },
+    { edge: 'paid->refunded', title: 'Process refund', text: 'Event refund() passes manager guard and restores inventory' },
+    { edge: 'issued->cancelled', title: 'Cancel unpaid order', text: 'Event cancel() from Issued releases reserved stock', kind: 'error' },
+    { edge: 'paid->issued', title: 'Reject backward move', text: 'Paid cannot revert to Issued; only refund() is legal', kind: 'error' },
+  ]}
+/>
+
+## 6. Structure
+
+In TypeScript, you can model a state machine either as a **discriminated union + pure transition function** (best for most domain entities) or as GoF **State objects** (when each state has heavy, distinct behavior).
+
+<Diagram
+  id="state-machine-structure"
+  ariaLabel="Pure transition function takes current state and event, checks guard, and returns next state"
+  caption="A pure transition function centralizes guards and blocks invalid moves in one place."
+  nodes={[
+    { id: 'state', label: 'OrderState', subtitle: 'Discriminated union', icon: 'interface', category: 'abstraction', rank: 0, order: 0 },
+    { id: 'fn', label: 'transition()', subtitle: '(state, event) => next', icon: 'service', category: 'service', rank: 1, order: 0 },
+    { id: 'guard', label: 'Guard Check', subtitle: 'Role & invariants', icon: 'gateway', category: 'edge', rank: 2, order: 0 },
+    { id: 'action', label: 'Domain Event', subtitle: 'Audit + side effect', icon: 'queue', category: 'data', rank: 2, order: 1 },
+  ]}
+  edges={[
+    { from: 'state', to: 'fn', label: 'input' },
+    { from: 'fn', to: 'guard', label: 'verify' },
+    { from: 'fn', to: 'action', label: 'emit' },
+  ]}
+/>
+
+## 7. Code
+
+```ts
+export type OrderState =
+  | { status: 'draft'; items: string[] }
+  | { status: 'issued'; items: string[]; issuedAt: string }
+  | { status: 'paid'; items: string[]; paidAt: string; receiptId: string }
+  | { status: 'cancelled'; reason: string }
+  | { status: 'refunded'; receiptId: string; refundedAt: string };
+
+export type OrderEvent =
+  | { type: 'ISSUE'; now: string }
+  | { type: 'PAY'; receiptId: string; now: string }
+  | { type: 'CANCEL'; reason: string }
+  | { type: 'REFUND'; approvedByManager: boolean; now: string };
+
+export function transitionOrder(state: OrderState, event: OrderEvent): OrderState {
+  switch (state.status) {
+    case 'draft':
+      if (event.type === 'ISSUE') {
+        if (state.items.length === 0) {
+          throw new Error('Guard failed: cannot issue an empty order');
+        }
+        return { status: 'issued', items: state.items, issuedAt: event.now };
+      }
+      if (event.type === 'CANCEL') {
+        return { status: 'cancelled', reason: event.reason };
+      }
+      break;
+
+    case 'issued':
+      if (event.type === 'PAY') {
+        return {
+          status: 'paid',
+          items: state.items,
+          paidAt: event.now,
+          receiptId: event.receiptId,
+        };
+      }
+      if (event.type === 'CANCEL') {
+        return { status: 'cancelled', reason: event.reason };
+      }
+      break;
+
+    case 'paid':
+      if (event.type === 'REFUND') {
+        if (!event.approvedByManager) {
+          throw new Error('Guard failed: manager approval required for refund');
+        }
+        return {
+          status: 'refunded',
+          receiptId: state.receiptId,
+          refundedAt: event.now,
+        };
+      }
+      break;
+
+    case 'cancelled':
+    case 'refunded':
+      throw new Error(`Terminal state '${state.status}' rejects event '${event.type}'`);
+
+    default: {
+      const _exhaustive: never = state;
+      return _exhaustive;
+    }
+  }
+
+  throw new Error(`Invalid transition: '${state.status}' cannot handle '${event.type}'`);
+}
+```
+
+## 8. When to use / when to avoid
+
+<Checklist
+  use={[
+    "Entities with 3 or more lifecycle phases where order matters (orders, invoices, deployments, tickets).",
+    "Workflows with strict regulatory or financial invariants (e.g. cannot refund before payment).",
+    "Distributed workflows where retries or duplicate webhooks could otherwise re-run a step.",
+  ]}
+  avoid={[
+    "Simple CRUD records that only have an active/archived toggle.",
+    "Purely stateless calculations where no history or phase restricts the next operation.",
+  ]}
+/>
+
+## 9. How to implement
+
+<Steps>
+  <Step>
+    ### List all valid states
+    Identify every mutually exclusive lifecycle phase and mark terminal states (`cancelled`, `refunded`).
+  </Step>
+  <Step>
+    ### List all events
+    Define every command or external signal that can act on the entity (`ISSUE`, `PAY`, `CANCEL`, `REFUND`).
+  </Step>
+  <Step>
+    ### Build the transition function
+    Map `(state, event) -> nextState` using a discriminated union `switch` with an exhaustive `never` check.
+  </Step>
+  <Step>
+    ### Add guards and idempotent side effects
+    Validate permissions, invariants, and idempotency keys before mutating state or emitting events.
+  </Step>
+  <Step>
+    ### Test valid and invalid transitions
+    Write unit tests for every legal move, rejected move, and terminal state.
+  </Step>
+</Steps>
+
+## 10. Pros / Cons
+
+<ProsCons
+  pros={[
+    "Eliminates impossible flag combinations at the type level.",
+    "Makes every legal and illegal transition easy to review with QA and product.",
+    "Turns edge cases (duplicate webhooks, out-of-order events) into deterministic tests.",
+  ]}
+  cons={[
+    "Adds boilerplate if an entity only has two trivial states.",
+    "Requires care when persisting state + side effects atomically (use the Outbox pattern for external events).",
+  ]}
+/>
+
+## 11. Relations
+
+<Relations
+  items={[
+    {
+      name: "State Machines vs Strategy",
+      summary: "Strategy lets the caller swap an algorithm; State Machines let the entity's lifecycle dictate behavior and transitions.",
+      href: "/docs/design/strategy",
+    },
+    {
+      name: "Pattern Relations",
+      summary: "Compares State, Strategy, Bridge, Adapter, and Decorator side by side.",
+      href: "/docs/design/pattern-relations",
+    },
+    {
+      name: "DDD Tactical",
+      summary: "Aggregates enforce state machine invariants before emitting domain events.",
+      href: "/docs/architecture/ddd-tactical",
+    },
+  ]}
+/>
+
+## 12. Check yourself
+
+<Quiz
+  questions={[
+    {
+      question: "What is the main risk of tracking an order lifecycle with separate booleans (isPaid, isCancelled, isRefunded)?",
+      options: [
+        { label: "Booleans take more database storage than strings", description: "Storage size is negligible; the real issue is invalid state combinations." },
+        { label: "Independent booleans allow contradictory states like paid and cancelled at the same time", description: "With N independent booleans there are 2^N combinations, most of which are illegal business states unless every caller checks every flag.", correct: true },
+        { label: "TypeScript does not support boolean fields on interfaces", description: "TypeScript supports boolean fields natively." },
+      ],
+    },
+    {
+      question: "In a state machine, what happens when a transition's guard evaluates to false?",
+      options: [
+        { label: "The entity moves to a random fallback state", description: "State machines are deterministic and never pick random states." },
+        { label: "The transition is blocked and the entity remains in its current state", description: "A guard is a precondition; if it fails, the transition does not fire and the state remains unchanged.", correct: true },
+        { label: "The entity enters a terminal state automatically", description: "Failed guards reject the event without changing state." },
+      ],
+    },
+    {
+      question: "Why should transition side effects (like sending a receipt or releasing stock) be idempotent?",
+      options: [
+        { label: "Because retries or duplicate webhook deliveries may trigger the same event more than once", description: "Network retries and at-least-once message delivery can replay events; idempotent guards and side effects prevent double charges or double stock restores.", correct: true },
+        { label: "Because TypeScript executes switch cases twice in strict mode", description: "TypeScript strict mode is compile-time type checking only." },
+        { label: "To avoid writing unit tests for terminal states", description: "Terminal states still require explicit unit tests." },
+      ],
+    },
+  ]}
+/>
