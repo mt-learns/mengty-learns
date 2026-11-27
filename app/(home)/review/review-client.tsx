@@ -1,8 +1,9 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { AlertTriangle, CheckCircle2, Flame, PartyPopper } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Flame, PartyPopper, WifiOff } from 'lucide-react';
 import { Illustration } from '@/components/illustrations';
+import { useOnlineStatus } from '@/components/pwa/use-online';
 import { Button } from '@/components/ui/button';
 
 export interface CardItem {
@@ -52,6 +53,7 @@ function loadFsrs() {
  * LCP element). Without it, the client falls back to fetching the file.
  */
 export function ReviewClient({ initialCards }: { initialCards?: CardItem[] }) {
+  const isOnline = useOnlineStatus();
   const [reviewState, setReviewState] = useState<Record<string, any>>({});
   const [cards, setCards] = useState<CardItem[]>([]);
   const [dueCards, setDueCards] = useState<CardItem[]>([]);
@@ -184,6 +186,12 @@ export function ReviewClient({ initialCards }: { initialCards?: CardItem[] }) {
             <span>{streak}</span>
           </span>
         </div>
+        {!isOnline && (
+          <div className="ml-auto inline-flex items-center gap-1.5 rounded-pill border bg-muted px-3 py-1 text-caption-1 text-muted-foreground">
+            <WifiOff className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
+            <span>Offline · saves locally</span>
+          </div>
+        )}
       </div>
 
       {loading && !initialCards?.[0] ? (

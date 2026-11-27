@@ -27,10 +27,15 @@ export function buildSwManifest({
     '/apple-touch-icon.png',
   ];
 
-  // Include /offline/ once the route exists in the build (or app/offline/page.tsx).
-  const offlineAppRoute = path.join(rootDir, 'app', 'offline', 'page.tsx');
+  // Include /offline/ once the route exists in the build (or app/(home)/offline/page.tsx).
+  const offlineAppRoute = path.join(rootDir, 'app', '(home)', 'offline', 'page.tsx');
+  const offlineRootRoute = path.join(rootDir, 'app', 'offline', 'page.tsx');
   const offlineStaticHtml = path.join(nextDir, 'server', 'app', 'offline.html');
-  if (fs.existsSync(offlineAppRoute) || fs.existsSync(offlineStaticHtml)) {
+  if (
+    fs.existsSync(offlineAppRoute) ||
+    fs.existsSync(offlineRootRoute) ||
+    fs.existsSync(offlineStaticHtml)
+  ) {
     precache.splice(1, 0, '/offline/');
   }
 
