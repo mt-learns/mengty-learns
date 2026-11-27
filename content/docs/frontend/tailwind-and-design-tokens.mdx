@@ -1,0 +1,244 @@
+---
+title: "Tailwind and Design Tokens: Name Roles, Not Colours"
+description: Put the palette in one @theme block, expose semantic utilities such as bg-primary and rounded-card, and let a theme switch swap variables instead of editing components.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: how-to
+level: intermediate
+tags: [tailwindcss, design-tokens, css, theming, accessibility, design-systems]
+tested_with:
+  tailwindcss: "4.3.5"
+  next: "16.4.6"
+cards:
+  - q: "What is the difference between a primitive and a semantic token?"
+    a: "A primitive names a value (`jade-600`); a semantic token names a job (`--color-primary`). Components use the job, so re-theming means changing one mapping."
+  - q: "Why `@theme inline` for colours that come from CSS variables?"
+    a: "`inline` makes the generated utility reference `var(--primary)` directly, so a `.dark` override on the variable changes every use without regenerating classes."
+  - q: "What does the Token Rule forbid?"
+    a: "Hex values and arbitrary colour classes in components and MDX. Colour changes happen in the token file, followed by a contrast check."
+  - q: "How do you prove both themes pass contrast?"
+    a: "A script computes WCAG relative luminance for each foreground/background pair, composites translucent fills, and exits non-zero below the minimum."
+  - q: "Why not use `dark:` on every component?"
+    a: "It scatters theme knowledge across the codebase and doubles the places to fix. Prefer variables that swap under one theme scope."
+related:
+  - frontend/react-component-architecture
+  - frontend/accessibility-wcag-basics
+  - frontend/responsive-mobile-first
+  - frontend/engineer-designer-handoff
+sources:
+  - title: "Tailwind CSS v4: Theme variables"
+    url: https://tailwindcss.com/docs/theme
+  - title: "Tailwind CSS: Dark mode"
+    url: https://tailwindcss.com/docs/dark-mode
+  - title: "MDN: Using CSS custom properties"
+    url: https://developer.mozilla.org/en-US/docs/Web/CSS/Using_CSS_custom_properties
+  - title: "WCAG 2.2: 1.4.3 Contrast (Minimum)"
+    url: https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html
+  - title: "software-engineering: Tailwind and design tokens (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/07-frontend-best-practices/09-tailwind-and-design-tokens.md
+---
+
+## TL;DR
+
+- **Three layers:** a primitive palette, semantic tokens that name a job (`primary`, `muted`, `destructive`), and utilities that components consume (`bg-primary`, `text-muted-foreground`, `rounded-card`).
+- **One theme block:** `@theme` in Tailwind v4 generates utilities from CSS variables. `@theme inline` keeps colour utilities pointed at `var(--primary)` so a `.dark` scope swaps values without touching components.
+- **Contrast is a test, not an opinion:** measure every foreground/background pair in both themes and fail the build below 4.5:1 for text.
+
+## Why it exists
+
+A design system without tokens is a screenshot. The first sprint ships `bg-[#1E7A5F]` and `text-[#6B7280]` in eleven files. Then marketing asks for a warmer green, dark mode arrives, and someone changes nine of the eleven. The two leftovers are invisible in review and obvious to a user on the settings page. Tokens fix the shape of the problem: a component asks for the *role* ("primary surface", "muted text") and the theme decides the value.
+
+Tailwind v4 made this easier by moving configuration into CSS. `@theme` is the source of truth; utilities are generated from it. The discipline that remains is naming roles rather than values and keeping every colour decision in one file.
+
+## Mental model
+
+**Primitive, semantic, component.** Primitives are the raw palette. Semantic tokens are aliases with intent. Components consume only semantic tokens. If a component needs a new colour, add a semantic token, not a hex value.
+
+**`@theme` vs `@theme inline`.**
+
+| Block | Use it for | Generated utility |
+|---|---|---|
+| `@theme` | Literal values: type scale, radii, durations | `text-body`, `rounded-card` |
+| `@theme inline` | Values that are themselves `var(...)` | `bg-primary` -> `background-color: var(--primary)` |
+
+With `inline`, the utility points at the variable rather than a resolved value, which is exactly what a theme scope needs.
+
+**One theme scope.** Define `--primary` under `:root` and again under `.dark`. Components do not branch on theme; the variable does.
+
+**Radius and type are tokens too.** The same rule applies to `rounded-card`, `rounded-control`, `text-body` and `--ease-ios`. A page that invents `rounded-[13px]` has left the system.
+
+**Contrast is measured.** Relative luminance is computed for each pair, with translucent fills composited the way the browser paints them. The script fails the build; a human does not eyeball it.
+
+## Flow: from a token to a themed pixel
+
+<Flow
+  id="tailwind-token-pipeline"
+  title="From a token to a themed pixel"
+  nodes={[
+    { id: 'tokens', label: 'Token file', subtitle: '@theme', icon: 'class', category: 'data', rank: 0, order: 0 },
+    { id: 'build', label: 'Tailwind build', subtitle: 'Generate utilities', icon: 'service', category: 'service', rank: 1, order: 0 },
+    { id: 'component', label: 'Component', subtitle: 'bg-primary', icon: 'interface', category: 'client', rank: 2, order: 0 },
+    { id: 'ui', label: 'Rendered UI', subtitle: 'Light / dark', icon: 'user', category: 'client', rank: 3, order: 0 },
+  ]}
+  steps={[
+    { edge: 'tokens->build', title: 'Declare semantic tokens', text: 'One file maps a role such as --color-primary to a value, once per theme.' },
+    { edge: 'build->tokens', title: 'Emit CSS variables', text: 'The build writes the variables and the utilities that reference them.', kind: 'response' },
+    { edge: 'build->component', title: 'Generate utilities', text: 'bg-primary, text-muted-foreground and rounded-card exist as named classes.' },
+    { edge: 'component->ui', title: 'Compose with roles', text: 'The component names roles, never hex values or arbitrary classes.' },
+    { edge: 'ui->component', title: 'Theme switch', text: 'The .dark scope swaps variable values; no component edits are needed.', kind: 'response' },
+  ]}
+/>
+
+## Do it
+
+Keep the palette and the semantic mapping in one stylesheet. This is the shape used by this site:
+
+```css
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *):not(:where(.light, .light *)));
+
+@theme {
+  --radius-control: 0.75rem;
+  --radius-panel: 1rem;
+  --radius-card: 1.25rem;
+
+  --text-body: 1.0625rem;
+  --text-body--line-height: 1.375rem;
+  --text-body--letter-spacing: -0.027rem;
+
+  --duration-base: 260ms;
+  --ease-ios: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-ring: var(--ring);
+}
+
+:root {
+  --background: #fafaf8;
+  --foreground: #0e1013;
+  --primary: #1e7a5f;
+  --primary-foreground: #ffffff;
+  --muted: #f1f1ee;
+  --muted-foreground: #5c5f63;
+  --border: #e2e2dd;
+  --ring: #1e7a5f;
+}
+
+.dark {
+  --background: #0e1013;
+  --foreground: #f4f4f1;
+  --primary: #63c6a4;
+  --primary-foreground: #08211a;
+  --muted: #1a1d21;
+  --muted-foreground: #a8adb4;
+  --border: #2a2e34;
+  --ring: #63c6a4;
+}
+```
+
+A component then reads like a sentence, and contains no colour decision:
+
+```tsx
+export function Callout({ children }: { children: React.ReactNode }) {
+  return (
+    <aside className="rounded-panel border border-border bg-muted p-4 text-body text-muted-foreground">
+      {children}
+    </aside>
+  )
+}
+```
+
+Prove contrast in CI rather than in review. The script below is the idea; this repo's `scripts/contrast.mjs` is the full version and fails non-zero:
+
+```js
+const channel = (c) => {
+  const s = c / 255
+  return s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4
+}
+const luminance = ([r, g, b]) => 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b)
+const ratio = (a, b) => {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x)
+  return (hi + 0.05) / (lo + 0.05)
+}
+
+const pairs = [
+  { fg: [250, 250, 248], bg: [14, 16, 19], min: 4.5, name: 'foreground on background (dark)' },
+  { fg: [92, 95, 99], bg: [250, 250, 248], min: 4.5, name: 'muted-foreground on background (light)' },
+]
+
+let failed = false
+for (const pair of pairs) {
+  const value = ratio(pair.fg, pair.bg)
+  const ok = value >= pair.min
+  console.log(`${ok ? 'PASS' : 'FAIL'} ${pair.name}: ${value.toFixed(2)}:1 (min ${pair.min})`)
+  if (!ok) failed = true
+}
+process.exit(failed ? 1 : 0)
+```
+
+The snippets above are illustrative and not run in this repo; the page records the verified library versions only.
+
+## Gotchas
+
+- **A primitive used directly is a leak.** `bg-jade-600` in a component bypasses theming; wrap it in a semantic token.
+- **`@theme` resolves at build time.** If a colour changes at runtime, map it with `@theme inline` and a CSS variable instead.
+- **A single `.dark` override is not enough** if a library ships unlayered colours. Map the library's variables to your tokens with equal or higher specificity, after its stylesheet.
+- **Arbitrary values multiply.** One `text-[13px]` is a review smell; ten are a second type scale.
+- **Opacity is not free.** `text-muted-foreground/60` composites differently on each background; measure the result, not the token.
+- **Red means error.** If red is also a brand accent, the error state stops being a signal.
+
+## Production checklist
+
+- [ ] One token file owns every colour, radius, type step, duration and easing.
+- [ ] Components use semantic utilities only; no hex values and no arbitrary colour classes.
+- [ ] The theme switch changes variables in one scope, not `dark:` variants across components.
+- [ ] A script measures every text and UI pair in both themes and fails below the minimum.
+- [ ] Library styles are mapped to the tokens after their own stylesheet.
+- [ ] The token file is reviewed like an API: additions are named for a role.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "Why should a component use `bg-primary` rather than `bg-[#1E7A5F]`?",
+    options: [
+      { label: "The role can be re-themed in one place, including dark mode", description: "The component names intent; the token file owns the value.", correct: true },
+      { label: "Hex values are slower for the browser to parse", description: "The performance difference is negligible; the issue is maintainability and theming." },
+      { label: "Tailwind rejects arbitrary values", description: "It supports them, which is exactly why the rule needs review." }
+    ]
+  },
+  {
+    question: "A colour must change when `.dark` is active. Which mapping makes that work without regenerating classes?",
+    options: [
+      { label: "`@theme inline` with `--color-primary: var(--primary)`", description: "The utility references the variable, and `.dark` overrides the variable.", correct: true },
+      { label: "`@theme` with a literal hex value", description: "A literal is resolved at build time and cannot switch at runtime." },
+      { label: "A `dark:bg-primary` class on every component", description: "It works but scatters theme knowledge across the codebase." }
+    ]
+  },
+  {
+    question: "Text is `#5C5F63` on `#FAFAF8`. What should happen before merge?",
+    options: [
+      { label: "Compute the contrast ratio and require at least 4.5:1", description: "Measure the pair; do not judge by eye.", correct: true },
+      { label: "Ship it if it looks grey enough", description: "Perception is not a measurement and varies by display." },
+      { label: "Only check the dark theme", description: "Both themes must pass." }
+    ]
+  }
+]} />
+
+## Sources
+
+- [Tailwind CSS v4: Theme variables](https://tailwindcss.com/docs/theme)
+- [Tailwind CSS: Dark mode](https://tailwindcss.com/docs/dark-mode)
+- [MDN: Using CSS custom properties](https://developer.mozilla.org/en-US/docs/Web/CSS/Using_CSS_custom_properties)
+- [WCAG 2.2: 1.4.3 Contrast (Minimum)](https://www.w3.org/WAI/WCAG22/Understanding/contrast-minimum.html)
+- [software-engineering: Tailwind and design tokens (author's notes)](https://github.com/limme-learning/software-engineering/blob/main/07-frontend-best-practices/09-tailwind-and-design-tokens.md)
