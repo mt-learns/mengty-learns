@@ -1,0 +1,110 @@
+---
+title: "Vue & Nuxt Composition API: Script Setup and Reactive State"
+description: Build scalable Vue 3 and Nuxt 3 applications using the Composition API, `<script setup>`, and auto-imported composables for logic reuse.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: explanation
+level: intermediate
+tags: [vue, nuxt, composition-api, reactvity, script-setup]
+tested_with:
+  vue: "3.5.13"
+  nuxt: "3.15.0"
+cards:
+  - q: "What is the primary advantage of the Composition API over the Options API in Vue 3?"
+    a: "Logic reuse through composables and better TypeScript integration, allowing related code to be grouped together rather than split by option type."
+  - q: "What does the `<script setup>` syntax provide in Vue components?"
+    a: "A more concise and ergonomic way to use the Composition API, automatically exposing variables and functions to the template."
+  - q: "How does Nuxt 3 handle composable imports?"
+    a: "It provides auto-imports for composables located in the `composables/` directory, eliminating the need for manual import statements."
+related:
+  - frontend/react-component-architecture
+  - frontend/nextjs-rendering-strategies
+sources:
+  - title: "Vue.js docs: Composition API FAQ"
+    url: https://vuejs.org/guide/extras/composition-api-faq.html
+  - title: "Nuxt docs: Composables"
+    url: https://nuxt.com/docs/guide/directory-structure/composables
+  - title: "software-engineering: Vue/Nuxt and Composition API (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/07-frontend-best-practices/03-vue-nuxt-composition-api.md
+---
+
+## TL;DR
+Vue 3's Composition API and `<script setup>` allow grouping logic by feature rather than lifecycle option. Nuxt 3 extends this with auto-imports and server-side rendering (SSR) by default.
+
+## Why it exists
+The traditional Options API (`data`, `methods`, `computed`) forced related logic to be scattered across different parts of a component file. As components grew, maintenance became difficult. The Composition API solves this by allowing logic to be extracted into reusable functions (composables) and grouped naturally by feature.
+
+## Mental model
+**Reactivity as a primitive.** Variables are wrapped in `ref()` or `reactive()` to become observable. Changes to these variables automatically trigger DOM updates.
+
+| Feature | Options API | Composition API (`<script setup>`) |
+|---|---|---|
+| **Logic Reuse** | Mixins (prone to name collisions) | Composables (clean, typed functions) |
+| **Organization** | Grouped by option type | Grouped by feature |
+| **TypeScript** | Difficult to type correctly | First-class, deep TS support |
+| **Boilerplate** | High (export default, etc.) | Low (top-level declarations) |
+
+## Do it
+### Basic Component with `<script setup>`
+```vue
+<script setup lang="ts">
+import { ref, computed } from 'vue'
+
+const count = ref(0)
+const doubleCount = computed(() => count.value * 2)
+
+function increment() {
+  count.value++
+}
+</script>
+
+<template>
+  <button @click="increment">Count is {{ count }} (Double: {{ doubleCount }})</button>
+</template>
+```
+
+### Nuxt 3 Composable (`composables/useCounter.ts`)
+```ts
+export const useCounter = () => {
+  const count = useState('count', () => 0)
+  const increment = () => count.value++
+  return { count, increment }
+}
+```
+
+## Gotchas
+- **Ref unwarpping**: Remember that `ref` values must be accessed via `.value` in JavaScript, but are automatically unwrapped in templates.
+- **Reactive vs Ref**: Use `ref()` for primitive values and `reactive()` for objects/arrays that don't need re-assignment.
+- **Nuxt Auto-imports**: While convenient, auto-imports can sometimes make it harder to trace where a function is defined; use IDE extensions (like Volar) for navigation.
+
+## Production checklist
+- [ ] Components use `<script setup>` for concise, performant Composition API usage.
+- [ ] Logic shared across components is extracted into typed composables.
+- [ ] Nuxt 3 auto-imports are used for standard composables and components.
+- [ ] Reactive state is used sparingly and kept close to where it is consumed.
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "How do you access the value of a `ref` variable in a Vue component's `<script setup>` block?",
+    options: [
+      { label: "Using the `.value` property", description: "Refs are reactive wrappers that require .value for JS access.", correct: true },
+      { label: "Directly by variable name", description: "This only works in the <template> block.", correct: false },
+      { label: "Using `this.variableName`", description: "The Composition API does not use `this` context.", correct: false }
+    ]
+  },
+  {
+    question: "What is a 'composable' in Vue 3?",
+    options: [
+      { label: "A function that leverages Vue's Composition API to encapsulate and reuse stateful logic", description: "Composables are the standard way to share reactive logic.", correct: true },
+      { label: "A special type of CSS file", description: "Composables are TypeScript/JavaScript functions.", correct: false },
+      { label: "A Nuxt-specific database connector", description: "Composables are core Vue features.", correct: false }
+    ]
+  }
+]} />
+
+## Sources
+- [Vue.js docs: Composition API FAQ](https://vuejs.org/guide/extras/composition-api-faq.html)
+- [Nuxt docs: Composables](https://nuxt.com/docs/guide/directory-structure/composables)
+- [software-engineering: Vue/Nuxt and Composition API (author's notes)](https://github.com/limme-learning/software-engineering/blob/main/07-frontend-best-practices/03-vue-nuxt-composition-api.md)
