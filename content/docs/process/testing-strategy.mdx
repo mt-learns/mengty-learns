@@ -22,6 +22,8 @@ cards:
   - q: "What are the three most common causes of flaky E2E tests?"
     a: "Shared mutable state across parallel tests, arbitrary sleep/setTimeout waits instead of condition-based assertions, and external network dependencies."
 related:
+  - process/e2e-playwright-cypress
+  - process/contract-testing
   - design/dependency-injection
   - process/dor-dod-quality-gates
   - ci-cd/this-site-pipeline
@@ -32,6 +34,8 @@ sources:
     url: https://vitest.dev/guide/
   - title: "Playwright Documentation"
     url: https://playwright.dev/docs/intro
+  - title: "software-engineering: Testing in Regulated Systems (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/08-testing-strategies/05-testing-in-regulated-enterprise-systems.md
 ---
 
 ## TL;DR
@@ -81,8 +85,13 @@ As shown in [Dependency Injection](/docs/design/dependency-injection), swap exte
 - **Browser QA:** Playwright scripts (`scripts/qa-shots.mjs`, `scripts/qa-diagrams.mjs`, `scripts/qa-axe.mjs` with `@axe-core/playwright`) and `@lhci/cli` check real rendered widths (`360px`, `1280px`), light/dark themes, accessibility violations, and Core Web Vitals against the production build.
 
 ### 5. Flaky tests and coverage
-- **Flaky tests destroy trust:** If a test fails 1 in 20 runs without code changes, developers stop reading CI failures. Fix non-determinism (shared DB rows, `setTimeout`, real clock `Date.now()`, unawaited promises) or remove the test.
+- **Flaky tests destroy trust:** If a test fails 1 in 20 runs without code changes, developers stop reading CI failures. Fix non-determinism (shared DB rows, `setTimeout`, real clock `Date.now()`, unawaited promises) or remove the test. See [Flake-Free E2E Testing](/docs/process/e2e-playwright-cypress) and [Contract Testing](/docs/process/contract-testing).
 - **Coverage is a signal, not a goal:** Use coverage reports to find **untested critical branches** (auth, money, error handling)—never enforce an arbitrary 95% gate that incentivizes assertion-free smoke tests.
+
+### 6. Testing as audit evidence (regulated systems)
+- **Use synthetic data, never production PII in UAT:** Even "masked" production copies with names removed remain pseudonymized personal data if birth dates, postcodes, or histories remain. Generate versioned synthetic datasets via domain factories.
+- **Generate traceability from test metadata:** Put ticket IDs in test names/annotations and archive machine-readable JUnit/scan/contract reports keyed by artifact digest in immutable storage (WORM) rather than relying on 90-day CI log retention.
+- **Test security & compliance controls explicitly:** Write negative tests proving cross-tenant isolation (`403`/`404`) and data-retention purges actually delete expired records.
 
 ## When you DON'T need this
 - **Throwaway spikes or one-off scripts:** A 2-hour prototype you plan to delete doesn't need a Playwright suite.
@@ -124,3 +133,4 @@ As shown in [Dependency Injection](/docs/design/dependency-injection), swap exte
 - [Martin Fowler: The Practical Test Pyramid](https://martinfowler.com/articles/practical-test-pyramid.html)
 - [Vitest Documentation](https://vitest.dev/guide/)
 - [Playwright Documentation](https://playwright.dev/docs/intro)
+- [software-engineering: Testing in Regulated Systems (author's notes)](https://github.com/limme-learning/software-engineering/blob/main/08-testing-strategies/05-testing-in-regulated-enterprise-systems.md)
