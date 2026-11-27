@@ -100,8 +100,9 @@ async function pruneCache(cacheName, maxEntries) {
 
 async function putInCache(cacheName, request, response, maxEntries) {
   if (!response || !response.ok) return;
+  const clone = response.clone();
   const cache = await caches.open(cacheName);
-  await cache.put(request, response.clone());
+  await cache.put(request, clone);
   if (maxEntries) await pruneCache(cacheName, maxEntries);
 }
 
@@ -173,7 +174,7 @@ self.addEventListener('fetch', (event) => {
   if (rule.strategy === 'cache-first') {
     event.respondWith(
       (async () => {
-        const cached = await caches.match(event.request);
+        const cached = await caches.match(event.request, { ignoreVary: true });
         if (cached) return cached;
         const res = await fetch(event.request);
         event.waitUntil(putInCache(targetCache, event.request, res, rule.maxEntries));
@@ -186,7 +187,7 @@ self.addEventListener('fetch', (event) => {
   if (rule.strategy === 'stale-while-revalidate') {
     event.respondWith(
       (async () => {
-        const cached = await caches.match(event.request);
+        const cached = await caches.match(event.request, { ignoreVary: true });
         const networkPromise = fetch(event.request)
           .then(async (res) => {
             await putInCache(targetCache, event.request, res, rule.maxEntries);
@@ -214,10 +215,10 @@ self.addEventListener('fetch', (event) => {
         }
         return res;
       } catch {
-        const cached = await caches.match(event.request);
+        const cached = await caches.match(event.request, { ignoreVary: true });
         if (cached) return cached;
         if (rule.fallback) {
-          const offline = await caches.match(rule.fallback);
+          const offline = await caches.match(rule.fallback, { ignoreVary: true });
           if (offline) return offline;
         }
         return new Response('Offline', {
