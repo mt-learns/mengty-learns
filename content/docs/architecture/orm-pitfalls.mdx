@@ -1,0 +1,160 @@
+---
+title: ORM Pitfalls & When to Drop to SQL
+description: Spot and fix N+1 queries, compare eager vs lazy loading, use raw-query escape hatches safely without SQL injection, and know when plain SQL wins.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: explanation
+level: intermediate
+tags: [architecture, orm, prisma, drizzle, sql, performance]
+tested_with:
+  typescript: "7.0.2"
+  prisma: "8.x (docs)"
+  drizzle_orm: "0.45.4 (docs)"
+cards:
+  - q: "What is the N+1 query problem in an ORM?"
+    a: "Fetching N parent records in 1 query and then running 1 extra query per parent inside a loop to load its related child records, resulting in N+1 database round trips."
+  - q: "Why should you prefer tagged-template raw helpers ($queryRaw`...` or Drizzle sql`...`) over string-interpolated escape hatches ($queryRawUnsafe or sql.raw)?"
+    a: "Tagged templates automatically bind interpolated values as SQL parameters ($1, $2), whereas raw string escape hatches concatenate values into SQL and re-open SQL injection."
+  - q: "What is the risk of over-eager loading with deep nested includes?"
+    a: "Joining or including too many child tables creates huge Cartesian result sets or loads megabytes of unused columns into Node.js memory."
+  - q: "When is it better to drop down from ORM query builders to plain SQL?"
+    a: "Complex reporting aggregations, window functions, recursive CTEs, bulk multi-row upserts, and queries that need exact index-hint or EXPLAIN ANALYZE control."
+related:
+  - security/sql-injection
+  - architecture/database-indexing
+sources:
+  - title: "Prisma Docs: Query optimization (N+1)"
+    url: https://www.prisma.io/docs/orm/prisma-client/queries/query-optimization-performance
+  - title: "Prisma Docs: Raw SQL queries"
+    url: https://www.prisma.io/docs/orm/prisma-client/using-raw-sql/raw-queries
+  - title: "Drizzle ORM Docs: Magic sql operator"
+    url: https://orm.drizzle.team/docs/sql
+---
+
+## TL;DR
+ORMs speed up everyday CRUD, but hide expensive **N+1 loops**, bloated `SELECT *` payloads, and awkward abstractions over joins or window functions. Use **eager batching (`include` / `with` / `IN (...)`)**, restrict raw-SQL escape hatches to **parameterized tagged templates** (never string interpolation), and **drop to SQL** for reporting, bulk writes, and tuned queries.
+
+## Why it exists
+Object-Relational Mappers bridge TypeScript objects and relational tables, generating typed queries and schema migrations. The abstraction leaks when developers treat database relations like in-memory arrays—triggering hundreds of network round trips per HTTP request or fighting the query builder to express a five-line SQL CTE.
+
+## Mental model
+Every ORM call still compiles to SQL and pays network round-trip latency plus database planning time. Think in **round trips and bytes transferred**, not object graphs.
+
+<Diagram
+  id="orm-n-plus-one"
+  ariaLabel="N+1 loop sends one query per parent row, whereas eager batching sends one or two queries total"
+  caption="N+1 loops multiply network round trips; eager loading batches them into constant queries."
+  nodes={[
+    { id: 'app', label: 'API Handler', subtitle: 'Loads 50 orders', icon: 'pod', category: 'service', rank: 0, order: 0 },
+    { id: 'loop', label: 'N+1 Loop', subtitle: '51 round trips', icon: 'service', category: 'client', rank: 1, order: 0, variant: 'problem' },
+    { id: 'batch', label: 'Eager Batch', subtitle: '1 JOIN or 2 IN()', icon: 'gateway', category: 'edge', rank: 1, order: 1 },
+    { id: 'db', label: 'Postgres DB', subtitle: 'Executes SQL', icon: 'db', category: 'data', rank: 2, order: 0 },
+  ]}
+  edges={[
+    { from: 'app', to: 'loop', kind: 'error', label: 'for...of' },
+    { from: 'loop', to: 'db', kind: 'error', label: '50 SELECTs' },
+    { from: 'app', to: 'batch', kind: 'request', label: 'include/with' },
+    { from: 'batch', to: 'db', kind: 'request', label: '1-2 queries' },
+  ]}
+/>
+
+## Do it
+
+### 1. Fix the N+1 query with eager loading
+Avoid `await` inside `for` loops or `Promise.all(rows.map(...))` that fires one query per row. Fetch relations in a single batched query instead:
+
+```typescript
+// Prisma / Drizzle-style TypeScript examples (not run)
+
+// BAD (N+1): 1 query for orders + N queries for customer rows
+const orders = await db.order.findMany({ take: 50 });
+for (const order of orders) {
+  order.customer = await db.customer.findUnique({ where: { id: order.customerId } });
+}
+
+// GOOD (Prisma-style): batched eager load + explicit field selection
+const ordersWithCustomer = await db.order.findMany({
+  take: 50,
+  select: {
+    id: true,
+    totalCents: true,
+    customer: { select: { id: true, name: true } },
+  },
+});
+
+// GOOD (Drizzle-style): explicit SQL JOIN selecting only needed columns
+const rows = await drizzleDb
+  .select({
+    orderId: ordersTable.id,
+    totalCents: ordersTable.totalCents,
+    customerName: customersTable.name,
+  })
+  .from(ordersTable)
+  .innerJoin(customersTable, eq(ordersTable.customerId, customersTable.id))
+  .limit(50);
+```
+
+### 2. Eager vs lazy loading
+- **Eager loading** (`include`, `with`, or explicit `JOIN`): fetches related rows up front in 1–2 queries. Predictable latency, works cleanly with serverless/async handlers.
+- **Lazy loading** (loading relations on property access): common in older active-record ORMs; almost always causes accidental N+1s in templates and JSON serializers. Disable implicit lazy loading if your ORM has it.
+
+### 3. Raw-query escape hatches (safely)
+When you need raw SQL, **never** use string interpolation inside `$queryRawUnsafe` or `sql.raw` with user input. Use tagged template literals so the ORM binds values as parameters (`$1`, `$2`)—see [SQL Injection & Parameterized Queries](/docs/security/sql-injection) for the full rules:
+
+```typescript
+// SAFE: tagged template binds `orgId` as $1 (not run)
+const summary = await db.$queryRaw<Array<{ status: string; total: number }>>`
+  SELECT status, COUNT(*)::int AS total
+  FROM orders
+  WHERE org_id = ${orgId}
+  GROUP BY status
+`;
+```
+
+### 4. When to drop to SQL
+Drop down to raw SQL (or a typed query runner) when:
+- You need **window functions** (`ROW_NUMBER()`, `SUM() OVER (...)`), **CTEs (`WITH`)**, or `LATERAL` joins.
+- You are doing **bulk upserts** or batch updates across thousands of rows.
+- You are tuning a hot query with `EXPLAIN (ANALYZE, BUFFERS)` and need exact control over join order or `SELECT ... FOR UPDATE SKIP LOCKED`.
+
+## When you DON'T need an ORM
+- **Analytics, reporting, or SQL-first teams:** If most of your endpoints are custom aggregations or your team is already fluent in SQL, a thin typed driver (`postgres` / `pg`) or query builder (Kysely) avoids fighting ORM abstractions.
+- **Simple scripts or static builds:** A 50-line migration or CLI script does not need a code-generated ORM client.
+- **Cost / complexity trade-off:** ORMs eliminate repetitive CRUD boilerplate and keep TypeScript types in sync with your schema, at the cost of a learning curve around generated SQL, migration tooling, and occasional escape hatches.
+
+## Gotchas
+- **Over-fetching with `SELECT *`:** Loading entire user or JSONB columns when you only need `id` and `email` wastes DB I/O and prevents PostgreSQL Index-Only Scans.
+- **Silent in-memory filtering:** Writing `.findMany()` and then `.filter(...)` in JavaScript instead of `WHERE` in SQL pulls the whole table over the network.
+- **Unbounded `include`:** Eager-loading 4 levels of nested one-to-many relations can blow up memory and response times.
+
+## Production checklist
+- [ ] Query logging or OpenTelemetry tracing is enabled in dev/staging to catch N+1 query spikes per request.
+- [ ] List queries select only the columns needed (`select` / projection) and always enforce a `LIMIT`.
+- [ ] Lint/review rules ban `$queryRawUnsafe` and `sql.raw` with template interpolation.
+- [ ] Heavy reporting and queue-worker queries (`SKIP LOCKED`) use parameterized SQL directly.
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "An endpoint fetches 100 invoices with findMany(), then loops over them calling findUnique() for each invoice's user. How many SQL queries run?",
+    options: [
+      { label: "101 queries (the N+1 problem)", description: "1 query fetches the 100 invoices, followed by 100 individual user queries.", correct: true },
+      { label: "2 queries, because the ORM automatically batches loops", description: "Standard await calls in a loop fire sequentially unless you use eager loading or a dataloader." },
+      { label: "1 query with an automatic JOIN", description: "A JOIN only runs if you explicitly request the relation via include, with, or join." }
+    ]
+  },
+  {
+    question: "Which raw SQL call in Prisma is safe when passing a user-supplied email filter?",
+    options: [
+      { label: "db.$queryRaw`SELECT id FROM users WHERE email = ${email}`", description: "Tagged template literals bind ${email} as a prepared statement parameter ($1).", correct: true },
+      { label: "db.$queryRawUnsafe(`SELECT id FROM users WHERE email = '${email}'`)", description: "Interpolating into $queryRawUnsafe creates a classic SQL injection vulnerability." },
+      { label: "db.$queryRawUnsafe('SELECT id FROM users WHERE email = ' + email)", description: "String concatenation mixes SQL syntax with untrusted user data." }
+    ]
+  }
+]} />
+
+## Sources
+- [Prisma Docs: Query optimization & N+1](https://www.prisma.io/docs/orm/prisma-client/queries/query-optimization-performance)
+- [Prisma Docs: Raw SQL queries](https://www.prisma.io/docs/orm/prisma-client/using-raw-sql/raw-queries)
+- [Drizzle ORM Docs: Magic sql operator](https://orm.drizzle.team/docs/sql)

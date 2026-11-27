@@ -18,6 +18,7 @@
     "caching-redis",
     "database-indexing",
     "transactions-isolation",
+    "orm-pitfalls",
     "queues-async",
     "api-design",
     "c4-model"
