@@ -19,6 +19,7 @@
     "database-indexing",
     "transactions-isolation",
     "orm-pitfalls",
+    "schema-migrations",
     "queues-async",
     "api-design",
     "c4-model"
