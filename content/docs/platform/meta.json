@@ -1,0 +1,16 @@
+{
+  "title": "Platform tools",
+  "pages": [
+    "secure-deployment-platform",
+    "security-baseline",
+    "ansible-essentials",
+    "nginx-edge",
+    "api-gateway-kong-gravitee",
+    "vault-secrets",
+    "vpn-private-access",
+    "prometheus-grafana",
+    "elk-logging",
+    "devsecops-pipeline",
+    "slo-and-runbooks"
+  ]
+}

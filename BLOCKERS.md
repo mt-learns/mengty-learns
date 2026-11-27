@@ -21,3 +21,11 @@
 # Landing Motion (branch `landing-motion`)
 
 5. **Desktop `LR` direction on `<Flow>` (`components/flow/` & `components/diagram/`):** `FlowPropsSchema` (`components/diagram/types.ts`) only accepts `layout: 'flow' | 'tree'` and has no `direction` prop (`'LR' | 'TB'`). Additionally, `FlowServer` (`components/flow/FlowServer.tsx`) only precomputes layouts up to `720px` (`PRECOMPUTE_WIDTHS`), and `computeDiagramLayout` (`components/diagram/layout.ts`) selects `TB` for `K8S_REQUEST_FLOW` at `720px`, leaving empty horizontal space on the `1200px` desktop landing container. **Needed in `components/flow/` + `components/diagram/` (polish worker):** expose an optional `direction?: 'LR' | 'TB'` (or `desktopDirection`) prop on `FlowProps` / `FlowServer`, or include wider breakpoints (e.g. `960`, `1136`) in `PRECOMPUTE_WIDTHS` so 4-rank flows lay out left-to-right on desktop. Also consider an explicit `autoPlay?: boolean` prop on `Player` so `K8sFlowObserver` does not have to trigger `Start`/`Pause` via button clicks.
+
+# Content Wave 11 (branch `content-wave11`)
+
+6. **Platform tools section icon (`components/illustrations/`) & home grid (`lib/home-data.ts`):**
+   - `components/illustrations/` and `lib/home-data.ts` are outside Wave 11's allowed scope.
+   - **Needed in `components/illustrations/types.ts` & `SectionIcon.tsx`:** Add `'platform'` to `SECTION_ICON_NAMES`, `DEFAULT_TITLES` (`'Platform tools section icon'`), `SECTION_TINTS`, and render a soft 3D clay icon (e.g., server rack / control-plane dial in a squircle).
+   - **Needed in `lib/home-data.ts`:** Add `platform` to `SECTION_COPY` (`Title: 'Platform tools'`, `Blurb: 'Ansible, Nginx, API gateways, Vault, Prometheus/Grafana, ELK, and DevSecOps.'`) and re-balance the home grid for 13 cards.
+   - **Needed in `content/docs/index.mdx`:** Once `<SectionIcon name="platform" />` exists, add `icon={<SectionIcon name="platform" size={24} decorative />}` to the Platform tools `<Card>`.

@@ -1,0 +1,141 @@
+---
+title: "Secure Deployment Platform: VM & Kubernetes Tracks"
+description: How a regulated deployment platform separates environments, builds immutable artifacts once, and delivers them across parallel VM and Kubernetes tracks.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: concept
+type: explanation
+level: intermediate
+tags: [platform, architecture, devsecops, gitops, ansible, kubernetes]
+tested_with:
+  kubernetes: "1.35.10 (docs)"
+  ansible-core: "2.22 (docs)"
+  argocd: "3.x (docs)"
+cards:
+  - q: "Why should application source code and GitOps deployment state live in separate repositories?"
+    a: "Separate repositories enforce segregation of duties and separate audit trails: merging app code cannot directly alter production manifests without platform/ops approval."
+  - q: "What does 'build once, promote by digest' mean in a deployment platform?"
+    a: "CI compiles and scans the artifact once, then promotes the exact immutable SHA-256 digest across dev, staging, and prod instead of rebuilding per environment."
+  - q: "Why should production run on a dedicated cluster rather than sharing a cluster with dev/staging?"
+    a: "Cluster-scoped resources (CRDs, admission webhooks, nodes, and etcd) cross namespace boundaries, so a shared cluster cannot isolate production from non-prod blast radius."
+  - q: "How do the VM track and Kubernetes track differ in delivery model?"
+    a: "The VM track uses push-based Ansible playbooks (drain, deploy, health-check) over SSH/bastion, whereas the Kubernetes track uses pull-based GitOps (Argo CD) reconciling from Git."
+related:
+  - gitops/what-is-gitops
+  - ci-cd/pipeline-anatomy
+  - security/supply-chain
+sources:
+  - title: "Kubernetes Docs: Pod Security Standards"
+    url: https://kubernetes.io/docs/concepts/security/pod-security-standards/
+  - title: "Argo CD Docs: Architecture Overview"
+    url: https://argo-cd.readthedocs.io/en/stable/operator-manual/architecture/
+  - title: "NIST SP 800-204D: Strategies for Integration of Software Supply Chain Security in DevSecOps"
+    url: https://csrc.nist.gov/pubs/sp/800/204/d/final
+  - title: "learn-devops: Master Plan & Architecture (author's notes)"
+    url: https://github.com/limme-learning/learn-devops/blob/main/docs/01-architecture.md
+---
+
+## Intent
+
+<Intent>
+Design a single deployment platform that supports both **VM-based workloads** and **Kubernetes workloads** with consistent security boundaries, immutable artifacts, short-lived credentials, and clear audit trails.
+</Intent>
+
+## Problem
+
+Teams often treat VM deployments and Kubernetes deployments as unrelated worlds—ad-hoc SSH scripts on VMs, manual `kubectl apply` on clusters, shared secrets across environments, and separate builds per stage. That creates configuration drift, unverified artifacts in production, and weak blast-radius isolation.
+
+## Solution
+
+Organize the platform around four shared invariants, then split only the final delivery mechanism:
+
+1. **Network zones & blast-radius isolation:** Inbound internet traffic terminates in a DMZ reverse proxy/WAF. Application zones accept traffic only from the DMZ, data zones accept only from the app zone, and production runs in its own dedicated cluster/VPC—never sharing a cluster or secrets engine with lower environments.
+2. **Everything as code, split by ownership:** Infrastructure (`infra-terraform`), host configuration (`infra-ansible`), cluster GitOps state (`apps-gitops`), and application source (`app-*`) live in separate repositories with distinct `CODEOWNERS` and branch protections.
+3. **Immutable artifacts promoted by digest:** CI builds and signs the artifact once (container image or OS package) and promotes the exact `sha256:` digest through `dev` → `staging` → `prod`.
+4. **Two delivery tracks:**
+   - **Track A (VMs):** Terraform provisions VMs and load balancers; Ansible applies CIS hardening, configures `vault-agent` for short-lived secrets, and rolls out updates one node at a time behind HAProxy/Nginx.
+   - **Track B (Kubernetes):** Terraform + Ansible provision the cluster; Argo CD reconciles manifests from Git; Kyverno enforces signed digests and `restricted` Pod Security at admission time.
+
+## Real-world analogy
+
+<Analogy>
+Think of a central commercial bakery (**CI**) that bakes, seals, and labels each batch with a tamper-evident lot number (**SHA-256 digest + Cosign signature**). Whether a store receives deliveries by refrigerated van (**Ansible push to VMs**) or automated rail cart (**Argo CD pull to Kubernetes**), both stores verify the exact same seal and never re-bake the bread on-site.
+</Analogy>
+
+## ▶ Flow: watch it work
+
+<Flow
+  id="secure-deployment-platform"
+  title="Immutable Artifact Delivery: VM Track vs Kubernetes Track"
+  nodes={[
+    { id: 'git', label: 'Git & CI', subtitle: 'Build & scan once', icon: 'git', category: 'external', rank: 0, order: 0 },
+    { id: 'registry', label: 'Signed Artifact', subtitle: 'Registry + Cosign', icon: 'ci', category: 'service', rank: 1, order: 0 },
+    { id: 'ansible', label: 'Ansible Push', subtitle: 'VM track (SSH)', icon: 'service', category: 'concrete', rank: 2, order: 0 },
+    { id: 'argocd', label: 'Argo CD Pull', subtitle: 'K8s track (GitOps)', icon: 'gateway', category: 'edge', rank: 2, order: 1 },
+    { id: 'vm', label: 'Hardened VM', subtitle: 'Systemd / Podman', icon: 'pod', category: 'data', rank: 3, order: 0 },
+    { id: 'k8s', label: 'K8s Cluster', subtitle: 'Kyverno + Pods', icon: 'pod', category: 'data', rank: 3, order: 1 },
+  ]}
+  steps={[
+    { edge: 'git->registry', title: 'Build and sign once', text: 'CI runs security gates, builds an immutable artifact, and signs it with Cosign.' },
+    { edge: 'registry->ansible', title: 'VM track: Ansible pulls artifact', text: 'Ansible drains one load-balanced VM, deploys the artifact, and checks health.' },
+    { edge: 'ansible->vm', title: 'VM converges to target state', text: 'The hardened host runs the app via systemd or rootless Podman with Vault Agent.' },
+    { edge: 'registry->argocd', title: 'K8s track: Argo CD detects digest', text: 'The GitOps repo pins the new digest; Argo CD pulls changes into the cluster.' },
+    { edge: 'argocd->k8s', title: 'Admission verifies and schedules', text: 'Kyverno verifies the Cosign signature and PodSecurity before Pods start.' },
+    { edge: 'k8s->argocd', title: 'Cluster reports healthy sync', text: 'Argo CD marks the Application Synced and Healthy once probes pass.', kind: 'response' },
+  ]}
+/>
+
+## Structure
+
+A clean multi-repo boundary keeps change control auditable:
+
+| Repository | Owner | Purpose | Promotion Gate |
+|---|---|---|---|
+| `infra-terraform` | Platform | Networks, VMs, clusters, load balancers | Plan on PR, manual apply in CI |
+| `infra-ansible` | Platform | Host baseline, CIS hardening, VM app deploy | `--check --diff` before apply |
+| `platform-gitops` | Platform | Ingress, cert-manager, Kyverno, Vault ESO | Platform approval |
+| `apps-gitops` | Dev + Platform | Per-env image digests and Helm/Kustomize values | Dev proposes, Platform approves prod |
+| `app-<service>` | Dev team | App source, Dockerfile, Helm chart, runbook | CI gates + code review |
+
+## When to use / when to avoid
+
+- **Use this dual-track architecture** when you operate regulated workloads, hybrid infrastructure (legacy VMs alongside Kubernetes), or need auditable segregation of duties.
+- **Avoid the full multi-repo split** for a solo project or early-stage prototype where a single repository with GitHub Actions and managed cloud PaaS/Containers delivers faster with far less ceremony.
+
+## Pros / Cons
+
+- **Pros:** Same security baseline and secret authority (Vault + OIDC) across both tracks; immutable digest promotion eliminates "works in staging, fails in prod" rebuild drift; clean audit evidence.
+- **Cons:** Higher operational overhead (maintaining separate repos, registries, and GitOps controllers); requires disciplined promotion automation so digest bumps do not become manual toil.
+
+## Relations
+
+- Pull-based Kubernetes delivery builds directly on [What GitOps Is](/docs/gitops/what-is-gitops).
+- Artifact scanning and signing extend [Supply-Chain Security](/docs/security/supply-chain) and [Pipeline Anatomy](/docs/ci-cd/pipeline-anatomy).
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "Why does a regulated platform separate the application source repo from the GitOps deployment repo?",
+    options: [
+      { label: "To enforce segregation of duties so app merges cannot directly alter production state without ops approval", description: "Separate repos give independent branch protections, CODEOWNERS, and audit trails.", correct: true },
+      { label: "Because Kubernetes cannot pull container images if manifests are in the same repo", description: "Kubernetes pulls images from a registry regardless of where manifests live." },
+      { label: "Because Argo CD only supports one repository per cluster", description: "Argo CD supports multiple repositories; the split is a governance control." }
+    ]
+  },
+  {
+    question: "What is the safest way to promote a release from staging to production?",
+    options: [
+      { label: "Promote the exact immutable SHA-256 artifact digest built and scanned in CI", description: "Digest promotion guarantees production runs the exact bytes tested in staging.", correct: true },
+      { label: "Rebuild the Docker image from main with a :prod tag", description: "Rebuilding introduces dependency drift and mutable tags can be overwritten." },
+      { label: "SSH into production hosts and run git pull", description: "Direct host mutation bypasses CI gates, signing, and audit trails." }
+    ]
+  }
+]} />
+
+## Sources
+
+- [Kubernetes Docs: Pod Security Standards](https://kubernetes.io/docs/concepts/security/pod-security-standards/)
+- [Argo CD Docs: Architecture Overview](https://argo-cd.readthedocs.io/en/stable/operator-manual/architecture/)
+- [NIST SP 800-204D: Software Supply Chain Security in DevSecOps](https://csrc.nist.gov/pubs/sp/800/204/d/final)
+- [learn-devops: Master Plan & Architecture (author's notes)](https://github.com/limme-learning/learn-devops/blob/main/docs/01-architecture.md)
