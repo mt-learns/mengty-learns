@@ -83,7 +83,6 @@ export function DemoRemember({ question, answer, title }: DemoRememberProps) {
         type="button"
         onClick={handleToggle}
         aria-pressed={flipped}
-        aria-label={flipped ? 'Show flashcard question' : 'Flip flashcard to reveal answer'}
         className="group relative grid w-full cursor-pointer rounded-panel text-left focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
         style={
           reducedMotion
