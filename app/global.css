@@ -290,12 +290,28 @@ figure.shiki pre {
   animation: mt-float 5.5s ease-in-out infinite;
 }
 
+@keyframes mt-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+.mt-cursor-blink {
+  animation: mt-blink 1s step-end infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .prose a:not([data-card]) {
     transition: none;
   }
   .mt-hero-rise,
-  .mt-hero-float {
+  .mt-hero-float,
+  .mt-cursor-blink {
     animation: none !important;
   }
 }

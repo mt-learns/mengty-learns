@@ -169,12 +169,12 @@ export function getRadarSnapshot(perRing = 2): RadarRingSnapshot[] {
   });
 }
 
-/** One real flashcard question for the "Remember" preview. */
-export function getSampleCard(preferSection = 'kubernetes'): { q: string; title: string; url: string } | null {
+/** One real flashcard question and answer for the "Remember" preview. */
+export function getSampleCard(preferSection = 'kubernetes'): { q: string; a: string; title: string; url: string } | null {
   const pages = notePages().sort((a, b) => Number(b.slugs[0] === preferSection) - Number(a.slugs[0] === preferSection));
   for (const page of pages) {
     const card = page.data.cards?.[0];
-    if (card) return { q: card.q, title: page.data.title, url: page.url };
+    if (card) return { q: card.q, a: card.a, title: page.data.title, url: page.url };
   }
   return null;
 }

@@ -4,6 +4,9 @@ import type { ReactNode } from 'react';
 import { Illustration, SectionIcon } from '@/components/illustrations';
 import { Container } from '@/components/layout/container';
 import { CountUp } from '@/components/home/count-up';
+import { DemoDo } from '@/components/home/demo-do';
+import { DemoRead } from '@/components/home/demo-read';
+import { DemoRemember } from '@/components/home/demo-remember';
 import { HeroIllustration } from '@/components/home/hero-illustration';
 import { K8sRequestFlow } from '@/components/home/k8s-flow';
 import { PathProgress } from '@/components/home/path-progress';
@@ -146,14 +149,7 @@ export default function HomePage() {
               <p className="mt-2 text-subheadline leading-relaxed text-muted-foreground">
                 Concept pages explain one idea each, with an animated flow you can step through.
               </p>
-              <div aria-hidden="true" className="mt-5 flex flex-wrap items-center gap-1 rounded-panel bg-grouped p-4 text-caption-1 font-medium">
-                {['User', 'Ingress', 'Service', 'Pod'].map((node, i) => (
-                  <span key={node} className="inline-flex items-center gap-1">
-                    {i > 0 && <ArrowRight className="size-4 shrink-0 text-primary" strokeWidth={1.75} />}
-                    <span className="rounded-control border border-border bg-card px-2 py-1">{node}</span>
-                  </span>
-                ))}
-              </div>
+              <DemoRead />
               <div className="mt-auto pt-5">
                 <TextLink href="/docs/kubernetes/service-routing">Open a concept page</TextLink>
               </div>
@@ -163,16 +159,7 @@ export default function HomePage() {
               <p className="mt-2 text-subheadline leading-relaxed text-muted-foreground">
                 Labs are real files in the repo. CI lints, builds and validates them on every change.
               </p>
-              <pre
-                aria-label="Checks CI runs on the labs"
-                className="mt-5 overflow-x-auto rounded-panel bg-code p-4 font-mono text-caption-1 leading-relaxed text-foreground"
-              >
-                <code>
-                  <span className="text-muted-foreground">$ </span>hadolint labs/*/Dockerfile{'\n'}
-                  <span className="text-muted-foreground">$ </span>tofu validate{'\n'}
-                  <span className="text-muted-foreground">$ </span>kubeconform -strict labs/*/k8s
-                </code>
-              </pre>
+              <DemoDo />
               <div className="mt-auto pt-5">
                 <TextLink href="/docs/containers/multi-stage-nextjs">Try a lab</TextLink>
               </div>
@@ -182,12 +169,7 @@ export default function HomePage() {
               <p className="mt-2 text-subheadline leading-relaxed text-muted-foreground">
                 Notes end with flashcards. Spaced repetition (FSRS) schedules them, right in your browser.
               </p>
-              {card && (
-                <figure className="mt-5 rounded-panel border border-border bg-grouped p-4">
-                  <blockquote className="text-subheadline font-medium leading-snug text-foreground">{card.q}</blockquote>
-                  <figcaption className="mt-2 text-footnote text-label-tertiary">Flashcard from {card.title}</figcaption>
-                </figure>
-              )}
+              {card && <DemoRemember question={card.q} answer={card.a} title={card.title} />}
               <div className="mt-auto pt-5">
                 <TextLink href="/review">Start today&apos;s review</TextLink>
               </div>
