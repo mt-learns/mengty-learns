@@ -1,0 +1,127 @@
+---
+title: Singleton Pattern & Why to Avoid It
+description: Why the GoF Singleton often introduces hidden global state and test coupling—and how dependency injection containers or module-level constants solve the same problem cleanly.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: explanation
+level: beginner
+tags: [design-patterns, singleton, dependency-injection, testing, anti-patterns]
+tested_with:
+  typescript: "7.0.2"
+cards:
+  - q: "What two responsibilities does the classic GoF Singleton pattern combine?"
+    a: "Ensuring only one instance of a class exists AND providing a global access point to it."
+  - q: "Why does a classic Singleton with mutable state hurt unit testing?"
+    a: "Tests share the same global instance across runs, causing order-dependent flakiness and preventing callers from substituting an in-memory fake."
+  - q: "How should you achieve a single shared instance (like a database pool) without a Singleton?"
+    a: "Instantiate the resource once at the application's composition root and pass it into dependents via constructor injection (or let your DI container manage its singleton lifecycle)."
+  - q: "When is a module-level or enum singleton acceptable?"
+    a: "Only for genuinely immutable configuration constants or stateless utilities where no test double is ever needed."
+related:
+  - design/dependency-injection
+  - design/anti-patterns
+  - architecture/dependency-inversion
+sources:
+  - title: "Refactoring.Guru: Singleton Pattern"
+    url: https://refactoring.guru/design-patterns/singleton
+  - title: "Martin Fowler: Inversion of Control Containers and the Dependency Injection pattern"
+    url: https://martinfowler.com/articles/injection.html
+  - title: "key-learning: singleton pattern (author's notes)"
+    url: https://github.com/limme-learning/key-learning/blob/main/software-design/03-design-patterns/07-singleton-pattern.md
+---
+
+## TL;DR
+The classic **Singleton** (`ClassName.getInstance()`) hides dependencies, leaks global mutable state across tests, and violates Single Responsibility. Instead of hand-rolling `getInstance()`, create one instance at your **composition root** and pass it via **dependency injection**.
+
+## Why it exists
+Sometimes a system genuinely needs a single shared resource—such as a PostgreSQL connection pool, a telemetry exporter, or immutable startup config. The GoF Singleton solved this in 1994 by locking the constructor and exposing a static `getInstance()` method, before dependency injection containers and ES modules were standard.
+
+## Mental model
+Separate **lifetime** (how many instances exist) from **access** (how callers receive it).
+
+<Diagram
+  id="singleton-vs-di"
+  ariaLabel="Global getInstance() couples callers to a concrete class, whereas a composition root injects one shared instance behind an interface"
+  caption="Keep one instance in the composition root without forcing callers to import a global."
+  nodes={[
+    { id: 'root', label: 'Composition Root', subtitle: 'Creates 1 pool', icon: 'ci', category: 'client', rank: 0, order: 0 },
+    { id: 'svcA', label: 'OrderService', subtitle: 'Receives pool', icon: 'service', category: 'service', rank: 1, order: 0 },
+    { id: 'svcB', label: 'BillingService', subtitle: 'Receives same pool', icon: 'service', category: 'service', rank: 1, order: 1 },
+  ]}
+  edges={[
+    { from: 'root', to: 'svcA', label: 'inject' },
+    { from: 'root', to: 'svcB', label: 'inject' },
+  ]}
+/>
+
+## Do it
+
+### Replace `getInstance()` with constructor injection
+
+```ts
+// Avoid: hidden global dependency + impossible to swap in tests
+class ConfigRegistry {
+  private static instance: ConfigRegistry;
+  private constructor(public readonly region: string) {}
+  static getInstance(): ConfigRegistry {
+    if (!ConfigRegistry.instance) {
+      ConfigRegistry.instance = new ConfigRegistry(process.env.REGION ?? 'us-east-1');
+    }
+    return ConfigRegistry.instance;
+  }
+}
+
+// Prefer: plain class instantiated once at startup and passed explicitly
+export interface AppConfig {
+  readonly region: string;
+}
+
+export class DeployService {
+  constructor(private readonly config: AppConfig) {}
+  targetRegion() {
+    return this.config.region;
+  }
+}
+
+// Composition root (main.ts): single shared instance
+const config: AppConfig = Object.freeze({ region: process.env.REGION ?? 'us-east-1' });
+const deployService = new DeployService(config);
+```
+
+### When a single instance IS fine
+- **DI-managed singleton scope:** Frameworks like NestJS or Spring manage one bean per container by default while still injecting it through constructors.
+- **Frozen constants / stateless helpers:** Immutable values (`Object.freeze(...)`) or pure functions have no mutable state to corrupt tests.
+
+## Gotchas
+- **Test pollution:** A mutable Singleton cache or counter populated in Test A silently breaks Test B when tests run in the same process.
+- **Hidden coupling:** Functions with zero parameters that secretly call `MetricsSingleton.getInstance()` lie about their dependencies.
+- **Module-cache assumptions in Serverless / Edge:** In Next.js or serverless workers, module-level singletons live per isolate, not globally across all replicas.
+
+## Production checklist
+- [ ] Never write `private constructor()` + `static getInstance()` for business services.
+- [ ] Create shared pools/clients once in `main.ts` (or a DI container) and pass them via constructor parameters.
+- [ ] Freeze any module-level config object (`Object.freeze`) so tests cannot mutate it.
+
+## Check yourself
+
+<Quiz
+  questions={[
+    {
+      question: "Why do unit tests suffer when services call DatabasePool.getInstance() directly?",
+      options: [
+        { label: "TypeScript does not allow static methods", description: "TypeScript supports static methods." },
+        { label: "Callers hide their dependency on global state, making it hard to inject an in-memory fake or reset state between tests", description: "Global getInstance() calls couple callers to a concrete shared instance across tests.", correct: true },
+        { label: "Singletons cannot be garbage collected during build", description: "The main pain is test coupling and hidden dependencies, not build-time GC." },
+      ],
+    },
+    {
+      question: "How should you share a single database connection pool across multiple services in production?",
+      options: [
+        { label: "Instantiate the pool once at the composition root and pass it via constructor injection", description: "Constructor injection gives you a single shared instance without global coupling.", correct: true },
+        { label: "Open a new connection pool inside every HTTP request", description: "Creating pools per request exhausts database connections." },
+        { label: "Store the pool on window.globalPool", description: "Attaching resources to global objects creates brittle implicit state." },
+      ],
+    },
+  ]}
+/>
