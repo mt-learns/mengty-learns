@@ -1,0 +1,115 @@
+---
+title: Flake-Free E2E Testing (Playwright & Cypress)
+description: Eliminate flaky E2E suites by banning fixed sleeps, isolating per-test data, reusing auth storageState, stubbing third-party vendors, and gating PRs on critical journeys.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: how-to
+level: intermediate
+tags: [process, testing, playwright, cypress, e2e, ci-cd]
+tested_with:
+  playwright: "1.65.1"
+cards:
+  - q: "What is the single most common cause of flaky E2E tests?"
+    a: "Fixed sleeps (like waitForTimeout) and non-retrying assertions instead of auto-waiting locators and web-first assertions."
+  - q: "Why should E2E tests NOT log in through the UI before every single test?"
+    a: "Repeated UI logins waste minutes, trigger IdP rate limits, and introduce session race conditions; authenticate once into storageState and reuse it."
+  - q: "How do you prevent parallel E2E workers from colliding on shared test accounts or lists?"
+    a: "Seed fresh, run-scoped data per test via an API or SQL helper and assert by unique role/text rather than positional nth(0) selectors."
+  - q: "How many E2E tests belong in the blocking PR gate versus post-merge?"
+    a: "Keep ~5-10 critical user journeys in the fast PR gate (< 10 min) and run the full regression suite post-merge or nightly."
+related:
+  - process/testing-strategy
+  - process/contract-testing
+  - ci-cd/this-site-pipeline
+sources:
+  - title: "Playwright Docs: Best Practices"
+    url: https://playwright.dev/docs/best-practices
+  - title: "Playwright Docs: Authentication (storageState)"
+    url: https://playwright.dev/docs/auth
+  - title: "software-engineering: Killing Flake in End-to-End Suites (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/08-testing-strategies/03-end-to-end-testing-playwright-and-cypress.md
+---
+
+## TL;DR
+A flaky E2E suite trains teams to ignore red builds. Keep suites deterministic with **web-first retrying assertions** (zero `waitForTimeout`), **per-test seeded data**, **reused `storageState`** auth, **stubbed external vendors**, and a **small critical-path PR gate** with Playwright traces uploaded on failure.
+
+## Why it exists
+When an E2E suite of 300 tests goes red 20% of the time due to `waitForTimeout(2000)` or shared test accounts, engineers stop trusting it and quarantine failing tests—until a real regression slips straight into production.
+
+## Mental model
+Test **real user journeys** against **your** backend and DB, while stubbing external vendors and freezing non-deterministic clocks.
+
+<Diagram
+  id="e2e-flake-fixes"
+  ariaLabel="Playwright test uses reused storageState, run-scoped API seed data, and mocked external vendor routes"
+  caption="Isolate each test with run-scoped data, reused auth state, and stubbed third-party boundaries."
+  nodes={[
+    { id: 'auth', label: 'storageState', subtitle: 'Login once', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'test', label: 'Playwright Test', subtitle: 'Web-first expects', icon: 'ci', category: 'service', rank: 1, order: 0 },
+    { id: 'app', label: 'App + Test DB', subtitle: 'Run-scoped seed', icon: 'db', category: 'data', rank: 2, order: 0 },
+    { id: 'ext', label: 'Vendor Stubs', subtitle: 'page.route()', icon: 'gateway', category: 'edge', rank: 2, order: 1 },
+  ]}
+  edges={[
+    { from: 'auth', to: 'test', label: 'cookies' },
+    { from: 'test', to: 'app', label: 'real HTTP' },
+    { from: 'test', to: 'ext', label: 'mock' },
+  ]}
+/>
+
+## Do it
+
+```ts
+import { test, expect } from '@playwright/test';
+
+test('submits order and shows confirmation', async ({ page }) => {
+  // Freeze clock for deterministic date assertions
+  await page.clock.install({ time: new Date('2026-11-27T10:00:00Z') });
+
+  // Stub external vendor at network boundary
+  await page.route('**/api.shipping-vendor.example/quote', (route) =>
+    route.fulfill({ json: { priceCents: 500, etaDays: 2 } }),
+  );
+
+  await page.goto('/checkout');
+  await page.getByLabel('Order reference').fill(`ORD-${test.info().workerIndex}-${Date.now()}`);
+  await page.getByRole('button', { name: 'Place order' }).click();
+
+  // Web-first retrying assertion (never use waitForTimeout)
+  await expect(page.getByRole('status')).toHaveText(/order confirmed/i);
+});
+```
+
+## Gotchas
+- **Quarantining without an expiry:** A "temporarily skipped" critical test becomes permanently blind coverage.
+- **Uploading traces only on success:** Always set `if: always()` (or `trace: 'on-first-retry'`) in CI so failed runs keep their trace/video artifacts.
+- **Asserting on `nth(0)`:** Positional selectors break whenever parallel workers insert rows into the same list.
+
+## Production checklist
+- [ ] Ban `waitForTimeout` / `cy.wait(ms)` via ESLint `no-restricted-syntax`.
+- [ ] Authenticate once via `storageState` (keep only 1 dedicated login E2E test).
+- [ ] Seed test data via API/DB per test with unique run/worker IDs.
+- [ ] Run ~5–10 `@critical` journeys in the PR gate and the full suite post-merge.
+
+## Check yourself
+
+<Quiz
+  questions={[
+    {
+      question: "Which Playwright assertion retries automatically until the DOM matches or the timeout expires?",
+      options: [
+        { label: "expect(await page.getByRole('status').textContent()).toBe('Saved')", description: "Awaiting textContent() reads the DOM once immediately and races with async updates." },
+        { label: "await expect(page.getByRole('status')).toHaveText('Saved')", description: "Web-first assertions on Locators auto-wait and retry cleanly.", correct: true },
+        { label: "await page.waitForTimeout(3000)", description: "Fixed sleeps waste time and still flake on slow CI runners." },
+      ],
+    },
+    {
+      question: "How should E2E tests handle third-party payment or screening APIs in a PR gate?",
+      options: [
+        { label: "Hit the live third-party sandbox on every PR", description: "External sandboxes add rate limits, downtime, and non-deterministic responses to your PR gate." },
+        { label: "Stub external vendor endpoints at the network boundary (e.g. page.route) and run a separate nightly sandbox check", description: "Stubbing keeps PR gates fast and deterministic while allowing you to test vendor error paths.", correct: true },
+        { label: "Disable all checkout E2E tests", description: "Stubbing lets you test your full UI and backend integration reliably." },
+      ],
+    },
+  ]}
+/>
