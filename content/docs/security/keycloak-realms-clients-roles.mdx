@@ -1,0 +1,256 @@
+---
+title: Keycloak Realms, Clients, and Roles
+description: Design Keycloak realms for user-population isolation, clients per app and API, client roles for fine-grained permissions, and groups for organization structure.
+kind: concept
+type: explanation
+level: intermediate
+tags: [security, keycloak, oauth2, oidc, rbac, iam]
+tested_with:
+  keycloak: "26.x (docs)"
+status: stable
+updated: "2026-11-27"
+verified: "2026-11-27"
+cards:
+  - q: "Should you create separate Keycloak realms for dev, staging, and production environments?"
+    a: "No. Realms isolate distinct user populations and security policies; dev, staging, and production should be separate Keycloak deployments so a staging misconfiguration cannot affect production."
+  - q: "Why should permissions like 'orders:write' be modeled as Client Roles rather than Realm Roles?"
+    a: "Client roles are scoped to a specific resource server, preventing name collisions across APIs and keeping access tokens small and auditable per API."
+  - q: "What is the difference between a Public client and a Confidential client in Keycloak?"
+    a: "Public clients (SPAs, mobile apps) cannot store secrets and use Authorization Code + PKCE; Confidential clients (BFFs, backend services) hold credentials and can use Client Credentials or Token Exchange."
+  - q: "How do Groups and Composite Roles simplify user onboarding and access reviews?"
+    a: "A Composite Role bundles fine-grained client roles into a job function, and assigning that role to a Group lets you onboard or audit an entire team or partner org with one membership change."
+related:
+  - security/oauth21-oidc-pkce
+  - security/authn-vs-authz
+  - security/sessions-vs-jwt
+sources:
+  - title: "Keycloak Docs: Server Administration Guide (Realms, Clients, Roles)"
+    url: https://www.keycloak.org/docs/latest/server_admin/
+  - title: "RFC 8693: OAuth 2.0 Token Exchange"
+    url: https://www.rfc-editor.org/rfc/rfc8693.html
+  - title: "software-engineering: Keycloak Realms, Clients and Roles (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/04-security-and-authentication/04-keycloak-realms-clients-and-roles.md
+---
+
+## TL;DR
+Use **one Keycloak realm per isolated user population** (never per environment), register **one client per frontend and one per backend API**, put API permissions in **client roles** (not global realm roles), and bundle job functions using **groups + composite roles**.
+
+## 1. Intent
+
+<Intent>
+Structure Keycloak's identity model so permissions stay scoped per API, access tokens remain compact, and onboarding or auditing a team takes one group assignment.
+</Intent>
+
+## 2. Problem
+
+Teams new to Keycloak often put everyone and everything into a single realm, one shared client, and flat realm roles like `admin` or `viewer`. Within a year, three problems appear:
+1. **Role collisions:** Both `billing-api` and `docs-api` want a `viewer` role, so granting `viewer` accidentally opens both services.
+2. **Token bloat:** Every user carries dozens of unrelated roles in every JWT.
+3. **Policy lock-in:** External partners and internal employees share one realm, making separate password policies, themes, or IdPs impossible.
+
+<Diagram
+  id="keycloak-problem"
+  ariaLabel="One shared client and global realm roles cause permission collisions and token bloat across APIs"
+  caption="Global realm roles and a single shared client leak permissions across unrelated APIs."
+  nodes={[
+    { id: 'realm', label: 'Shared Realm', subtitle: 'Staff + Partners', icon: 'gateway', category: 'external', rank: 0, order: 0, variant: 'problem' },
+    { id: 'role', label: 'Realm Role: viewer', subtitle: 'Global scope', icon: 'interface', category: 'external', rank: 1, order: 0, variant: 'problem' },
+    { id: 'api1', label: 'Billing API', icon: 'service', category: 'external', rank: 2, order: 0, variant: 'problem' },
+    { id: 'api2', label: 'Docs API', icon: 'service', category: 'external', rank: 2, order: 1, variant: 'problem' },
+  ]}
+  edges={[
+    { from: 'realm', to: 'role' },
+    { from: 'role', to: 'api1', label: 'leaks' },
+    { from: 'role', to: 'api2', label: 'leaks' },
+  ]}
+/>
+
+## 3. Solution
+
+Map Keycloak primitives cleanly to your system boundaries:
+
+| Primitive | Purpose | Design rule |
+|---|---|---|
+| **Realm** | Hard security boundary (users, keys, policies, IdPs) | One per user population (e.g. `staff` vs `partners`), **never** per environment |
+| **Client** | Registered app or API | One public client per SPA/mobile app; one confidential/bearer client per backend API |
+| **Client Role** | Permission scoped to one API (`billing.read`) | Default for all API authorization checks |
+| **Realm Role** | Org-wide identity (`employee`, `platform-admin`) | Reserve strictly for cross-cutting identity tags |
+| **Group + Composite** | Team or org structure + role bundle | Attach composite roles to groups for 1-click onboarding and clean audits |
+| **Client Scope / Mapper** | Controls claims emitted per token | Keep JWTs minimal; emit only needed audience and roles |
+
+## 4. Real-world analogy
+
+<Analogy>
+Think of a **multi-tenant office building**. Different companies have separate building entrances and security desks (**Realms**). Each floor's locked suite is a **Client** with its own keycard permissions (**Client Roles**), while an employee's job title (**Group + Composite Role**) grants the exact set of suite keys needed on day one.
+</Analogy>
+
+## 5. Flow: watch it work
+
+<Flow
+  id="keycloak-realms-clients-roles"
+  title="OIDC Login & Client-Role Enforcement"
+  nodes={[
+    { id: 'spa', label: 'Partner Portal', subtitle: 'Public client (PKCE)', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'kc', label: 'Keycloak Realm', subtitle: 'partners realm', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+    { id: 'api', label: 'Orders API', subtitle: 'Resource server', icon: 'service', category: 'service', rank: 2, order: 0 },
+  ]}
+  steps={[
+    { edge: 'spa->kc', title: 'Authenticate with PKCE', text: 'Portal redirects user to partners realm using Authorization Code + PKCE' },
+    { edge: 'kc->spa', title: 'Issue scoped JWT', text: 'Keycloak maps Group -> Composite Role -> orders-api client roles into JWT', kind: 'response' },
+    { edge: 'spa->api', title: 'Call Orders API', text: 'Portal sends Bearer JWT with aud=orders-api and resource_access roles' },
+    { edge: 'api->spa', title: 'Authorize & respond', text: 'Orders API verifies signature, aud, and orders.write client role', kind: 'response' },
+  ]}
+/>
+
+## 6. Structure
+
+<Diagram
+  id="keycloak-structure"
+  layout="tree"
+  ariaLabel="Realm contains groups with composite roles, which map to client roles on specific API clients"
+  caption="Users inherit composite roles via Groups, which grant scoped Client Roles per API."
+  nodes={[
+    { id: 'grp', label: 'Group: PartnerOps', subtitle: 'Org membership', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'comp', label: 'Composite Role', subtitle: 'partner-manager', icon: 'interface', category: 'abstraction', rank: 1, order: 0 },
+    { id: 'r1', label: 'orders.write', subtitle: 'orders-api client', icon: 'service', category: 'service', rank: 2, order: 0 },
+    { id: 'r2', label: 'invoices.read', subtitle: 'billing-api client', icon: 'db', category: 'data', rank: 2, order: 1 },
+  ]}
+  edges={[
+    { from: 'grp', to: 'comp', label: 'assigned' },
+    { from: 'comp', to: 'r1', label: 'grants' },
+    { from: 'comp', to: 'r2', label: 'grants' },
+  ]}
+/>
+
+## 7. Code
+
+When your resource server verifies a Keycloak JWT, read `resource_access[clientId].roles` (and validate `aud` / `iss`) instead of trusting global realm roles:
+
+```ts
+export interface KeycloakJwtPayload {
+  sub: string;
+  iss: string;
+  aud: string | string[];
+  resource_access?: Record<string, { roles?: string[] }>;
+}
+
+export function extractClientRoles(
+  payload: KeycloakJwtPayload,
+  clientId: string,
+  expectedIssuer: string,
+): Set<string> {
+  if (payload.iss !== expectedIssuer) {
+    throw new Error('Untrusted token issuer');
+  }
+
+  const audiences = Array.isArray(payload.aud) ? payload.aud : [payload.aud];
+  if (!audiences.includes(clientId)) {
+    throw new Error(`Token audience missing ${clientId}`);
+  }
+
+  const roles = payload.resource_access?.[clientId]?.roles ?? [];
+  return new Set(roles);
+}
+```
+
+## 8. When to use / when to avoid
+
+<Checklist
+  use={[
+    "Use separate realms for genuinely separate user populations (customers/partners vs internal staff).",
+    "Register a dedicated client for every backend API so audience (aud) and client roles stay isolated.",
+    "Use OAuth 2.0 Token Exchange (RFC 8693) when Service A calls Service B on a user's behalf and must narrow scope.",
+  ]}
+  avoid={[
+    "Do not put dev, staging, and prod realms on the same Keycloak cluster.",
+    "Do not cram 200 roles or large custom attributes into every access token—keep JWTs small.",
+  ]}
+/>
+
+## 9. How to implement
+
+<Steps>
+  <Step>
+    ### Provision realms per user population
+    Deploy separate Keycloak instances per environment, with one realm per distinct user group.
+  </Step>
+  <Step>
+    ### Register frontend and API clients
+    Create public PKCE clients for SPAs and confidential/bearer clients for each resource server.
+  </Step>
+  <Step>
+    ### Define client roles per API
+    Name permissions consistently (`orders.read`, `orders.write`) inside each API client.
+  </Step>
+  <Step>
+    ### Bundle roles into groups via composite roles
+    Assign composite roles to Groups so user onboarding and periodic access reviews stay simple.
+  </Step>
+</Steps>
+
+## 10. Pros / Cons
+
+<ProsCons
+  pros={[
+    "Strict audience and permission isolation between microservices.",
+    "Clean onboarding/offboarding via group membership.",
+    "Separate password policies, MFA, and login themes per user population.",
+  ]}
+  cons={[
+    "More objects (clients, scopes, mappers) to manage as IaC or realm exports.",
+    "Composite roles add one extra hop when auditing why a user holds a specific permission.",
+  ]}
+/>
+
+## 11. Relations
+
+<Relations
+  items={[
+    {
+      name: "OAuth 2.1, OIDC & PKCE",
+      summary: "Explains the Authorization Code + PKCE flow that Keycloak executes at runtime.",
+      href: "/docs/security/oauth21-oidc-pkce",
+    },
+    {
+      name: "Authentication vs Authorization",
+      summary: "Clarifies how identity verification (OIDC) separates from permission checks (RBAC/ABAC).",
+      href: "/docs/security/authn-vs-authz",
+    },
+    {
+      name: "Sessions vs JWT",
+      summary: "Covers token lifetimes, revocation trade-offs, and BFF session patterns.",
+      href: "/docs/security/sessions-vs-jwt",
+    },
+  ]}
+/>
+
+## 12. Check yourself
+
+<Quiz
+  questions={[
+    {
+      question: "Why is creating dev, staging, and prod realms inside a single Keycloak instance discouraged?",
+      options: [
+        { label: "Keycloak only supports one realm per server", description: "Keycloak supports multiple realms, but sharing one server across environments is risky." },
+        { label: "A shared instance couples upgrades, restarts, and admin mistakes directly between staging and production", description: "Separate deployments per environment prevent test changes or outages from impacting production logins.", correct: true },
+        { label: "Client roles cannot exist inside multiple realms", description: "Each realm has its own independent clients and roles." },
+      ],
+    },
+    {
+      question: "Where should an API permission like 'invoices.approve' live in Keycloak?",
+      options: [
+        { label: "As a Client Role on the billing-api client", description: "Scoping permissions to the target API client prevents name collisions and keeps tokens auditable.", correct: true },
+        { label: "As a global Realm Role shared by all apps", description: "Global realm roles collide across APIs and bloat every token." },
+        { label: "Hardcoded in the frontend SPA bundle", description: "Authorization must always be enforced on the backend resource server." },
+      ],
+    },
+    {
+      question: "What does validating the 'aud' (audience) claim in a backend resource server prevent?",
+      options: [
+        { label: "A valid token issued for another service from being replayed against your API", description: "Audience validation ensures the token was explicitly minted for this resource server.", correct: true },
+        { label: "SQL injection in PostgreSQL", description: "Parameterized queries prevent SQL injection, not JWT audience checks." },
+        { label: "Users from logging out", description: "Logout is handled via OIDC end-session endpoints and session revocation." },
+      ],
+    },
+  ]}
+/>

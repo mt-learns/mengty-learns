@@ -8,6 +8,7 @@
     "passwords",
     "sessions-vs-jwt",
     "oauth21-oidc-pkce",
+    "keycloak-realms-clients-roles",
     "xss-csp",
     "sql-injection",
     "csrf-ssrf",
