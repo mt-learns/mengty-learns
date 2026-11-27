@@ -57,10 +57,10 @@ Container hardening works in four independent layers:
 ## Do it
 
 ### 1. Numeric non-root `USER` in the Dockerfile
-Look at `labs/docker-multistage-next/Dockerfile` in this repo—it creates `nextjs` at UID `1001` and switches before `CMD`:
+Look at `labs/docker-multistage-next/Dockerfile` in this repo—it creates `nextjs` at UID `1001` and switches with `USER nextjs` before `CMD`. When deploying to Kubernetes with `runAsNonRoot: true`, adapt that final line to numeric `USER 1001:1001`:
 
 ```dockerfile
-# Snippet adapted from labs/docker-multistage-next/Dockerfile
+# Adapted from labs/docker-multistage-next/Dockerfile (lab uses USER nextjs; numeric UID shown for Kubernetes runAsNonRoot)
 RUN addgroup -g 1001 -S nodejs \
   && adduser -S nextjs -u 1001 -G nodejs
 
