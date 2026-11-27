@@ -42,7 +42,7 @@ const ogSvg = `
   <text x="96" y="342" fill="${INK}" font-family="${FONT}" font-size="76" font-weight="700" letter-spacing="-1.5">See how infrastructure</text>
   <text x="96" y="430" fill="${INK}" font-family="${FONT}" font-size="76" font-weight="700" letter-spacing="-1.5">really works.</text>
   <text x="96" y="534" fill="${MUTED}" font-family="${FONT}" font-size="28" font-weight="400">DevOps · Architecture · Security</text>
-  <text x="1104" y="534" text-anchor="end" fill="${JADE}" font-family="${FONT}" font-size="28" font-weight="600">mengtylearns.com</text>
+  <text x="1104" y="534" text-anchor="end" fill="${JADE}" font-family="${FONT}" font-size="28" font-weight="600">learn.limmengty.com</text>
 </svg>`;
 
 await sharp(Buffer.from(ogSvg)).png().toFile(ogPngPath);

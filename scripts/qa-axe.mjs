@@ -1,12 +1,12 @@
 // axe-core scan of the site, light and dark, same routes as the CI
-// quality job plus /radar and the 404. Exits 1 on any serious/critical issue.
+// quality job plus /radar, /digest and the 404. Exits 1 on any serious/critical issue.
 //   pnpm preview   (in another terminal: Worker preview on :8787)
 //   node scripts/qa-axe.mjs [--url http://localhost:8787]
 import AxeBuilder from '@axe-core/playwright';
 import { chromium } from 'playwright';
 import { waitForQaTarget } from './lib/qa-target.mjs';
 
-const routes = ['/', '/docs/', '/docs/design/bridge/', '/review/', '/radar/', '/this-page-does-not-exist/'];
+const routes = ['/', '/docs/', '/docs/design/bridge/', '/review/', '/radar/', '/digest/', '/this-page-does-not-exist/'];
 
 const base = await waitForQaTarget();
 

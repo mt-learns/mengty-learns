@@ -39,11 +39,11 @@ export default function DigestPage() {
           <p className="text-body font-medium text-foreground mb-1">No published digests yet</p>
           <p className="text-subheadline text-muted-foreground">
             Digests are published biweekly from the private RSS inbox. Subscribe via{' '}
-            <Link href="/digest/rss.xml" className="text-primary hover:underline">
+            <Link href="/digest/rss.xml" className="text-link underline decoration-1 underline-offset-[3px] hover:text-link-hover">
               RSS
             </Link>{' '}
             or check the{' '}
-            <Link href="/radar" className="text-primary hover:underline">
+            <Link href="/radar" className="text-link underline decoration-1 underline-offset-[3px] hover:text-link-hover">
               Tech Radar
             </Link>
             .

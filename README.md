@@ -1,7 +1,7 @@
 # Mengty Learns
 
 > Learning DevOps, architecture and security, one note at a time.
-> **mengtylearns.com** · a static, personal learning site by Lim Mengty
+> **learn.limmengty.com** · a static, personal learning site by Lim Mengty
 
 A learning system, not a blog: structured notes, animated process flows, hands-on labs that CI actually runs, flashcards with spaced repetition, and a personal tech radar. Everything is pre-rendered at build time (no backend, no database) and served from a Cloudflare Worker.
 
