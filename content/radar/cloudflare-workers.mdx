@@ -1,14 +1,17 @@
 ---
-title: Cloudflare Workers
-ring: assess
+title: OpenNext on Cloudflare Workers
+ring: trial
 quadrant: platforms
-what: V8 isolate serverless runtime executing JavaScript and TypeScript at the edge.
-why: Near-zero cold-start overhead and tight integration with Workers Assets, KV, D1, and R2 for small APIs.
-action: Assess for lightweight webhooks and edge utilities that complement static sites.
-updated: "2026-11-26"
+what: Full-stack Next.js adapter (@opennextjs/cloudflare) running pre-rendered pages and Worker routes on Cloudflare's V8 isolate runtime with Workers Static Assets.
+why: "TODO(owner): Rewrite in your own voice — this site just shipped on Cloudflare Workers via OpenNext with read-only static asset caching and zero paid bindings."
+action: Trial in production for this site, watching bundle size (< 3 MiB gzip free-plan limit) and Linux CI build parity.
+updated: "2026-11-27"
 sources:
+  - title: OpenNext — Cloudflare Workers
+    url: https://opennext.js.org/cloudflare
   - title: Cloudflare Workers Docs
     url: https://developers.cloudflare.com/workers/
 related:
   - ci-cd/this-site-pipeline
+  - ci-cd/deploy-and-rollback
 ---

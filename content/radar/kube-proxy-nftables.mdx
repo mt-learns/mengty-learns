@@ -1,0 +1,14 @@
+---
+title: kube-proxy nftables mode
+ring: assess
+quadrant: techniques
+what: Linux netfilter nftables backend for kube-proxy (GA since Kubernetes 1.33) replacing both legacy iptables and the deprecated ipvs mode.
+why: "TODO(owner): Rewrite in your own voice — Kubernetes SIG Network scheduled ipvs removal starting in 1.40, making nftables the path forward."
+action: Assess in a Kubernetes 1.33+ lab and plan migration away from ipvs before Kubernetes 1.40 disables it by default.
+updated: "2026-11-27"
+sources:
+  - title: Kubernetes Blog — Scheduling the removal of the kube-proxy IPVS backend (2026-11-16)
+    url: https://kubernetes.io/blog/2026/11/16/ipvs-removal/
+related:
+  - kubernetes/service-routing
+---

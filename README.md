@@ -9,11 +9,11 @@ A learning system, not a blog: structured notes, animated process flows, hands-o
 
 | Area | Route | What it is |
 |---|---|---|
-| Docs | `/docs/<section>/…` | Notes, concept pages, cheatsheets and labs in 9 sections: Foundations, Containers, Kubernetes, IaC, CI/CD, GitOps, Design, Architecture, Security |
-| Review | `/review` | Daily flashcards (FSRS spaced repetition, saved in `localStorage`) built from every page's `cards` |
+| Docs | `/docs/<section>/…` | 102 pages across 10 sections: Architecture (23), Security (15), Design (11), Process (11), Foundations (10), Containers (9), Kubernetes (8), IaC (6), CI/CD (6), GitOps (3) |
+| Review | `/review` | 409 flashcards (FSRS spaced repetition, saved in `localStorage`) built from every page's `cards` |
 | Radar | `/radar` | Personal Tech Radar: Adopt / Trial / Assess / Hold |
 | Digest | `/digest` (+ `/digest/rss.xml`) | Biweekly "things that matter", in my own words |
-| Labs | `labs/<name>/` | Runnable Docker / Kubernetes / OpenTofu exercises, validated in CI |
+| Labs | `labs/<name>/` | 5 runnable exercises (`arch-order-service`, `bridge-pattern-ts`, `docker-multistage-next`, `k8s-service-routing`, `tofu-local-file`), validated in CI |
 
 ## Stack
 
