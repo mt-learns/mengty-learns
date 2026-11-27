@@ -46,9 +46,9 @@ Look at `.github/workflows/` in **this repository** as a real-world example of w
 
 | Control | Current state in this repo | Gap / next step |
 |---|---|---|
-| **Lockfile enforcement** | `ci.yml`, `quality.yml`, and `inbox.yml` all run `pnpm install --frozen-lockfile`. | Keep `--frozen-lockfile` everywhere; consider `--ignore-scripts` where native builds aren't needed. |
-| **Action pinning** | `labs.yml` pins to patch tags (`actions/checkout@v4.2.2`, `hadolint/hadolint-action@v3.5.0`, `opentofu/setup-opentofu@v2.0.2`), while `ci.yml`, `quality.yml`, and `inbox.yml` still use floating major tags (`actions/checkout@v4`, `pnpm/action-setup@v4`, `actions/setup-node@v4`). | **Not SHA-pinned yet:** pin every `uses:` across all 4 workflows to a **40-character commit SHA** with a version comment. |
-| **Least-privilege `GITHUB_TOKEN`** | `labs.yml` and `quality.yml` set `permissions: contents: read`; `inbox.yml` sets `permissions: issues: write`. | `ci.yml` still omits an explicit `permissions: contents: read` block. |
+| **Lockfile enforcement** | `ci.yml`, `deploy.yml`, `inbox.yml`, and `quality.yml` all run `pnpm install --frozen-lockfile`. | Keep `--frozen-lockfile` everywhere; consider `--ignore-scripts` where native builds aren't needed. |
+| **Action pinning** | All 5 workflows (`ci.yml`, `deploy.yml`, `inbox.yml`, `labs.yml`, `quality.yml`) pin every `uses:` to a **40-character commit SHA** with a version comment (e.g. `# v7.0.1` in `deploy.yml`/`quality.yml`, `# v4.2.2` in `labs.yml`, `# v4` in `ci.yml`/`inbox.yml`). | Keep Renovate updating pinned SHAs automatically so security patches stay current. |
+| **Least-privilege `GITHUB_TOKEN`** | All 5 workflows declare explicit `permissions:` (`contents: read` on `ci.yml`, `labs.yml`, `quality.yml`; `issues: write` on `inbox.yml`; `contents: read` + deploy/PR scopes on `deploy.yml`). | Audit `deploy.yml` permissions whenever adding new deploy steps. |
 
 ```yaml
 # UNSAFE: floating tag can be retargeted upstream
