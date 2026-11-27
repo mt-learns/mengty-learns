@@ -1,0 +1,99 @@
+---
+title: "Responsive & Mobile-First: Fluid Layouts and Touch Targets"
+description: Build fluid, accessible layouts starting from 360px up to 4K displays with Tailwind CSS media queries and 44px minimum tap targets.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: how-to
+level: intermediate
+tags: [react, tailwind, responsive, mobile-first, design-systems]
+tested_with:
+  tailwindcss: "4.3.5"
+  next: "16.4.6"
+cards:
+  - q: "Why design mobile-first rather than desktop-first?"
+    a: "Adding complexity as screen size increases is easier than stripping down a crowded desktop layout to fit 360px screens."
+  - q: "What is the minimum recommended tap target size for touchscreens?"
+    a: "44px by 44px to ensure reliable interaction without mis-taps."
+  - q: "How do Tailwind min-width breakpoints operate?"
+    a: "Mobile styles are default, and breakpoints like `md:` apply styles from that screen width upwards."
+related:
+  - frontend/tailwind-and-design-tokens
+  - frontend/accessibility-wcag-basics
+sources:
+  - title: "Tailwind CSS docs: Responsive Design"
+    url: https://tailwindcss.com/docs/responsive-design
+  - title: "W3C WCAG 2.2: Target Size (Minimum)"
+    url: https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html
+  - title: "software-engineering: Responsive and mobile-first design (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/09-accessibility/03-responsive-mobile-first.md
+---
+
+## TL;DR
+Start styling at 360px mobile width, then layer on larger screens (`md:`, `lg:`). Enforce 44px minimum tap targets, fluid typography, and container queries so components adapt to their container rather than the viewport.
+
+## Why it exists
+Designing desktop-first results in cramped mobile layouts, hidden sidebars, and tiny touch targets that frustrate mobile users. A mobile-first approach forces prioritization: what matters most fits on a 360px phone screen; larger screens gain breathing room and multi-column grids.
+
+## Mental model
+**Min-width stack.** Unprefixed classes apply everywhere. `md:` applies from 768px upwards.
+
+| Breakpoint | Width | Typical device |
+|---|---|---|
+| Default | 360px+ | Mobile phone |
+| `sm` | 640px | Large phone / small tablet |
+| `md` | 768px | Tablet / iPad |
+| `lg` | 1024px | Laptop |
+| `xl` | 1280px+ | Desktop / 4K monitor |
+
+## Do it
+### Mobile-First Layout Pattern
+```tsx
+export function ResponsiveNav() {
+  return (
+    <nav className="flex flex-col space-y-2 p-4 md:flex-row md:items-center md:justify-between md:space-y-0">
+      <span className="text-body font-semibold">Mengty Learns</span>
+      <div className="flex flex-col space-y-2 md:flex-row md:space-x-4 md:space-y-0">
+        <a href="/docs" className="min-h-tap flex items-center px-3 py-2">Docs</a>
+        <a href="/review" className="min-h-tap flex items-center px-3 py-2">Review</a>
+      </div>
+    </nav>
+  )
+}
+```
+
+## Gotchas
+- **Fixed width containers** (`w-[1200px]`) overflow on mobile devices; use `max-w-7xl w-full mx-auto px-4`.
+- **Tiny tap targets** (`p-1` on an icon button) cause mis-taps on touchscreens; enforce `--tap-target: 44px`.
+- **Viewport units (`100vh`)** on mobile browsers include the address bar, causing vertical scrolling bugs. Use `100dvh` (dynamic viewport height).
+
+## Production checklist
+- [ ] Layouts tested at 360px width without horizontal scrolling or clipping.
+- [ ] Tap targets meet the 44px minimum requirement (`min-h-tap`).
+- [ ] Tailwind breakpoints use min-width (`md:`, `lg:`), stacking up from mobile base styles.
+- [ ] Text wraps cleanly and does not overflow narrow viewports.
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "What is the primary benefit of the mobile-first approach?",
+    options: [
+      { label: "It forces prioritization of core content and scales up gracefully to larger screens", description: "Designing for constraints first ensures clean, focused layouts.", correct: true },
+      { label: "It eliminates the need for CSS media queries", description: "Media queries are still used via Tailwind breakpoint prefixes.", correct: false },
+      { label: "It makes desktop monitors run faster", description: "Screen size has no impact on GPU/CPU performance.", correct: false }
+    ]
+  },
+  {
+    question: "Why should you use `100dvh` instead of `100vh` on mobile web apps?",
+    options: [
+      { label: "100vh includes the mobile browser address bar height, causing vertical clipping", description: "Dynamic viewport height (`dvh`) adjusts when mobile browser bars appear and hide.", correct: true },
+      { label: "100vh is deprecated in CSS", description: "It is valid, but buggy on mobile browsers.", correct: false },
+      { label: "100dvh loads faster", description: "Performance is identical.", correct: false }
+    ]
+  }
+]} />
+
+## Sources
+- [Tailwind CSS docs: Responsive Design](https://tailwindcss.com/docs/responsive-design)
+- [W3C WCAG 2.2: Target Size (Minimum)](https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html)
+- [software-engineering: Responsive and mobile-first design (author's notes)](https://github.com/limme-learning/software-engineering/blob/main/09-accessibility/03-responsive-mobile-first.md)
