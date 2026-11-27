@@ -6,6 +6,7 @@
     "yagni-kiss-dry",
     "composition-vs-inheritance",
     "dependency-injection",
+    "use-case-and-class-design",
     "factory-method",
     "adapter",
     "bridge",
@@ -16,6 +17,7 @@
     "strategy",
     "state-machines",
     "pattern-relations",
+    "singleton-and-why-not",
     "anti-patterns"
   ],
   "icon": "design"
