@@ -28,12 +28,6 @@ export function StaggerGrid({
     const el = ref.current;
     if (!el || typeof IntersectionObserver === 'undefined') return;
 
-    const rect = el.getBoundingClientRect();
-    if (rect.top < window.innerHeight * 0.95) {
-      setState('revealed');
-      return;
-    }
-
     setState('armed');
     const observer = new IntersectionObserver(
       (entries) => {

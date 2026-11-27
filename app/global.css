@@ -362,3 +362,11 @@ figure.shiki pre {
     padding-inline: 2rem;
   }
 }
+
+/* Defer layout and paint of off-screen code blocks, diagrams and flows on long docs pages. */
+.prose figure.shiki,
+.prose .diagram-stage-wrap,
+.prose section[id^='flow-'] {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 320px;
+}

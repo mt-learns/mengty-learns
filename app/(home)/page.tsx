@@ -41,6 +41,7 @@ function TextLink({ href, children }: { href: string; children: ReactNode }) {
   return (
     <Link
       href={href}
+      prefetch={false}
       className="group inline-flex min-h-tap items-center gap-1.5 self-start font-medium text-link underline decoration-1 underline-offset-[3px] hover:text-link-hover md:self-auto"
     >
       {children}
@@ -89,6 +90,7 @@ export default function HomePage() {
             >
               <Link
                 href="/docs"
+                prefetch={false}
                 className="inline-flex min-h-tap items-center justify-center gap-2 whitespace-nowrap rounded-control bg-primary px-6 text-headline text-primary-foreground shadow-[0_1px_2px_rgb(var(--shadow-color)/0.12),0_4px_12px_-4px_rgb(var(--shadow-color)/0.25)] transition-colors hover:bg-primary-hover motion-reduce:transition-none"
               >
                 Start learning
@@ -222,6 +224,7 @@ export default function HomePage() {
                   {path.href ? (
                     <Link
                       href={path.href}
+                      prefetch={false}
                       className="group flex w-full flex-col rounded-card border border-border bg-card p-6 transition-[transform,border-color,box-shadow] duration-200 ease-[var(--ease-ios)] min-[75rem]:p-5 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_2px_4px_rgb(var(--shadow-color)/0.04),0_12px_24px_-12px_rgb(var(--shadow-color)/0.18)] focus-visible:-translate-y-0.5 motion-reduce:transition-none motion-reduce:transform-none"
                     >
                       {body}
@@ -266,6 +269,7 @@ export default function HomePage() {
               <li key={note.url}>
                 <Link
                   href={note.url}
+                  prefetch={false}
                   className="group flex min-h-tap flex-col gap-1.5 px-5 py-4 transition-colors hover:bg-accent sm:flex-row sm:items-center sm:gap-4 motion-reduce:transition-none"
                 >
                   <span className="min-w-0 flex-1 font-medium text-foreground">{note.title}</span>

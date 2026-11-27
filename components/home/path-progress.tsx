@@ -3,17 +3,24 @@
 import { useEffect, useState } from 'react';
 import { cn } from '@/lib/utils';
 
+let cachedCompleted: Record<string, unknown> | null = null;
+
+function getCompletedMap(): Record<string, unknown> {
+  if (cachedCompleted) return cachedCompleted;
+  try {
+    cachedCompleted = JSON.parse(localStorage.getItem('mt-completed-v1') || '{}');
+  } catch {
+    cachedCompleted = {};
+  }
+  return cachedCompleted!;
+}
+
 /** "x / N done" from localStorage; the slot is reserved and stays invisible until hydrated. */
 export function PathProgress({ urls }: { urls: string[] }) {
   const [done, setDone] = useState<number | null>(null);
 
   useEffect(() => {
-    let completed: Record<string, unknown> = {};
-    try {
-      completed = JSON.parse(localStorage.getItem('mt-completed-v1') || '{}');
-    } catch {
-      completed = {};
-    }
+    const completed = getCompletedMap();
     setDone(urls.filter((url) => completed[url]).length);
   }, [urls]);
 

@@ -35,28 +35,41 @@ export function ReviewCta({ className }: { className?: string }) {
       return;
     }
 
-    fetch('/cards.json')
-      .then((response) => (response.ok ? (response.json() as Promise<CardRef[]>) : []))
-      .then((cards) => {
-        if (cancelled) return;
-        const now = Date.now();
-        const due = cards.filter(
-          (card) => !state[card.id]?.due || new Date(state[card.id].due!).getTime() <= now,
-        ).length;
-        setStatus({ kind: 'returning', due });
-      })
-      .catch(() => {
-        if (!cancelled) setStatus({ kind: 'first-time' });
-      });
+    const loadDueCount = () => {
+      fetch('/card-ids.json')
+        .then((response) => (response.ok ? (response.json() as Promise<string[]>) : []))
+        .then((cardIds) => {
+          if (cancelled) return;
+          const now = Date.now();
+          const due = cardIds.filter(
+            (id) => !state[id]?.due || new Date(state[id].due!).getTime() <= now,
+          ).length;
+          setStatus({ kind: 'returning', due });
+        })
+        .catch(() => {
+          if (!cancelled) setStatus({ kind: 'first-time' });
+        });
+    };
 
+    if (typeof window.requestIdleCallback === 'function') {
+      const idleId = window.requestIdleCallback(loadDueCount);
+      return () => {
+        cancelled = true;
+        window.cancelIdleCallback(idleId);
+      };
+    }
+
+    const timerId = window.setTimeout(loadDueCount, 0);
     return () => {
       cancelled = true;
+      window.clearTimeout(timerId);
     };
   }, []);
 
   return (
     <Link
       href="/review"
+      prefetch={false}
       className={cn(
         'inline-grid min-h-tap items-center justify-items-center whitespace-nowrap rounded-control border border-border-strong bg-card px-6 text-headline text-foreground transition-colors hover:bg-accent motion-reduce:transition-none',
         className,
