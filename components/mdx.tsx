@@ -20,6 +20,7 @@ import {
 import { FlowServer as Flow } from '@/components/flow/FlowServer';
 import { Diagram } from '@/components/diagram/Diagram';
 import { Quiz } from '@/components/learn/Quiz';
+import { LearningMap } from '@/components/learn/LearningMap';
 import { Illustration, SectionIcon } from '@/components/illustrations';
 import type { MDXComponents } from 'mdx/types';
 
@@ -48,6 +49,7 @@ export function getMDXComponents(components?: MDXComponents) {
     Flow,
     Diagram,
     Quiz,
+    LearningMap,
     SectionIcon,
     Illustration,
     ...components,

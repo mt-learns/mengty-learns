@@ -2,6 +2,7 @@
   "title": "Leadership",
   "icon": "leadership",
   "pages": [
+    "index",
     "becoming-a-team-lead",
     "clarity-and-alignment",
     "delegation-and-ownership",

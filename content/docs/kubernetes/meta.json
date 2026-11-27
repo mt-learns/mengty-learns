@@ -1,6 +1,7 @@
 {
   "title": "Kubernetes",
   "pages": [
+    "index",
     "service-routing",
     "kubectl-apply",
     "pods-deployments",

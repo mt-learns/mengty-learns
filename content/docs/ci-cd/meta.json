@@ -1,6 +1,7 @@
 {
   "title": "CI/CD",
   "pages": [
+    "index",
     "github-actions",
     "pipeline-anatomy",
     "caching",

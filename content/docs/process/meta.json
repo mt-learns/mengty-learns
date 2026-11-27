@@ -1,6 +1,7 @@
 {
   "title": "Process",
   "pages": [
+    "index",
     "scrum-kanban-waterfall",
     "project-kickoff-checklist",
     "idea-to-production",
