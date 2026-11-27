@@ -27,6 +27,8 @@ sources:
     url: https://www.atlassian.com/team-playbook/plays/raci
   - title: "PMI: Responsibility Assignment Matrix (RAM / RACI)"
     url: https://www.pmi.org/
+  - title: "key-learning: Roles, RACI, and Decision Rights (author's notes)"
+    url: https://github.com/limme-learning/key-learning/blob/main/technical-management-playbook/03-roles-raci-and-decision-rights.md
 ---
 
 ## TL;DR
@@ -62,8 +64,19 @@ Notice two boundaries:
 ## Common mistakes
 1. **Two `A`s on one row:** "Shared accountability" means neither person feels responsible when something breaks. Pick one `A`.
 2. **Zero `A`s or zero `R`s:** A row with only `C` and `I` never gets done; a row with `A` and no `R` means the owner is doing all the work without knowing it.
-3. **Confusing `A` with `R`:** The Owner can be `A` for a wave while a Worker is `R` for writing the pages.
+3. **Using person names instead of roles:** Naming "Alice" instead of "Team Lead" causes matrix rot every time someone rotates or goes on leave.
 4. **Overusing `C`:** Marking 5 people as `C` turns every 20-line PR into a committee. Downgrade non-essential reviewers to `I`.
+
+## Decision rights by domain
+Pair your RACI with a quick **decision-rights** table so people know who makes the call without a meeting:
+
+| Decision type | Accountable role | Consulted roles |
+|---|---|---|
+| **Product priority & customer value** | PO / Business Owner | PM, Team Lead |
+| **Technical architecture & ADRs** | Team Lead / Architect | Developers, Ops, Security |
+| **Local implementation detail** | Responsible Developer | Peers via PR review |
+| **Production release & rollback** | Release Owner / Team Lead | Ops, QA, PM |
+| **Active incident response** | Incident Commander (IC) | Ops, Developers, Comms |
 
 ## Minimum viable version (1–3 person team + AI agents)
 You do not need a spreadsheet for every ticket. Write a **6-row RACI table once** in `AGENTS.md` or `CONTRIBUTING.md` covering:
@@ -112,3 +125,4 @@ You do not need a spreadsheet for every ticket. Write a **6-row RACI table once*
 ## Sources
 - [Atlassian Team Playbook: RACI Chart](https://www.atlassian.com/team-playbook/plays/raci)
 - [Project Management Institute (PMI)](https://www.pmi.org/)
+- [key-learning: Roles, RACI, and Decision Rights (author's notes)](https://github.com/limme-learning/key-learning/blob/main/technical-management-playbook/03-roles-raci-and-decision-rights.md)
