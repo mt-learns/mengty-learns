@@ -29,6 +29,8 @@ sources:
     url: https://sre.google/sre-book/postmortem-culture/
   - title: "PagerDuty Incident Response Documentation"
     url: https://response.pagerduty.com/
+  - title: "key-learning: Incident Management and Postmortems (author's notes)"
+    url: https://github.com/limme-learning/key-learning/blob/main/technical-management-playbook/11-incident-management-and-postmortems.md
 ---
 
 ## TL;DR
@@ -45,8 +47,9 @@ During an outage, **mitigate first, debug later** (rollback beats root-cause hun
 
 ## 2. Roles (and how 1–3 person teams share them)
 - **Incident Commander (IC):** Holds the big picture, calls the severity, delegates tasks, and prevents duplicate work. Does **not** SSH in to tail logs if someone else is available.
-- **Comms Lead:** Posts external status updates and internal summaries at fixed intervals so responders aren't interrupted by "is it fixed yet?" pings.
+- **Comms Lead:** Posts external status updates and internal summaries at fixed intervals so responders aren't interrupted by "is it fixed yet?" pings. Always state **impact, confirmed facts only, active mitigation, owner, and next update time** (see [Incident Leadership](/docs/leadership/incident-leadership)).
 - **Operations / Responder:** Runs the rollback, checks dashboards, and executes mitigation steps.
+- **Scribe (optional on larger incidents):** Records timestamps, decisions, and metrics live so the postmortem timeline is accurate.
 
 On a **2-person team**, Person A is **IC + Comms** and Person B is **Operations**. As a **solo developer**, set a 15-minute repeating timer: spend 1 minute updating a status note/issue, then 14 minutes mitigating.
 
