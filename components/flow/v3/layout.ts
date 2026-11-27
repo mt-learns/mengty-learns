@@ -172,6 +172,9 @@ export function computeFlowGraph({
         isTreeEdge: route.isTreeEdge,
         direction: computed.direction,
         skipLaneCoord: route.skipLaneCoord,
+        labelBox: route.labelBox,
+        compact: computed.compact,
+        isOverview,
       },
     };
   });

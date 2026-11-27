@@ -28,6 +28,11 @@ export interface StepEdgeData extends Record<string, unknown> {
   isTreeEdge: boolean;
   direction: LayoutDirection;
   skipLaneCoord?: number;
+  /** §6.3 pill box from the layout (top-left, flow units); absent = no collision-free spot. */
+  labelBox?: { x: number; y: number; width: number; height: number };
+  /** Compact layouts show only the active edge's pill while stepping. */
+  compact?: boolean;
+  isOverview?: boolean;
 }
 
 export type FlowStepEdge = Edge<StepEdgeData, 'step'>;
@@ -107,9 +112,13 @@ export function StepEdge({
   const badgeOffsetX = direction === 'LR' ? 0 : 14;
   const badgeOffsetY = direction === 'LR' ? -14 : 0;
 
-  // §6.3: Edge label pill on opposite side to the badge
-  const pillOffsetX = -badgeOffsetX;
-  const pillOffsetY = -badgeOffsetY;
+  // §6.3: the pill box is placed by the layout so it never overlaps a node, a badge,
+  // another pill or the canvas edge. Compact layouts (narrow cards) draw only the
+  // active edge's pill while stepping; the step text already explains the hop.
+  const labelBox = data?.labelBox;
+  const showLabel =
+    Boolean(data?.label && labelBox) &&
+    (!data?.compact || data?.isOverview || isActive);
 
   return (
     <>
@@ -170,15 +179,18 @@ export function StepEdge({
         </EdgeLabelRenderer>
       )}
 
-      {data?.label && (
+      {showLabel && labelBox && (
         <EdgeLabelRenderer>
           <div
+            data-edge-label=""
             style={{
-              transform: `translate(-50%, -50%) translate(${labelX + pillOffsetX}px, ${labelY + pillOffsetY}px)`,
+              width: labelBox.width,
+              height: labelBox.height,
+              transform: `translate(${labelBox.x}px, ${labelBox.y}px)`,
             }}
-            className="nodrag nopan pointer-events-none absolute rounded-pill border border-border bg-card px-2 py-0.5 text-[12px] font-medium leading-none text-foreground shadow-xs"
+            className="nodrag nopan pointer-events-none absolute left-0 top-0 flex items-center justify-center whitespace-nowrap rounded-pill border border-border bg-card text-[12px] font-medium leading-none text-foreground shadow-xs"
           >
-            {data.label}
+            {data?.label}
           </div>
         </EdgeLabelRenderer>
       )}

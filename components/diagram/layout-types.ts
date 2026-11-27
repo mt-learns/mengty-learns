@@ -47,6 +47,8 @@ export interface EdgeRoute {
   isStackedEdge: boolean;
   isStraight: boolean;
   skipLaneCoord?: number;
+  /** §6.3 label pill box (top-left, layout units), placed collision-free at build time. */
+  labelBox?: { x: number; y: number; width: number; height: number };
 }
 
 export interface SerializedLayout {

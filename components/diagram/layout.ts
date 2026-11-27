@@ -78,6 +78,19 @@ export interface EdgeRoute {
   isStraight: boolean;
   /** Dedicated lane coordinate (Y in LR, X in TB) when skipping intermediate ranks (§5.9). */
   skipLaneCoord?: number;
+  /**
+   * §6.3 edge label pill, placed by `placeEdgeLabels` (top-left corner, layout units).
+   * Absent when the edge has no label or no collision-free spot exists; the step text
+   * then carries the meaning and the pill is not drawn.
+   */
+  labelBox?: LabelBox;
+}
+
+export interface LabelBox {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
 }
 
 export interface ComputedDiagramLayout {
@@ -295,12 +308,13 @@ function runDagrePass(
   wrapMaxPerRow: number | null,
   nodeWidth: number,
   nodeLines: Map<string, 1 | 2>,
+  minRankGap = 0,
 ): {
   nodeMap: Map<string, NodeBox>;
   groupBoxes: GroupBox[];
   bounds: { width: number; height: number };
 } {
-  const rankGap = compact ? COMPACT_RANK_GAP : RANK_GAP;
+  const rankGap = Math.max(compact ? COMPACT_RANK_GAP : RANK_GAP, minRankGap);
   const baseNodeGap = compact ? COMPACT_NODE_GAP : NODE_GAP;
   const hasDisjointGroups = groups.length > 1;
   const effectiveNodesep = hasDisjointGroups
@@ -778,6 +792,7 @@ export function computeDiagramLayout({
   layout = 'flow',
   containerWidth,
   clampHeight = true,
+  stepBadges = true,
 }: {
   nodes: FlowNode[];
   edges: LayoutEdgeInput[];
@@ -785,6 +800,8 @@ export function computeDiagramLayout({
   layout?: FlowLayoutMode;
   containerWidth: number;
   clampHeight?: boolean;
+  /** <Flow> draws a step badge on the active edge; a static <Diagram> never does. */
+  stepBadges?: boolean;
 }): ComputedDiagramLayout {
   const safeWidth = Math.max(240, containerWidth);
   const isTree = layout === 'tree';
@@ -832,6 +849,15 @@ export function computeDiagramLayout({
   const fitsAtReadable = (p: Pass, dir: LayoutDirection, stk: boolean, isCompact = false) =>
     finalFitFor(p, dir, stk) >= minZoomFor(isCompact);
 
+  // §6.3: in LR an edge label sits on the horizontal run between two ranks, so the
+  // rank gap must hold the widest pill plus clearance on both sides.
+  const labelRankGap = edges.reduce(
+    (gap, e) => (e.label
+        ? Math.max(gap, edgeLabelSize(e.label).width + 4 * EDGE_LABEL_CLEARANCE)
+        : gap),
+    0,
+  );
+
   // ---- §3.3 fit-before-pan ladder ------------------------------------------
   // (a) choose the LR/TB direction that fits best
   let compact = false;
@@ -844,7 +870,18 @@ export function computeDiagramLayout({
     wrapMaxPerRow: number | null,
     d: { nodeWidth: number; nodeLines: Map<string, 1 | 2> },
   ): Pass =>
-    runDagrePass(nodes, edges, groups, dir, layout, compactMode, wrapMaxPerRow, d.nodeWidth, d.nodeLines);
+    runDagrePass(
+      nodes,
+      edges,
+      groups,
+      dir,
+      layout,
+      compactMode,
+      wrapMaxPerRow,
+      d.nodeWidth,
+      d.nodeLines,
+      dir === 'LR' ? labelRankGap : 0,
+    );
 
   let direction: LayoutDirection = isTree
     ? 'TB'
@@ -930,7 +967,33 @@ export function computeDiagramLayout({
   }
 
   // ---- edge routing (may expand bounds for skip-rank lanes, §5.9) ----------
-  const { edgeRoutes, finalBounds } = applySkipLanes(pass, direction, stacked);
+  const { edgeRoutes, finalBounds: routedBounds } = applySkipLanes(pass, direction, stacked);
+
+  // §6.3: place label pills. They prefer the node bounds, but may use the margin the
+  // fit leaves at a readable zoom; the bounds then grow to include them (§3.1).
+  const labelZoom = minZoomFor(compact);
+  const maxW =
+    safeWidth < 480 ? (safeWidth - 12) / labelZoom : (safeWidth - 1) / (labelZoom + FIT_PADDING);
+  const maxH = !clampHeight
+    ? Infinity
+    : safeWidth < 480
+      ? (MAX_CANVAS_HEIGHT - 24) / labelZoom
+      : (MAX_CANVAS_HEIGHT - 1) / (labelZoom + FIT_PADDING);
+  const slackX = Math.max(0, Math.floor((maxW - routedBounds.width) / 2) - 1);
+  const slackY = Number.isFinite(maxH)
+    ? Math.max(0, Math.floor((maxH - routedBounds.height) / 2) - 1)
+    : 48;
+  placeEdgeLabels(
+    edgeRoutes,
+    pass.nodeMap,
+    pass.groupBoxes,
+    direction,
+    routedBounds,
+    compact,
+    { x: slackX, y: slackY },
+    stepBadges,
+  );
+  const finalBounds = includeLabelBoxes(pass, edgeRoutes, direction, routedBounds);
 
   // Re-fit AFTER skip-lane expansion so nothing is clipped (§3.1/§3.3).
   // If the expanded bounds no longer fit at readable zoom, drop to pan (never at >= 640px).
@@ -1176,4 +1239,290 @@ export function buildSkipRankPath(
   return { path, labelX: laneCoord, labelY: midY };
 }
 
+// ---- §6.3 edge label placement ------------------------------------------------
 
+/** 12px / 500 pill: 8px side padding + 1px border; 12px line + 2px vertical padding + 1px border. */
+export const EDGE_LABEL_FONT_SIZE = 12;
+export const EDGE_LABEL_HEIGHT = 18;
+const EDGE_LABEL_CHROME_X = 18;
+/** Clearance between a pill and the line it labels, and between a pill and any obstacle. */
+const EDGE_LABEL_LINE_GAP = 4;
+const EDGE_LABEL_CLEARANCE = 2;
+export const STEP_BADGE_SIZE = 22;
+export const STEP_BADGE_OFFSET = 14;
+
+export function edgeLabelSize(text: string): { width: number; height: number } {
+  return {
+    width: Math.ceil(estimateTextWidth(text, EDGE_LABEL_FONT_SIZE, true) + EDGE_LABEL_CHROME_X),
+    height: EDGE_LABEL_HEIGHT,
+  };
+}
+
+type Pt = { x: number; y: number };
+
+/**
+ * Orthogonal polyline (corners unrounded) and badge anchor for an edge, matching
+ * the path builders the renderers draw with.
+ */
+export function edgeGeometry(
+  route: EdgeRoute,
+  nodeMap: Map<string, NodeBox>,
+  direction: LayoutDirection,
+): { points: Pt[]; labelX: number; labelY: number } | null {
+  const fromBox = nodeMap.get(route.from);
+  const toBox = nodeMap.get(route.to);
+  if (!fromBox || !toBox) return null;
+  const s = getHandleCoords(fromBox, route.sourceHandle, route.offsetX, route.offsetY);
+  const t = getHandleCoords(toBox, route.targetHandle, route.offsetX, route.offsetY);
+
+  if (route.isStackedEdge) {
+    const g = buildStackedTreePath(s.x, s.y, t.x, t.y, fromBox);
+    const stemX = fromBox.x + 12;
+    return { points: [{ x: stemX, y: s.y }, { x: stemX, y: t.y }, t], labelX: g.labelX, labelY: g.labelY };
+  }
+  if (route.skipLaneCoord !== undefined) {
+    const g = buildSkipRankPath(s.x, s.y, t.x, t.y, direction, route.skipLaneCoord);
+    const lane = route.skipLaneCoord;
+    if (direction === 'LR') {
+      const outDir = t.x >= s.x ? 1 : -1;
+      const x1 = s.x + outDir * 18;
+      const x2 = t.x - outDir * 18;
+      return {
+        points: [s, { x: x1, y: s.y }, { x: x1, y: lane }, { x: x2, y: lane }, { x: x2, y: t.y }, t],
+        labelX: g.labelX,
+        labelY: g.labelY,
+      };
+    }
+    const outDir = t.y >= s.y ? 1 : -1;
+    const y1 = s.y + outDir * 18;
+    const y2 = t.y - outDir * 18;
+    return {
+      points: [s, { x: s.x, y: y1 }, { x: lane, y: y1 }, { x: lane, y: y2 }, { x: t.x, y: y2 }, t],
+      labelX: g.labelX,
+      labelY: g.labelY,
+    };
+  }
+
+  const g = route.isTreeEdge
+    ? buildTreeBusPath(s.x, s.y, t.x, t.y)
+    : buildSmoothStepSvgPath(s.x, s.y, t.x, t.y, route.sourceHandle, route.targetHandle);
+  const horizontal = (h: string) => h.startsWith('left') || h.startsWith('right');
+  const srcH = !route.isTreeEdge && horizontal(route.sourceHandle);
+  const tgtH = !route.isTreeEdge && horizontal(route.targetHandle);
+  let points: Pt[];
+  if (srcH && tgtH) {
+    const midX = (s.x + t.x) / 2;
+    points = Math.abs(s.y - t.y) < 0.5 ? [s, t] : [s, { x: midX, y: s.y }, { x: midX, y: t.y }, t];
+  } else if (!srcH && !tgtH) {
+    const busY = Math.round((s.y + t.y) / 2);
+    points = Math.abs(s.x - t.x) < 0.5 ? [s, t] : [s, { x: s.x, y: busY }, { x: t.x, y: busY }, t];
+  } else if (srcH) {
+    points = [s, { x: t.x, y: s.y }, t];
+  } else {
+    points = [s, { x: s.x, y: t.y }, t];
+  }
+  return { points, labelX: g.labelX, labelY: g.labelY };
+}
+
+/** The 22px step badge rect for an edge (§6.2: 14px above in LR, right in TB). */
+export function stepBadgeRect(labelX: number, labelY: number, direction: LayoutDirection): LabelBox {
+  const cx = labelX + (direction === 'LR' ? 0 : STEP_BADGE_OFFSET);
+  const cy = labelY + (direction === 'LR' ? -STEP_BADGE_OFFSET : 0);
+  const r = STEP_BADGE_SIZE / 2;
+  return { x: cx - r, y: cy - r, width: STEP_BADGE_SIZE, height: STEP_BADGE_SIZE };
+}
+
+function boxesOverlap(a: LabelBox, b: LabelBox, clearance: number): boolean {
+  return (
+    a.x < b.x + b.width + clearance &&
+    a.x + a.width + clearance > b.x &&
+    a.y < b.y + b.height + clearance &&
+    a.y + a.height + clearance > b.y
+  );
+}
+
+function segmentHitsBox(p: Pt, q: Pt, b: LabelBox): boolean {
+  const minX = Math.min(p.x, q.x);
+  const maxX = Math.max(p.x, q.x);
+  const minY = Math.min(p.y, q.y);
+  const maxY = Math.max(p.y, q.y);
+  return maxX > b.x && minX < b.x + b.width && maxY > b.y && minY < b.y + b.height;
+}
+
+/**
+ * §6.3 + DIAGRAM-RULES §2.6/§3.1: places every edge label pill so that it never
+ * overlaps a node, a group label, a step badge or another pill, and stays inside
+ * the given bounds plus `slack` (the caller grows the bounds to include it, so the
+ * pill is inside the canvas at whatever zoom the fit picks).
+ *
+ * Candidates sit beside (or on) each segment of the edge's own path, nearest the
+ * badge anchor first, on the side opposite the badge first. A first pass also
+ * keeps clear of other edges' lines; a second pass allows crossing them. A label
+ * with no valid spot gets no `labelBox` and is not drawn: the step text names it.
+ */
+export function placeEdgeLabels(
+  routes: EdgeRoute[],
+  nodeMap: Map<string, NodeBox>,
+  groups: GroupBox[],
+  direction: LayoutDirection,
+  bounds: { width: number; height: number },
+  compact = false,
+  slack: { x: number; y: number } = { x: 0, y: 0 },
+  stepBadges = true,
+): void {
+  const geoms = new Map(routes.map((r) => [r.key, edgeGeometry(r, nodeMap, direction)]));
+  const fixed: LabelBox[] = [
+    ...nodeMap.values(),
+    ...groups.map((g) => ({ x: g.x, y: g.y, width: g.width, height: GROUP_LABEL_HEIGHT })),
+  ];
+  const badges = new Map<string, LabelBox>();
+  for (const [key, geom] of geoms) {
+    if (geom) badges.set(key, stepBadgeRect(geom.labelX, geom.labelY, direction));
+  }
+  const placed: LabelBox[] = [];
+
+  for (const route of routes) {
+    delete route.labelBox;
+    const geom = geoms.get(route.key);
+    if (!route.label || !geom) continue;
+    const { width, height } = edgeLabelSize(route.label);
+
+    const segments: Array<{ p: Pt; q: Pt; len: number; vertical: boolean }> = [];
+    for (let i = 0; i < geom.points.length - 1; i++) {
+      const p = geom.points[i];
+      const q = geom.points[i + 1];
+      const len = Math.abs(q.x - p.x) + Math.abs(q.y - p.y);
+      if (len < 1) continue;
+      segments.push({ p, q, len, vertical: Math.abs(q.x - p.x) < 0.5 });
+    }
+    // Segments nearest the badge anchor first, then longer ones.
+    const anchor = { x: geom.labelX, y: geom.labelY };
+    const distTo = (sg: (typeof segments)[number]) => {
+      const cx = Math.max(Math.min(anchor.x, Math.max(sg.p.x, sg.q.x)), Math.min(sg.p.x, sg.q.x));
+      const cy = Math.max(Math.min(anchor.y, Math.max(sg.p.y, sg.q.y)), Math.min(sg.p.y, sg.q.y));
+      return Math.abs(cx - anchor.x) + Math.abs(cy - anchor.y);
+    };
+    segments.sort((a, b) => distTo(a) - distTo(b) || b.len - a.len);
+
+    const candidates: LabelBox[] = [];
+    for (const sg of segments) {
+      // Along-segment positions: fractions from the middle out, plus the two spots
+      // snapped against the segment's ends (just clear of the nodes it joins).
+      const half = (sg.vertical ? height : width) / 2 + EDGE_LABEL_CLEARANCE + 0.5;
+      const fractions = [0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8, 0.1, 0.9];
+      if (sg.len > 2 * half) fractions.push(half / sg.len, 1 - half / sg.len);
+      for (const t of fractions) {
+        const px = sg.p.x + (sg.q.x - sg.p.x) * t;
+        const py = sg.p.y + (sg.q.y - sg.p.y) * t;
+        // Beside the line, on it, then one ring out: past the 22px badge.
+        const far = STEP_BADGE_OFFSET + STEP_BADGE_SIZE / 2 + EDGE_LABEL_CLEARANCE + 1;
+        const centers: Pt[] = sg.vertical
+          ? [
+              // The TB badge sits right of the line, so the pill prefers the left.
+              { x: px - EDGE_LABEL_LINE_GAP - width / 2, y: py },
+              { x: px + EDGE_LABEL_LINE_GAP + width / 2, y: py },
+              { x: px, y: py },
+              { x: px - far - width / 2, y: py },
+              { x: px + far + width / 2, y: py },
+            ]
+          : [
+              // The LR badge sits above the line, so the pill prefers below.
+              { x: px, y: py + EDGE_LABEL_LINE_GAP + height / 2 },
+              { x: px, y: py - EDGE_LABEL_LINE_GAP - height / 2 },
+              { x: px, y: py },
+              { x: px, y: py + far + height / 2 },
+              { x: px, y: py - far - height / 2 },
+            ];
+        for (const c of centers) {
+          candidates.push({
+            x: Math.round((c.x - width / 2) * 10) / 10,
+            y: Math.round((c.y - height / 2) * 10) / 10,
+            width,
+            height,
+          });
+        }
+      }
+    }
+
+    // Full layouts show every pill next to whichever badge is active, so all badges
+    // are obstacles. Compact layouts show only the active edge's pill (FlowCanvas),
+    // so only the edge's own badge is.
+    const badgeObstacles = !stepBadges
+      ? []
+      : compact
+      ? [badges.get(route.key)].filter((b): b is LabelBox => Boolean(b))
+      : [...badges.values()];
+    const within = (b: LabelBox, sx: number, sy: number) =>
+      b.x >= -sx &&
+      b.y >= -sy &&
+      b.x + b.width <= bounds.width + sx &&
+      b.y + b.height <= bounds.height + sy;
+    const free = (b: LabelBox) =>
+      !fixed.some((o) => boxesOverlap(b, o, EDGE_LABEL_CLEARANCE)) &&
+      !badgeObstacles.some((o) => boxesOverlap(b, o, EDGE_LABEL_CLEARANCE)) &&
+      !placed.some((o) => boxesOverlap(b, o, EDGE_LABEL_CLEARANCE));
+    const clearOfOtherLines = (b: LabelBox) => {
+      for (const [key, other] of geoms) {
+        if (key === route.key || !other) continue;
+        for (let i = 0; i < other.points.length - 1; i++) {
+          if (segmentHitsBox(other.points[i], other.points[i + 1], b)) return false;
+        }
+      }
+      return true;
+    };
+
+    // Inside the node bounds first, then in the fit margin; clear of other lines first.
+    const chosen =
+      candidates.find((b) => within(b, 0, 0) && free(b) && clearOfOtherLines(b)) ??
+      candidates.find((b) => within(b, 0, 0) && free(b)) ??
+      candidates.find((b) => within(b, slack.x, slack.y) && free(b) && clearOfOtherLines(b)) ??
+      candidates.find((b) => within(b, slack.x, slack.y) && free(b));
+    if (chosen) {
+      route.labelBox = chosen;
+      placed.push(chosen);
+    }
+  }
+}
+
+
+/**
+ * Grows the bounds to include every placed label pill, translating nodes, groups,
+ * skip lanes and pills when a pill sits left of or above the origin.
+ */
+function includeLabelBoxes(
+  pass: { nodeMap: Map<string, NodeBox>; groupBoxes: GroupBox[] },
+  routes: EdgeRoute[],
+  direction: LayoutDirection,
+  bounds: { width: number; height: number },
+): { width: number; height: number } {
+  let minX = 0;
+  let minY = 0;
+  let maxX = bounds.width;
+  let maxY = bounds.height;
+  for (const r of routes) {
+    if (!r.labelBox) continue;
+    minX = Math.min(minX, r.labelBox.x);
+    minY = Math.min(minY, r.labelBox.y);
+    maxX = Math.max(maxX, r.labelBox.x + r.labelBox.width);
+    maxY = Math.max(maxY, r.labelBox.y + r.labelBox.height);
+  }
+  const dx = Math.ceil(-minX);
+  const dy = Math.ceil(-minY);
+  if (dx > 0 || dy > 0) {
+    for (const box of pass.nodeMap.values()) {
+      box.x += dx;
+      box.cx += dx;
+      box.y += dy;
+      box.cy += dy;
+    }
+    for (const g of pass.groupBoxes) {
+      g.x += dx;
+      g.y += dy;
+    }
+    for (const r of routes) {
+      if (r.labelBox) r.labelBox = { ...r.labelBox, x: r.labelBox.x + dx, y: r.labelBox.y + dy };
+      if (r.skipLaneCoord !== undefined) r.skipLaneCoord += direction === 'LR' ? dy : dx;
+    }
+  }
+  return { width: Math.ceil(maxX + dx), height: Math.ceil(maxY + dy) };
+}

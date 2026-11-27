@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { K8S_REQUEST_FLOW } from '../../lib/flows/k8s-request';
+import { buildEdgeBuckets } from '../flow/v3/graph';
 import {
   buildSkipRankPath,
   buildSmoothStepSvgPath,
@@ -9,8 +10,11 @@ import {
   buildTreeBusPath,
   computeDiagramLayout,
   estimateTextWidth,
+  edgeGeometry,
   getHandleCoords,
+  GROUP_LABEL_HEIGHT,
   splitLabelTokens,
+  stepBadgeRect,
   type NodeBox,
 } from './layout';
 import {
@@ -387,6 +391,84 @@ function assertLayoutInvariants(
   }
 }
 
+/**
+ * §6.3 / §2.6 / §3.1 edge label pills: every placed pill stays clear of every node,
+ * every group label strip and every other pill, and inside the bounds (which the
+ * fit keeps inside the canvas). A <Flow> pill also stays clear of its own step badge,
+ * and in a full (non-compact) layout, where all pills show at once, of every badge.
+ */
+function assertEdgeLabelInvariants(
+  label: string,
+  layoutResult: ReturnType<typeof computeDiagramLayout>,
+  { isStaticDiagram, requireAllPlaced }: { isStaticDiagram: boolean; requireAllPlaced: boolean },
+) {
+  const nodeBoxes = [...layoutResult.nodes.values()];
+  const groupStrips = layoutResult.groups.map((g) => ({
+    x: g.x,
+    y: g.y,
+    width: g.width,
+    height: GROUP_LABEL_HEIGHT,
+  }));
+  const badges = new Map<string, { x: number; y: number; width: number; height: number }>();
+  for (const route of layoutResult.edges) {
+    const geom = edgeGeometry(route, layoutResult.nodes, layoutResult.direction);
+    if (geom) badges.set(route.key, stepBadgeRect(geom.labelX, geom.labelY, layoutResult.direction));
+  }
+
+  const placed = layoutResult.edges.filter((r) => r.label && r.labelBox);
+  if (requireAllPlaced) {
+    const missing = layoutResult.edges.filter((r) => r.label && !r.labelBox).map((r) => r.label);
+    expect(missing, `${label} every edge label is placed`).toEqual([]);
+  }
+
+  for (const route of placed) {
+    const box = route.labelBox!;
+    const tag = `${label} label "${route.label}" (${route.key})`;
+    expect(box.x, `${tag} left >= 0`).toBeGreaterThanOrEqual(0);
+    expect(box.y, `${tag} top >= 0`).toBeGreaterThanOrEqual(0);
+    expect(box.x + box.width, `${tag} right <= bounds.width`).toBeLessThanOrEqual(
+      layoutResult.bounds.width,
+    );
+    expect(box.y + box.height, `${tag} bottom <= bounds.height`).toBeLessThanOrEqual(
+      layoutResult.bounds.height,
+    );
+    for (const node of nodeBoxes) {
+      expect(rectsOverlap(box, node), `${tag} must not overlap node ${node.id}`).toBe(false);
+    }
+    for (const strip of groupStrips) {
+      expect(rectsOverlap(box, strip), `${tag} must not overlap a group label`).toBe(false);
+    }
+    for (const other of placed) {
+      if (other === route) continue;
+      expect(
+        rectsOverlap(box, other.labelBox!),
+        `${tag} must not overlap label "${other.label}"`,
+      ).toBe(false);
+    }
+    if (!isStaticDiagram) {
+      const relevant = layoutResult.compact
+        ? [[route.key, badges.get(route.key)] as const]
+        : [...badges.entries()];
+      for (const [key, badge] of relevant) {
+        if (!badge) continue;
+        expect(rectsOverlap(box, badge), `${tag} must not overlap the step badge on ${key}`).toBe(
+          false,
+        );
+      }
+    }
+  }
+}
+
+/** The edge list exactly as FlowServer builds it (one route per from->to:kind, first label wins). */
+function flowEdgeInputs(steps: Parameters<typeof buildEdgeBuckets>[0]) {
+  return Array.from(buildEdgeBuckets(steps).values()).map((b) => ({
+    from: b.from,
+    to: b.to,
+    kind: b.kind,
+    label: b.label,
+  }));
+}
+
 describe('DIAGRAM-RULES §9.1 layout invariants across all MDX flows and diagrams', () => {
   for (const relPath of OWNED_MDX_FILES) {
     const fullPath = path.join(DOCS_DIR, relPath);
@@ -432,6 +514,21 @@ describe('DIAGRAM-RULES §9.1 layout invariants across all MDX flows and diagram
               false,
             );
           });
+
+          it(`${relPath} <Flow id="${parsed.id}" variant="${variant.id}"> edge labels clear of nodes, labels, badges and bounds @ ${width}px`, () => {
+            const layoutResult = computeDiagramLayout({
+              nodes: variant.nodes,
+              edges: flowEdgeInputs(variant.steps),
+              groups: variant.groups ?? [],
+              layout: variant.layout ?? parsed.layout,
+              containerWidth: width,
+            });
+            assertEdgeLabelInvariants(`${parsed.id}:${variant.id}@${width}`, layoutResult, {
+              isStaticDiagram: false,
+              // Wide cards have room for every pill; narrow ones may drop one (the step text names it).
+              requireAllPlaced: width >= 720,
+            });
+          });
         }
       }
     }
@@ -452,6 +549,7 @@ describe('DIAGRAM-RULES §9.1 layout invariants across all MDX flows and diagram
             layout: parsed.layout,
             containerWidth: width,
             clampHeight: false,
+            stepBadges: false,
           });
 
           assertLayoutInvariants(
@@ -461,6 +559,10 @@ describe('DIAGRAM-RULES §9.1 layout invariants across all MDX flows and diagram
             width,
             true,
           );
+          assertEdgeLabelInvariants(`${parsed.id}@${width}`, layoutResult, {
+            isStaticDiagram: true,
+            requireAllPlaced: false,
+          });
         });
       }
     }
@@ -487,6 +589,21 @@ describe('DIAGRAM-RULES §9.1 layout invariants across all MDX flows and diagram
         width,
         false,
       );
+    });
+
+    it(`shared lib/flows/k8s-request.ts <Flow id="${K8S_REQUEST_FLOW.id}"> edge labels clear of nodes, labels, badges and bounds @ ${width}px`, () => {
+      const parsed = parseFlowProps(K8S_REQUEST_FLOW);
+      const layoutResult = computeDiagramLayout({
+        nodes: parsed.nodes ?? [],
+        edges: flowEdgeInputs(parsed.steps ?? []),
+        groups: parsed.groups ?? [],
+        layout: parsed.layout,
+        containerWidth: width,
+      });
+      assertEdgeLabelInvariants(`${parsed.id}:shared@${width}`, layoutResult, {
+        isStaticDiagram: false,
+        requireAllPlaced: width >= 720,
+      });
     });
   }
 });

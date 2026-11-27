@@ -166,6 +166,9 @@ export function buildFlowGraphFromPrecomputed({
         isTreeEdge: route.isTreeEdge,
         direction: chosen.direction,
         skipLaneCoord: route.skipLaneCoord,
+        labelBox: route.labelBox,
+        compact: chosen.compact,
+        isOverview,
       },
     };
   });
