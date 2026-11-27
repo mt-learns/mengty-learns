@@ -17,6 +17,7 @@ import { PageFooter } from '@/components/learn/PageFooter';
 import { MarkDone } from '@/components/learn/MarkDone';
 import { Illustration } from '@/components/illustrations';
 import { StandaloneBackBar } from '@/components/pwa/standalone-ui';
+import { computeReadingMinutes } from '@/lib/reading-time';
 
 export default async function Page({ params }: { params: Promise<{ slug?: string[] }> }) {
   const resolvedParams = await params;
@@ -25,6 +26,7 @@ export default async function Page({ params }: { params: Promise<{ slug?: string
 
   const MDX = page.data.body;
   const markdownUrl = `/llms.mdx${page.url}.md`;
+  const readingMinutes = computeReadingMinutes(page.path);
 
   return (
     <DocsPage
@@ -47,16 +49,22 @@ export default async function Page({ params }: { params: Promise<{ slug?: string
         <MarkDone slug={page.url} />
       </div>
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground my-2">
-        {page.data.type && (
-          <span className="inline-flex items-center rounded-full bg-primary text-primary-foreground px-2.5 py-0.5 font-medium capitalize">
-            {page.data.type}
-          </span>
-        )}
         {page.data.level && (
           <span className="inline-flex items-center rounded-full bg-secondary text-secondary-foreground px-2.5 py-0.5 font-medium capitalize">
             {page.data.level}
           </span>
         )}
+        {page.data.cefr && (
+          <span className="inline-flex items-center rounded-full bg-highlight-soft text-highlight-text px-2.5 py-0.5 font-semibold">
+            CEFR {page.data.cefr}
+          </span>
+        )}
+        <span className="inline-flex items-center rounded-full bg-muted text-muted-foreground px-2.5 py-0.5 font-medium tabular-nums">
+          {readingMinutes} min read
+        </span>
+        <span className="inline-flex items-center rounded-full bg-primary text-primary-foreground px-2.5 py-0.5 font-medium capitalize">
+          {page.data.kind ?? page.data.type ?? 'note'}
+        </span>
         {page.data.tested_with && Object.keys(page.data.tested_with).length > 0 && (
           <span className="inline-flex items-center rounded-full bg-muted text-muted-foreground px-2.5 py-0.5 font-medium">
             Tested with {Object.entries(page.data.tested_with).map(([k, v]) => `${k} ${v}`).join(', ')}
