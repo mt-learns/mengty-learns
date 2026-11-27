@@ -79,7 +79,8 @@ Requests for static assets (`/_next/static/*`, `public/`) do not run the Worker,
 - Cloudflare's limit is **64 MiB uncompressed** on both Free and Paid. Its limits page says "There is no compressed size limit". The plan and the OpenNext docs still mention 3 MiB gzip on Free, but that figure is out of date (checked 2026-11-26).
 - `scripts/check-worker-size.mjs` runs `wrangler deploy --dry-run` locally (no account needed), prints both sizes, adds them to the job summary, and fails above **48 MiB**. That gate leaves 16 MiB of headroom.
 - First measurement (2026-11-26): **17.96 MiB uncompressed, 3.65 MiB gzip** (`Total Upload: 18394.49 KiB / gzip: 3742.55 KiB`).
-- Content pages hardly change the size: their HTML/RSC are static assets, not Worker code. Code changes do: new dependencies, and especially server-side libraries.
+- Go-live measurement (2026-11-27, 92 docs pages): **31.68 MiB uncompressed, 5.66 MiB gzip** (`Total Upload: 32443.47 KiB / gzip: 5793.89 KiB`).
+- Content pages **do** grow the Worker. Their HTML/RSC are static assets, but the compiled MDX of every page (about 3.8 MB in total) is also bundled into about six server chunks (docs page, digest, home, radar, review, `llms.mdx`). The content waves added roughly 14 MiB. At this rate the 48 MiB gate is a few content waves away. When it gets close, look at lazy-loading the docs collection (Fumadocs `async` mode) so that page bodies leave the Worker bundle. New dependencies, especially server-side libraries, grow it too.
 - To check locally (WSL/Linux): `pnpm exec opennextjs-cloudflare build && node scripts/check-worker-size.mjs`.
 
 ## 7. Local preview
@@ -92,3 +93,82 @@ pnpm qa:diagrams
 ```
 
 On Windows, `opennextjs-cloudflare build` fails with `EPERM: operation not permitted, symlink`. Run it in WSL from a copy on the Linux filesystem (`~/…`, not `/mnt/c/…`), and use a Linux Node from WSL, not the Windows one. The preview on `localhost:8787` is reachable from Windows browsers and scripts.
+
+### 7a. WSL check (worked 2026-11-27: WSL2 Ubuntu, Node 22.23.5, pnpm 11.6.0)
+
+One-time setup in WSL: a Linux Node 22 from nodejs.org, checksum-verified, and pnpm through corepack. No sudo is needed.
+
+```bash
+wsl -d Ubuntu            # starts the distro if it is stopped
+cd ~
+curl -fsSL https://nodejs.org/dist/latest-v22.x/SHASUMS256.txt -o node-sums.txt
+V=$(grep -o "node-v22[0-9.]*-linux-x64.tar.xz" node-sums.txt | sort -u)
+curl -fsSLO "https://nodejs.org/dist/latest-v22.x/$V"
+grep " $V\$" node-sums.txt | sha256sum -c -
+mkdir -p ~/.local/node22 && tar -xJf "$V" -C ~/.local/node22 --strip-components=1 && rm "$V" node-sums.txt
+export PATH="$HOME/.local/node22/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+corepack enable --install-directory ~/.local/node22/bin
+corepack prepare pnpm@11.6.0 --activate
+```
+
+Each session: put the Linux Node first, and keep Windows' `/mnt/c/...` Node off `PATH`. WSL appends the Windows `PATH`, and its `node`/`corepack` either can't run or pick the wrong platform binaries.
+
+```bash
+export PATH="$HOME/.local/node22/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+export COREPACK_ENABLE_DOWNLOAD_PROMPT=0 NEXT_TELEMETRY_DISABLED=1 WRANGLER_SEND_METRICS=false
+```
+
+Clone from the **main repo**, not from an Orca/git worktree. A worktree's `.git` file holds a Windows path (`D:/me/mt/.git/worktrees/...`) that Linux git can't resolve (`fatal: not a git repository`). Branches are shared, so clone the branch by name:
+
+```bash
+rm -rf ~/mengty-learns-check
+git clone --branch <branch> /mnt/d/me/mt ~/mengty-learns-check
+cd ~/mengty-learns-check
+pnpm install --frozen-lockfile
+pnpm lint && pnpm typecheck && pnpm test && pnpm build   # build ends with check-static-routes
+pnpm exec opennextjs-cloudflare build
+node scripts/check-worker-size.mjs                        # local dry run, no account
+pnpm exec opennextjs-cloudflare preview --port 8787 --ip 0.0.0.0
+```
+
+To pick up new commits: `git fetch origin <branch> && git reset --hard origin/<branch>`, then rebuild.
+
+Run the QA scripts **from Windows** against `http://localhost:8787`. Playwright's Chromium in WSL needs `libnss3`, `libnspr4` and `libasound2` (`sudo pnpm exec playwright install-deps chromium`). If you have no sudo there, use Windows Node with Playwright 1.65.1 and `@axe-core/playwright` 4.14.1:
+
+```bash
+node scripts/qa-axe.mjs --url http://localhost:8787
+node scripts/qa-shots.mjs --url http://localhost:8787 --widths 360,1280
+```
+
+In Git Bash, set `MSYS_NO_PATHCONV=1` before passing `--routes /digest/`. Otherwise Git Bash turns `/digest/` into `C:/Program Files/Git/digest/`.
+
+Stop the preview: `pkill -f "opennextjs-cloudflare preview"; pkill -f workerd` (in WSL).
+
+## 8. Go-live checklist (lead)
+
+Do the owner prerequisites in §1 first (zone active, no DNS record on `learn.limmengty.com`, token and account-ID secrets in GitHub).
+
+1. **Push.** `git push -u origin main` (with the owner's OK).
+2. **Watch the Actions run.** `gh run watch $(gh run list --workflow deploy.yml --branch main --limit 1 --json databaseId -q '.[0].databaseId')`, or Actions → Deploy. Every step must be green: lint, typecheck, test, OpenNext build, static-route gate, size gate (about 31.7 MiB), deploy. The job summary lists the `workers.dev` URL and the version ID. Write the version ID down: it is your rollback target next time.
+3. **workers.dev URL.** Open `https://mengty-learns.<account-subdomain>.workers.dev/`. Home, `/docs/`, `/docs/design/bridge/` (the flow plays), `/review/`, `/radar/`, `/digest/` all load. Ctrl+K returns results, and DevTools shows 0 console errors and no CSP reports.
+4. **Custom domain.** Dashboard → Workers & Pages → mengty-learns → Settings → Domains & Routes shows `learn.limmengty.com` as an active Custom domain. Then `https://learn.limmengty.com/` loads with a valid certificate (the certificate can take a few minutes on the first deploy).
+5. **Headers on production** (expected values in §2):
+   ```bash
+   B=https://learn.limmengty.com
+   for p in / /docs/ /docs/design/bridge/ /digest/rss.xml /sitemap.xml /robots.txt /llms.txt; do
+     echo "== $p"; curl -sI "$B$p" | grep -iE "^HTTP|^cache-control|content-security-policy|strict-transport|x-content-type|referrer-policy|permissions-policy|x-frame-options|x-opennext-cache"
+   done
+   curl -sI "$B$(curl -s $B/ | grep -o '/_next/static/[^"]*\.js' | head -1)" | grep -iE "^HTTP|^cache-control"   # public, max-age=31536000, immutable
+   curl -s -o /dev/null -w "%{http_code}\n" "$B/this-page-does-not-exist/"                                     # 404
+   curl -s "$B/sitemap.xml" | grep -c "https://learn.limmengty.com"                                             # > 0, no other origin
+   ```
+6. **Lighthouse on production.** `lighthouserc.json` points at `localhost:8787`, so skip its collect URLs and keep its thresholds:
+   ```bash
+   rm -rf .lighthouseci
+   pnpm exec lhci collect --no-lighthouserc -n 3 \
+     --url https://learn.limmengty.com/ --url https://learn.limmengty.com/docs/ \
+     --url https://learn.limmengty.com/docs/design/bridge/ --url https://learn.limmengty.com/review/
+   pnpm exec lhci assert        # thresholds from lighthouserc.json: perf ≥ 0.90, a11y/best-practices/SEO ≥ 0.95
+   ```
+   Alternatively, use Chrome DevTools → Lighthouse (mobile, clean profile). Record the four scores in the release note.
+7. **If anything is wrong: roll back first, then fix forward** (§3): `pnpm exec wrangler deployments list`, then `pnpm exec wrangler rollback <last-good-version-id>`. On the very first deploy there is no older version: remove the custom domain in the dashboard (or leave it) and push a fix. After a rollback, revert the bad commit on `main`, because the next push redeploys whatever `main` holds.
