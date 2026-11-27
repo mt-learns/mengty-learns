@@ -17,6 +17,7 @@
     "event-sourcing",
     "caching-redis",
     "database-indexing",
+    "transactions-isolation",
     "queues-async",
     "api-design",
     "c4-model"
