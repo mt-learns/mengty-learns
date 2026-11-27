@@ -32,6 +32,8 @@ sources:
     url: https://playwright.dev/docs/accessibility-testing
   - title: "GoogleChrome/lighthouse-ci"
     url: https://github.com/GoogleChrome/lighthouse-ci
+  - title: "key-learning: Testing Strategy and Quality Gates (author's notes)"
+    url: https://github.com/limme-learning/key-learning/blob/main/technical-management-playbook/08-testing-strategy-and-quality-gates.md
 ---
 
 ## TL;DR
@@ -63,6 +65,12 @@ Before a task moves to `Done`:
 | **Merge to `main`** | Review approval + clean git | ≥ 1 review approval (Lead/Owner), conventional commit, 0 secret leaks | Branch protection / Lead review |
 | **Release / Quality** | Accessibility & performance | `0` serious/critical `@axe-core/playwright` violations; Lighthouse CI (`lhci autorun`) ≥ 95 | `.github/workflows/quality.yml` |
 | **Production deploy** | Live verification | Preview/prod smoke check (`200` on key routes, headers present, 0 console errors) | Post-deploy check / `RUNBOOK.md` |
+
+### Three-checkpoint release gate
+Organize checks into three clear moments so nothing slips through between merge and production:
+- **Before merge:** Build, lint, unit/integration tests, peer code review, and secret/dependency scans pass.
+- **Before release:** Acceptance criteria verified on staging, critical E2E/regression flows green, known defects assessed, and database migration, backup, and rollback steps reviewed.
+- **After release:** Critical-path smoke test passes, error rates/latency/logs look normal, alerts are watched during the soak window, and stakeholders receive the release result.
 
 ## Minimum viable version (1–3 person team + AI agents)
 If you are starting a new repo today, set up just **three gates**:
@@ -110,3 +118,4 @@ If you are starting a new repo today, set up just **three gates**:
 - [The 2020 Scrum Guide: Definition of Done](https://scrumguides.org/scrum-guide.html)
 - [Playwright: Accessibility Testing](https://playwright.dev/docs/accessibility-testing)
 - [Lighthouse CI (GitHub)](https://github.com/GoogleChrome/lighthouse-ci)
+- [key-learning: Testing Strategy and Quality Gates (author's notes)](https://github.com/limme-learning/key-learning/blob/main/technical-management-playbook/08-testing-strategy-and-quality-gates.md)

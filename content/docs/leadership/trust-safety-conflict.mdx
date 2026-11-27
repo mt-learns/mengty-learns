@@ -1,0 +1,103 @@
+---
+title: "Trust, Psychological Safety, and Conflict"
+description: How engineering leads build psychological safety without lowering standards, resolve technical and team conflict early, and keep postmortems blameless.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: how-to
+level: beginner
+tags: [leadership, psychological-safety, trust, conflict, blameless]
+tested_with:
+  rework_guide: "Google re:Work (Project Aristotle: Psychological Safety)"
+  sre_book: "Google SRE Book (Postmortem Culture)"
+cards:
+  - q: "What does psychological safety mean in an engineering team?"
+    a: "A shared belief that teammates can ask questions, surface risks, admit mistakes, and challenge ideas without fear of humiliation or punishment."
+  - q: "Does high psychological safety mean lowering technical standards?"
+    a: "No. It pairs high engineering standards with fairness and respect—people debate ideas rigorously without attacking individuals."
+  - q: "How should a lead reframe a production mistake in a blameless culture?"
+    a: "Ask 'What system conditions allowed this change to reach production, and what guardrails prevent recurrence?' instead of 'Who broke prod?'"
+  - q: "What is the first step when resolving conflict between two engineers?"
+    a: "Address tension early and privately, separating observable facts and impact from personality judgments, and anchor both sides on the shared goal."
+related:
+  - process/incident-management
+  - process/retrospectives
+  - leadership/coaching-feedback-growth
+sources:
+  - title: "Google re:Work: Guide to Understanding Team Effectiveness"
+    url: https://rework.withgoogle.com/en/guides/understanding-team-effectiveness
+  - title: "Google SRE Book: Postmortem Culture"
+    url: https://sre.google/sre-book/postmortem-culture/
+  - title: "key-learning: Trust, Psychological Safety, and Conflict (author's notes)"
+    url: https://github.com/limme-learning/key-learning/blob/main/management-playbook/10-trust-psychological-safety-and-conflict.md
+---
+
+## TL;DR
+**Psychological safety** is the #1 predictor of team effectiveness in Google's Project Aristotle: people speak up about risks and mistakes early instead of hiding them. It is **not** a free pass on standards—it means holding **high standards with respect**, debating mechanisms rather than blaming people, and resolving conflict around shared goals.
+
+## Why it exists
+When engineers fear looking foolish or being blamed for an outage, they stay quiet in design reviews, hide schedule risks until launch day, and cover up small bugs. By the time leadership hears about a problem, it is already an incident.
+
+## Mental model: Safety + Standards
+- **Low safety + Low standards:** Apathy—nobody cares and nobody speaks up.
+- **Low safety + High standards:** Fear—people hide errors and optimize for covering themselves.
+- **High safety + Low standards:** Comfort without accountability.
+- **High safety + High standards:** Learning zone—rigorous code/design debate paired with blameless curiosity.
+
+## Do it: Resolving conflict and building safety
+
+### 1. 7-step conflict resolution
+1. **Act early and privately:** Don't let tension fester across weeks of passive-aggressive PR comments.
+2. **Lead with facts and impact:** Describe what happened and how it affects delivery or users—not personality traits.
+3. **Listen without interrupting:** Let each person state their concern in full.
+4. **Anchor on the shared goal:** *"We both want zero data loss during checkout."*
+5. **Compare options on trade-offs:** Evaluate latency, complexity, cost, and reversibility.
+6. **Assign owner and next step:** Agree on who tests or implements the chosen path, and when to review.
+7. **Write down the agreement:** Record architectural or process agreements in an ADR or ticket so the debate stays settled.
+
+### 2. Phrases that de-escalate and clarify
+- *"Help me understand the failure mode you're worried about."*
+- *"What evidence or benchmark would change your mind?"*
+- *"We agree on the goal; we're comparing two approaches to get there."*
+- *"Let's separate what we observed in logs from what we're assuming."*
+
+### 3. Blameless incident framing
+- **Avoid:** *"Who deployed the broken migration?"*
+- **Use:** *"What missing CI check, migration lock, or review step allowed this to ship, and how do we automate that guardrail?"*
+
+## Gotchas
+- **Mistaking niceness for safety:** Avoiding hard feedback or letting missed commitments slide is *not* psychological safety—it erodes trust for everyone else carrying the load.
+- **Loudest voice wins:** In design reviews, explicitly invite quieter or junior engineers to speak before senior voices anchor the room.
+- **Tolerating disrespect:** Technical disagreement is healthy; sarcasm, personal attacks, or public shaming must be stopped immediately.
+
+## Production checklist
+- [ ] Leads model vulnerability by admitting their own mistakes and knowledge gaps openly.
+- [ ] Design reviews and retros actively invite quieter voices and separate ideas from ego.
+- [ ] Postmortems (`process/incident-management`) focus on system guardrails, never individual blame.
+- [ ] Recurring PR or architecture deadlocks are resolved in a focused call and documented in an ADR.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "An engineer disagrees with the Team Lead's proposed caching design during a review. How does a psychologically safe lead respond?",
+    options: [
+      { label: "Ask 'What failure mode or evidence are you seeing?' and evaluate both options on trade-offs", description: "Inviting pushback surfaces real risks early and reinforces that ideas, not people, are being evaluated.", correct: true },
+      { label: "Pull rank immediately so the meeting ends faster", description: "Shutting down dissent teaches the team to stay quiet next time—even when they spot a real bug." },
+      { label: "Skip the review entirely to avoid conflict", description: "Avoiding technical debate lowers standards and ships unexamined risks." }
+    ]
+  },
+  {
+    question: "Which question best reflects a blameless postmortem mindset?",
+    options: [
+      { label: "\"What conditions in our pipeline and runbook let a bad config reach production?\"", description: "Blameless postmortems assume good intent and fix systemic gaps.", correct: true },
+      { label: "\"Which developer forgot to read the deployment checklist?\"", description: "Blaming human memory misses the opportunity to automate a safer check." },
+      { label: "\"Should we skip writing a postmortem so nobody feels bad?\"", description: "Skipping postmortems prevents the team from learning; keeping them blameless is the right fix." }
+    ]
+  }
+]} />
+
+## Sources
+- [Google re:Work: Guide to Understanding Team Effectiveness](https://rework.withgoogle.com/en/guides/understanding-team-effectiveness)
+- [Google SRE Book: Postmortem Culture](https://sre.google/sre-book/postmortem-culture/)
+- [key-learning: Trust, Psychological Safety, and Conflict (author's notes)](https://github.com/limme-learning/key-learning/blob/main/management-playbook/10-trust-psychological-safety-and-conflict.md)

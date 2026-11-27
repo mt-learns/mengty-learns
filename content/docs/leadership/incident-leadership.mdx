@@ -1,0 +1,115 @@
+---
+title: "Incident Leadership"
+description: How a Team Lead or Incident Commander coordinates outages—separating IC from hands-on debugging, running factual status updates, and driving prevention actions to closure.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: how-to
+level: intermediate
+tags: [leadership, incident-management, sre, reliability, postmortem]
+tested_with:
+  sre_book: "Google SRE Book (Managing Incidents)"
+cards:
+  - q: "Why should the Incident Commander (IC) avoid hands-on debugging during a multi-person outage?"
+    a: "If the IC gets pulled into tailing logs or writing SQL, nobody holds the big picture, coordinates roles, or tracks time and decisions."
+  - q: "What must every incident status update include, even before the root cause is known?"
+    a: "Current status, user impact, confirmed facts only (no guesses), active mitigation steps, owner, and the exact time of the next update."
+  - q: "What is the leader's main responsibility after a blameless postmortem is written?"
+    a: "Ensuring prevention actions have owners, due dates, and tracked tickets—and actually get closed rather than becoming shelfware."
+related:
+  - process/incident-management
+  - process/raci
+  - leadership/trust-safety-conflict
+sources:
+  - title: "Google SRE Book: Managing Incidents"
+    url: https://sre.google/sre-book/managing-incidents/
+  - title: "PagerDuty Incident Response Documentation"
+    url: https://response.pagerduty.com/
+  - title: "key-learning: DevOps, Reliability, and Incident Leadership (author's notes)"
+    url: https://github.com/limme-learning/key-learning/blob/main/management-playbook/12-devops-reliability-and-incident-leadership.md
+  - title: "key-learning: Incident Management and Postmortems (author's notes)"
+    url: https://github.com/limme-learning/key-learning/blob/main/technical-management-playbook/11-incident-management-and-postmortems.md
+---
+
+## TL;DR
+During an active outage, an engineering leader's job is **coordination, calm, and fast mitigation—not hero debugging**. Keep the **Incident Commander** role separate from hands-on investigation, send **fact-only status updates** with a next-update timestamp, and ensure postmortem prevention actions are tracked to completion.
+
+## Why it exists
+In high-stress outages, teams often crowd into one screen-share while nobody updates stakeholders, nobody records decisions, and two engineers accidentally run conflicting fixes. Clear incident leadership restores service faster and protects trust afterward.
+
+## Mental model: You build it, you own how it runs
+Pair the operational playbook in [Incident Management](/docs/process/incident-management) with explicit leadership boundaries:
+- **Stabilize before root-cause hunting:** Roll back, toggle a feature flag, or isolate the failing dependency first.
+- **Command vs execution:** The IC directs and unblocks; investigators and ops run commands.
+- **Facts only externally:** Never speculate about root cause in stakeholder updates until logs confirm it.
+
+## Do it: Incident RACI and update template
+
+### 1. Incident RACI for small engineering teams
+
+| Activity | Team Lead / IC | Developer | Ops / SRE | PM / Comms | Support |
+|---|---|---|---|---|---|
+| **Declare severity & assign roles** | **A / R** | C | C | I | C |
+| **Stabilize / rollback service** | A | **R** | **R** | I | I |
+| **Investigate logs & root cause** | A | **R** | **R** | I | C |
+| **Communicate customer impact** | C | I | C | **A / R** | C |
+| **Write & close postmortem actions** | **A** | **R** | **R** | I | C |
+
+### 2. Fact-only incident update template
+
+```text
+Incident status: Investigating / Mitigating / Monitoring / Resolved
+
+Impact:
+- Checkout API returning 502 for ~30% of EU requests since 14:05 UTC.
+
+Confirmed facts:
+- Error rate spiked 3 minutes after release #418; database CPU is normal.
+
+Actions in progress:
+- Rolling back release #418 to #417 (Owner: @oncall-ops).
+
+Owner:
+- @team-lead (IC)
+
+Next update:
+- 14:25 UTC (in 15 minutes)
+```
+
+## Gotchas
+- **The IC grabbing the keyboard:** The moment the lead starts debugging, communication stops and duplicate work begins.
+- **Skipping rollback rehearsal:** A rollback plan written in a wiki that nobody has tested under pressure often fails during a real outage.
+- **Unclosed postmortems:** A postmortem with five action items and zero tracked tickets guarantees the same outage repeats next quarter.
+
+## Production checklist
+- [ ] On-call engineers know who holds **IC**, **Mitigation**, and **Comms** roles before an outage hits.
+- [ ] Rollback and feature-flag kill switches are rehearsed on staging.
+- [ ] Critical side effects (payments, inventory, webhooks) use idempotency keys so retries are safe.
+- [ ] Every SEV1/SEV2 postmortem action item is reviewed weekly until closed.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "Why should the Incident Commander avoid tailing logs or writing hotfixes when other responders are available?",
+    options: [
+      { label: "Someone must hold the big picture, assign tasks, prevent duplicate work, and keep updates on schedule", description: "Separating coordination from hands-on debugging keeps the response organized and faster.", correct: true },
+      { label: "Because Incident Commanders are not allowed to have production read access", description: "ICs often have access; the separation is about cognitive focus, not permissions." },
+      { label: "Because logs are only useful after the postmortem", description: "Responders use logs actively to mitigate and investigate; the IC coordinates them." }
+    ]
+  },
+  {
+    question: "Ten minutes into an outage, you still do not know the root cause. What should your stakeholder update say?",
+    options: [
+      { label: "User impact, confirmed facts so far, active mitigation steps, and the exact time of the next update", description: "Predictable, fact-only updates build trust even while root cause is still under investigation.", correct: true },
+      { label: "Wait until you have 100% certainty on root cause before sending any update", description: "Silence during an outage creates panic and interrupts responders with status pings." },
+      { label: "Guess the most likely developer mistake so stakeholders feel informed", description: "Speculation misleads stakeholders and undermines blameless culture." }
+    ]
+  }
+]} />
+
+## Sources
+- [Google SRE Book: Managing Incidents](https://sre.google/sre-book/managing-incidents/)
+- [PagerDuty Incident Response Documentation](https://response.pagerduty.com/)
+- [key-learning: DevOps, Reliability, and Incident Leadership (author's notes)](https://github.com/limme-learning/key-learning/blob/main/management-playbook/12-devops-reliability-and-incident-leadership.md)
+- [key-learning: Incident Management and Postmortems (author's notes)](https://github.com/limme-learning/key-learning/blob/main/technical-management-playbook/11-incident-management-and-postmortems.md)

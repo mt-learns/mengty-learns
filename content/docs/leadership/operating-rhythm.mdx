@@ -1,0 +1,99 @@
+---
+title: "Management Operating Rhythm"
+description: A practical cadence cheatsheet for engineering teams—daily stand-ups, async updates, refinement, planning, reviews, retros, 1:1s, and meeting hygiene rules.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: cheatsheet
+type: reference
+level: beginner
+tags: [leadership, operating-rhythm, cadence, meetings, process]
+tested_with:
+  scrum_guide: "2020 Scrum Guide"
+cards:
+  - q: "What is the purpose of a consistent team operating rhythm?"
+    a: "It replaces ad-hoc status chasing with predictable cadences for alignment, risk surfacing, quality checks, and people support."
+  - q: "Which practices should be asynchronous by default instead of live meetings?"
+    a: "Routine progress updates, code reviews, and pre-read context—reserving live meetings for decisions, discovery, and conflict resolution."
+  - q: "What should happen to a recurring meeting that has no written agenda or decision to make?"
+    a: "Cancel it or convert it into a short async update."
+  - q: "How often should a Team Lead hold 1:1s and metric reviews?"
+    a: "1:1s biweekly or monthly for coaching and health; delivery/reliability metric reviews monthly to spot trends."
+related:
+  - process/scrum-kanban-waterfall
+  - process/retrospectives
+  - leadership/communication-and-listening
+sources:
+  - title: "The 2020 Scrum Guide: Scrum Events"
+    url: https://scrumguides.org/scrum-guide.html
+  - title: "key-learning: Management Operating Rhythm (author's notes)"
+    url: https://github.com/limme-learning/key-learning/blob/main/management-playbook/14-management-operating-rhythm.md
+  - title: "key-learning: Team Governance and Operating Rhythm (author's notes)"
+    url: https://github.com/limme-learning/key-learning/blob/main/project-management/02-raci-and-team-governance/05-team-governance-and-operating-rhythm.md
+---
+
+## TL;DR
+A healthy **operating rhythm** gives a team predictable touchpoints for **alignment, quality, and growth** without drowning engineers in meetings. Keep routine status **async**, reserve live calendars for **decisions and collaboration**, and cancel any meeting that lacks an agenda.
+
+## Team cadence cheatsheet
+
+| Practice | Cadence | Timebox | Primary purpose | Owner |
+|---|---|---|---|---|
+| **Daily stand-up** | Daily | 10–15 min | Surface blockers and coordinate today's work | Team Lead |
+| **Async status (RAG)** | Daily / Weekly | 5 min read | Share progress, risks, and decisions needed | Team Lead / PM |
+| **Code review** | Continuous | Same-day SLA | Maintain quality, security, and shared context | Developers + Lead |
+| **Backlog refinement** | Weekly | 45–60 min | Clarify scope, acceptance criteria, and dependencies | PO + Team Lead |
+| **Design / ADR review** | As needed | 30 min | Align on architecture, schemas, and risks | Team Lead |
+| **Sprint planning** | Per sprint | 60 min | Commit to realistic goals and clear owners | Lead + PO + PM |
+| **Release readiness** | Pre-release | 15–30 min | Verify tests, migrations, rollback, and runbook | Lead + Ops + QA |
+| **Sprint demo / review** | Per sprint | 30–45 min | Show working software and gather feedback | Lead + PO |
+| **Retrospective** | Per sprint | 45 min | Turn friction into 1–2 owned process fixes | Team Lead |
+| **1:1 check-in** | Biweekly / Monthly | 30 min | Coaching, feedback, workload, and growth | Team Lead |
+| **Health & metric review** | Monthly | 30–45 min | Inspect DORA, defect trends, and team load | Lead + PM |
+
+## Meeting hygiene rules
+1. **No agenda, no meeting:** State the goal and decision needed in the invite before people accept.
+2. **Minimum viable attendee list:** Invite only people needed for the decision; send notes to everyone else (`Informed`).
+3. **Separate reading from deciding:** Share context docs 24 hours ahead so live time goes to trade-offs, not reading slides aloud.
+4. **Start and end on time:** Respect makers' schedules (`25`/`50`-minute defaults leave breathing room).
+5. **Close with owners:** End every meeting with written decisions, owners, and due dates.
+
+## Minimum viable version (1–3 person team)
+- **Monday (15 min):** Pick the week's 2–3 outcomes and flag blockers.
+- **Daily (async):** 3-line stand-up message in chat (*Done / Next / Blocked*).
+- **Friday (20 min):** Demo what shipped and write one retro action item for next week.
+
+## Gotchas
+- **Calendar creep:** Adding a new recurring sync after every minor hiccup eventually leaves engineers with zero 2-hour coding blocks. Audit recurring meetings quarterly and delete stale ones.
+- **Stand-ups that become status reports to the lead:** Stand-up is for teammates to coordinate with each other, not to recite ticket IDs to a manager.
+
+## Production checklist
+- [ ] Every recurring team meeting has a clear owner, purpose, and timebox.
+- [ ] Routine status updates happen asynchronously rather than in live calls.
+- [ ] Engineers have protected, uninterrupted focus blocks on the calendar.
+- [ ] Every retro and metric review produces at least one tracked, owned improvement.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "A weekly 60-minute status meeting has had no decisions and only one person reading Jira updates aloud for the past month. What should the Team Lead do?",
+    options: [
+      { label: "Cancel the meeting and replace it with a 5-line async RAG status update", description: "Routine status belongs in async writing; reserve live meetings for decisions, discovery, and alignment.", correct: true },
+      { label: "Invite more stakeholders so the meeting feels more active", description: "Adding attendees to an agenda-less meeting wastes more engineering hours." },
+      { label: "Keep the meeting as-is so the calendar looks structured", description: "Operating rhythm exists to create clarity, not performative calendar blocks." }
+    ]
+  },
+  {
+    question: "What is the main focus of a Backlog Refinement session?",
+    options: [
+      { label: "Clarifying upcoming scope, acceptance criteria, and dependencies before sprint planning", description: "Refinement ensures work meets Definition of Ready before engineers commit to it.", correct: true },
+      { label: "Running production smoke tests", description: "Smoke tests happen during release verification, not backlog refinement." },
+      { label: "Conducting individual performance reviews", description: "Performance and growth belong in private 1:1s." }
+    ]
+  }
+]} />
+
+## Sources
+- [The 2020 Scrum Guide](https://scrumguides.org/scrum-guide.html)
+- [key-learning: Management Operating Rhythm (author's notes)](https://github.com/limme-learning/key-learning/blob/main/management-playbook/14-management-operating-rhythm.md)
+- [key-learning: Team Governance and Operating Rhythm (author's notes)](https://github.com/limme-learning/key-learning/blob/main/project-management/02-raci-and-team-governance/05-team-governance-and-operating-rhythm.md)
