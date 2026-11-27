@@ -21,7 +21,7 @@ export function Checklist({ use = [], avoid = [], children }: ChecklistProps) {
                 <Check className="size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
                 <span>When to use</span>
               </div>
-              <ul className="m-0 list-none space-y-2 p-0 text-subheadline text-card-foreground">
+              <ul className="m-0 list-none space-y-2 p-0 text-subheadline leading-normal text-card-foreground">
                 {use.map((item) => (
                   <li key={item} className="flex items-start gap-2">
                     <Check
@@ -42,7 +42,7 @@ export function Checklist({ use = [], avoid = [], children }: ChecklistProps) {
                 <Ban className="size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
                 <span>When to avoid</span>
               </div>
-              <ul className="m-0 list-none space-y-2 p-0 text-subheadline text-card-foreground">
+              <ul className="m-0 list-none space-y-2 p-0 text-subheadline leading-normal text-card-foreground">
                 {avoid.map((item) => (
                   <li key={item} className="flex items-start gap-2">
                     <Ban

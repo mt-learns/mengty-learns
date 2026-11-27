@@ -32,7 +32,7 @@ export function Figure({ src, srcDark, alt, caption, className }: FigureProps) {
         )}
       </div>
       {caption && (
-        <figcaption className="text-center text-xs text-muted-foreground">
+        <figcaption className="text-center text-footnote text-muted-foreground">
           {caption}
         </figcaption>
       )}

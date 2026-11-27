@@ -26,7 +26,7 @@ export function LabLink({ name, href, description, command }: LabLinkProps) {
             <p className="m-0 mt-0.5 text-footnote text-muted-foreground">{description}</p>
           )}
           {command && (
-            <pre className="mt-2 mb-0 overflow-x-auto rounded-control bg-muted px-3 py-1.5 font-mono text-caption-1 text-foreground">
+            <pre className="mt-2 mb-0 overflow-x-auto rounded-control bg-muted px-3 py-1.5 font-mono text-footnote text-foreground">
               <code>{command}</code>
             </pre>
           )}

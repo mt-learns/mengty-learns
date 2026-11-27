@@ -21,7 +21,7 @@ export function Analogy({ children, title = 'Real-world analogy' }: AnalogyProps
         </span>
         <span>{title}</span>
       </div>
-      <div className="text-callout text-muted-foreground [&>p]:my-2 [&>p:last-child]:mb-0">
+      <div className="text-callout leading-[1.55] text-muted-foreground [&>p]:my-2 [&>p:last-child]:mb-0">
         {children}
       </div>
     </aside>

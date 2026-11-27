@@ -28,7 +28,7 @@ export function Quiz({ questions }: QuizProps) {
       <div className="space-y-6">
         {questions.map((q, i) => (
           <div key={i} className="space-y-3">
-            <p className="font-medium text-body">{i + 1}. {q.question}</p>
+            <p className="font-reading font-semibold text-body">{i + 1}. {q.question}</p>
             <div className="grid grid-cols-1 gap-2">
               {q.options.map((opt, j) => {
                 const isSelected = selected[i] === j;
@@ -43,7 +43,7 @@ export function Quiz({ questions }: QuizProps) {
                   <button
                     key={j}
                     onClick={() => handleSelect(i, j)}
-                    className={`text-left p-3 rounded-panel border transition-all motion-reduce:transition-none ${borderClass} hover:border-primary/50 min-h-tap`}
+                    className={`font-reading text-left p-3 rounded-panel border transition-all motion-reduce:transition-none ${borderClass} hover:border-primary/50 min-h-tap`}
                   >
                     <span className="font-semibold block mb-0.5">{opt.label}</span>
                     <span className="text-muted-foreground text-subheadline">{opt.description}</span>

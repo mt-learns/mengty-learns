@@ -54,7 +54,7 @@ export default async function DigestEntryPage({
       </div>
 
       <div className="flex flex-wrap items-center gap-2 mb-3">
-        <span className="text-footnote text-muted-foreground">{page.data.date}</span>
+        <span className="text-footnote tabular-nums text-muted-foreground">{page.data.date}</span>
         {page.data.status === 'draft' && (
           <span className="inline-flex items-center rounded-pill bg-secondary px-2.5 py-0.5 text-caption-1 font-medium text-secondary-foreground">
             Draft
@@ -78,8 +78,8 @@ export default async function DigestEntryPage({
                   <span>{item.title}</span>
                   <ExternalLink className="size-4 shrink-0" strokeWidth={1.75} aria-hidden="true" />
                 </a>
-                <p className="text-subheadline text-muted-foreground">{item.why}</p>
-                <p className="text-footnote text-muted-foreground">
+                <p className="font-reading text-subheadline text-muted-foreground">{item.why}</p>
+                <p className="font-reading text-footnote text-muted-foreground">
                   <span className="font-medium text-foreground">Action:</span> {item.action}
                 </p>
               </div>

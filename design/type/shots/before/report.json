@@ -1,0 +1,506 @@
+[
+  {
+    "route": "/",
+    "width": 360,
+    "theme": "light",
+    "file": "design\\type\\shots\\before\\home-360-light.png",
+    "edges": [
+      {
+        "name": "nav",
+        "left": 24,
+        "right": 321
+      },
+      {
+        "name": "div",
+        "left": 24,
+        "right": 321
+      },
+      {
+        "name": "div",
+        "left": 24,
+        "right": 321
+      },
+      {
+        "name": "div",
+        "left": 24,
+        "right": 321
+      },
+      {
+        "name": "div",
+        "left": 24,
+        "right": 321
+      },
+      {
+        "name": "div",
+        "left": 24,
+        "right": 321
+      },
+      {
+        "name": "div",
+        "left": 24,
+        "right": 321
+      },
+      {
+        "name": "div",
+        "left": 24,
+        "right": 321
+      },
+      {
+        "name": "footer",
+        "left": 24,
+        "right": 321
+      }
+    ],
+    "overflow": -15
+  },
+  {
+    "route": "/docs/containers/dockerfile-best-practices/",
+    "width": 360,
+    "theme": "light",
+    "file": "design\\type\\shots\\before\\docs_containers_dockerfile-best-practices-360-light.png",
+    "edges": [],
+    "overflow": -15
+  },
+  {
+    "route": "/docs/kubernetes/kubectl-cheatsheet/",
+    "width": 360,
+    "theme": "light",
+    "file": "design\\type\\shots\\before\\docs_kubernetes_kubectl-cheatsheet-360-light.png",
+    "edges": [],
+    "overflow": -15
+  },
+  {
+    "route": "/docs/design/bridge/",
+    "width": 360,
+    "theme": "light",
+    "file": "design\\type\\shots\\before\\docs_design_bridge-360-light.png",
+    "edges": [],
+    "overflow": -15
+  },
+  {
+    "route": "/review/",
+    "width": 360,
+    "theme": "light",
+    "file": "design\\type\\shots\\before\\review-360-light.png",
+    "edges": [
+      {
+        "name": "nav",
+        "left": 24,
+        "right": 321
+      },
+      {
+        "name": "div",
+        "left": 24,
+        "right": 321
+      },
+      {
+        "name": "footer",
+        "left": 24,
+        "right": 321
+      }
+    ],
+    "overflow": -15
+  },
+  {
+    "route": "/radar/",
+    "width": 360,
+    "theme": "light",
+    "file": "design\\type\\shots\\before\\radar-360-light.png",
+    "edges": [
+      {
+        "name": "nav",
+        "left": 24,
+        "right": 321
+      },
+      {
+        "name": "div",
+        "left": 24,
+        "right": 321
+      },
+      {
+        "name": "footer",
+        "left": 24,
+        "right": 321
+      }
+    ],
+    "overflow": -15
+  },
+  {
+    "route": "/",
+    "width": 1280,
+    "theme": "light",
+    "file": "design\\type\\shots\\before\\home-1280-light.png",
+    "edges": [
+      {
+        "name": "nav",
+        "left": 65,
+        "right": 1201
+      },
+      {
+        "name": "div",
+        "left": 65,
+        "right": 1201
+      },
+      {
+        "name": "div",
+        "left": 65,
+        "right": 1201
+      },
+      {
+        "name": "div",
+        "left": 65,
+        "right": 1201
+      },
+      {
+        "name": "div",
+        "left": 65,
+        "right": 1201
+      },
+      {
+        "name": "div",
+        "left": 65,
+        "right": 1201
+      },
+      {
+        "name": "div",
+        "left": 65,
+        "right": 1201
+      },
+      {
+        "name": "div",
+        "left": 65,
+        "right": 1201
+      },
+      {
+        "name": "footer",
+        "left": 65,
+        "right": 1201
+      }
+    ],
+    "overflow": -15
+  },
+  {
+    "route": "/docs/containers/dockerfile-best-practices/",
+    "width": 1280,
+    "theme": "light",
+    "file": "design\\type\\shots\\before\\docs_containers_dockerfile-best-practices-1280-light.png",
+    "edges": [],
+    "overflow": -15
+  },
+  {
+    "route": "/docs/kubernetes/kubectl-cheatsheet/",
+    "width": 1280,
+    "theme": "light",
+    "file": "design\\type\\shots\\before\\docs_kubernetes_kubectl-cheatsheet-1280-light.png",
+    "edges": [],
+    "overflow": -15
+  },
+  {
+    "route": "/docs/design/bridge/",
+    "width": 1280,
+    "theme": "light",
+    "file": "design\\type\\shots\\before\\docs_design_bridge-1280-light.png",
+    "edges": [],
+    "overflow": -15
+  },
+  {
+    "route": "/review/",
+    "width": 1280,
+    "theme": "light",
+    "file": "design\\type\\shots\\before\\review-1280-light.png",
+    "edges": [
+      {
+        "name": "nav",
+        "left": 65,
+        "right": 1201
+      },
+      {
+        "name": "div",
+        "left": 65,
+        "right": 1201
+      },
+      {
+        "name": "footer",
+        "left": 65,
+        "right": 1201
+      }
+    ],
+    "overflow": -15
+  },
+  {
+    "route": "/radar/",
+    "width": 1280,
+    "theme": "light",
+    "file": "design\\type\\shots\\before\\radar-1280-light.png",
+    "edges": [
+      {
+        "name": "nav",
+        "left": 65,
+        "right": 1201
+      },
+      {
+        "name": "div",
+        "left": 65,
+        "right": 1201
+      },
+      {
+        "name": "footer",
+        "left": 65,
+        "right": 1201
+      }
+    ],
+    "overflow": -15
+  },
+  {
+    "route": "/",
+    "width": 360,
+    "theme": "dark",
+    "file": "design\\type\\shots\\before\\home-360-dark.png",
+    "edges": [
+      {
+        "name": "nav",
+        "left": 24,
+        "right": 321
+      },
+      {
+        "name": "div",
+        "left": 24,
+        "right": 321
+      },
+      {
+        "name": "div",
+        "left": 24,
+        "right": 321
+      },
+      {
+        "name": "div",
+        "left": 24,
+        "right": 321
+      },
+      {
+        "name": "div",
+        "left": 24,
+        "right": 321
+      },
+      {
+        "name": "div",
+        "left": 24,
+        "right": 321
+      },
+      {
+        "name": "div",
+        "left": 24,
+        "right": 321
+      },
+      {
+        "name": "div",
+        "left": 24,
+        "right": 321
+      },
+      {
+        "name": "footer",
+        "left": 24,
+        "right": 321
+      }
+    ],
+    "overflow": -15
+  },
+  {
+    "route": "/docs/containers/dockerfile-best-practices/",
+    "width": 360,
+    "theme": "dark",
+    "file": "design\\type\\shots\\before\\docs_containers_dockerfile-best-practices-360-dark.png",
+    "edges": [],
+    "overflow": -15
+  },
+  {
+    "route": "/docs/kubernetes/kubectl-cheatsheet/",
+    "width": 360,
+    "theme": "dark",
+    "file": "design\\type\\shots\\before\\docs_kubernetes_kubectl-cheatsheet-360-dark.png",
+    "edges": [],
+    "overflow": -15
+  },
+  {
+    "route": "/docs/design/bridge/",
+    "width": 360,
+    "theme": "dark",
+    "file": "design\\type\\shots\\before\\docs_design_bridge-360-dark.png",
+    "edges": [],
+    "overflow": -15
+  },
+  {
+    "route": "/review/",
+    "width": 360,
+    "theme": "dark",
+    "file": "design\\type\\shots\\before\\review-360-dark.png",
+    "edges": [
+      {
+        "name": "nav",
+        "left": 24,
+        "right": 321
+      },
+      {
+        "name": "div",
+        "left": 24,
+        "right": 321
+      },
+      {
+        "name": "footer",
+        "left": 24,
+        "right": 321
+      }
+    ],
+    "overflow": -15
+  },
+  {
+    "route": "/radar/",
+    "width": 360,
+    "theme": "dark",
+    "file": "design\\type\\shots\\before\\radar-360-dark.png",
+    "edges": [
+      {
+        "name": "nav",
+        "left": 24,
+        "right": 321
+      },
+      {
+        "name": "div",
+        "left": 24,
+        "right": 321
+      },
+      {
+        "name": "footer",
+        "left": 24,
+        "right": 321
+      }
+    ],
+    "overflow": -15
+  },
+  {
+    "route": "/",
+    "width": 1280,
+    "theme": "dark",
+    "file": "design\\type\\shots\\before\\home-1280-dark.png",
+    "edges": [
+      {
+        "name": "nav",
+        "left": 65,
+        "right": 1201
+      },
+      {
+        "name": "div",
+        "left": 65,
+        "right": 1201
+      },
+      {
+        "name": "div",
+        "left": 65,
+        "right": 1201
+      },
+      {
+        "name": "div",
+        "left": 65,
+        "right": 1201
+      },
+      {
+        "name": "div",
+        "left": 65,
+        "right": 1201
+      },
+      {
+        "name": "div",
+        "left": 65,
+        "right": 1201
+      },
+      {
+        "name": "div",
+        "left": 65,
+        "right": 1201
+      },
+      {
+        "name": "div",
+        "left": 65,
+        "right": 1201
+      },
+      {
+        "name": "footer",
+        "left": 65,
+        "right": 1201
+      }
+    ],
+    "overflow": -15
+  },
+  {
+    "route": "/docs/containers/dockerfile-best-practices/",
+    "width": 1280,
+    "theme": "dark",
+    "file": "design\\type\\shots\\before\\docs_containers_dockerfile-best-practices-1280-dark.png",
+    "edges": [],
+    "overflow": -15
+  },
+  {
+    "route": "/docs/kubernetes/kubectl-cheatsheet/",
+    "width": 1280,
+    "theme": "dark",
+    "file": "design\\type\\shots\\before\\docs_kubernetes_kubectl-cheatsheet-1280-dark.png",
+    "edges": [],
+    "overflow": -15
+  },
+  {
+    "route": "/docs/design/bridge/",
+    "width": 1280,
+    "theme": "dark",
+    "file": "design\\type\\shots\\before\\docs_design_bridge-1280-dark.png",
+    "edges": [],
+    "overflow": -15
+  },
+  {
+    "route": "/review/",
+    "width": 1280,
+    "theme": "dark",
+    "file": "design\\type\\shots\\before\\review-1280-dark.png",
+    "edges": [
+      {
+        "name": "nav",
+        "left": 65,
+        "right": 1201
+      },
+      {
+        "name": "div",
+        "left": 65,
+        "right": 1201
+      },
+      {
+        "name": "footer",
+        "left": 65,
+        "right": 1201
+      }
+    ],
+    "overflow": -15
+  },
+  {
+    "route": "/radar/",
+    "width": 1280,
+    "theme": "dark",
+    "file": "design\\type\\shots\\before\\radar-1280-dark.png",
+    "edges": [
+      {
+        "name": "nav",
+        "left": 65,
+        "right": 1201
+      },
+      {
+        "name": "div",
+        "left": 65,
+        "right": 1201
+      },
+      {
+        "name": "footer",
+        "left": 65,
+        "right": 1201
+      }
+    ],
+    "overflow": -15
+  }
+]

@@ -93,15 +93,15 @@ export function RadarFilter({ entries }: { entries: RadarEntryItem[] }) {
                           {item.quadrant}
                         </span>
                       </div>
-                      <span className="text-caption-1 text-label-tertiary">
+                      <span className="text-footnote tabular-nums text-label-tertiary">
                         {item.updated}
                       </span>
                     </div>
 
-                    <p className="text-subheadline text-muted-foreground">
+                    <p className="font-reading text-subheadline text-muted-foreground">
                       <span className="text-foreground">{item.what}</span> — {item.why}
                     </p>
-                    <p className="text-footnote text-muted-foreground">
+                    <p className="font-reading text-footnote text-muted-foreground">
                       <span className="font-medium text-foreground">Action:</span> {item.action}
                     </p>
 
