@@ -1,0 +1,121 @@
+---
+title: Normalization vs Denormalization
+description: Keep your write model in Third Normal Form (3NF) so every fact has one home, and isolate denormalized read models or materialized views for heavy reporting.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: explanation
+level: intermediate
+tags: [architecture, database, postgresql, normalization, cqrs, materialized-views]
+tested_with:
+  postgresql: "17.x (docs)"
+cards:
+  - q: "Why is Third Normal Form (3NF) the right default for transactional write models?"
+    a: "In 3NF, every fact is stored in exactly one place, preventing partial updates and data drift across copies."
+  - q: "When is denormalization actually justified—and when is it not?"
+    a: "Justified when aggregating millions of rows on the read path or isolating heavy analytics from OLTP; NOT justified merely to avoid joining 3-5 indexed tables for a single record."
+  - q: "Why is maintaining duplicated columns in application code risky?"
+    a: "Bulk imports, background jobs, or another service writing to the table can bypass application code and leave stale or inconsistent totals."
+  - q: "How do PostgreSQL Materialized Views balance read speed and data freshness?"
+    a: "They precompute expensive joins/aggregations into a stored table that refreshes on a schedule (CONCURRENTLY with a unique index), making staleness explicit and bounded."
+related:
+  - architecture/database-indexing
+  - architecture/cqrs
+  - architecture/database-partitioning
+sources:
+  - title: "PostgreSQL Docs: Materialized Views"
+    url: https://www.postgresql.org/docs/current/rules-materializedviews.html
+  - title: "PostgreSQL Docs: REFRESH MATERIALIZED VIEW"
+    url: https://www.postgresql.org/docs/current/sql-refreshmaterializedview.html
+  - title: "software-engineering: Normalization vs Denormalization (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/06-database-strategies/03-normalization-vs-denormalization.md
+---
+
+## TL;DR
+**Normalize (3NF) your write model** so every fact has one source of truth, and **denormalize only on separate read paths** (materialized views or CQRS projections) when heavy aggregations threaten OLTP latency. Never duplicate mutable totals across operational tables in app code.
+
+## Why it exists
+Running a 9-table, 50-million-row analytics query on your primary OLTP database flushes the buffer cache and holds long transactions that block `autovacuum`. Conversely, flattening `customer_name` or `order_total` onto multiple operational tables in application code almost always causes silent drift when one write path forgets to update the copy.
+
+## Mental model
+**Write truth once; project read shapes separately.**
+
+<Diagram
+  id="norm-vs-denorm"
+  ariaLabel="OLTP writes go to normalized 3NF tables; heavy reporting reads from a refreshed materialized view or read replica"
+  caption="Keep 3NF for transactional integrity; refresh a separate read model for heavy aggregations."
+  nodes={[
+    { id: 'oltp', label: 'OLTP Writes', subtitle: 'Orders, items', icon: 'service', category: 'client', rank: 0, order: 0 },
+    { id: 'tnf', label: '3NF Tables', subtitle: 'Single source of truth', icon: 'db', category: 'data', rank: 1, order: 0 },
+    { id: 'mv', label: 'Materialized View', subtitle: 'Precomputed totals', icon: 'db', category: 'abstraction', rank: 2, order: 0 },
+    { id: 'dash', label: 'Analytics UI', subtitle: 'Fast reads', icon: 'gateway', category: 'edge', rank: 3, order: 0 },
+  ]}
+  edges={[
+    { from: 'oltp', to: 'tnf', label: 'ACID write' },
+    { from: 'tnf', to: 'mv', label: 'refresh' },
+    { from: 'mv', to: 'dash', label: 'query' },
+  ]}
+/>
+
+## Do it
+
+### Decision matrix
+
+| Situation | Use 3NF + Indexes | Use Materialized View / Read Model |
+|---|---|---|
+| Single-record lookup joining 4 indexed tables | **Yes** (fast index lookups) | No |
+| Dashboard aggregating 20M rows every 5 minutes | No | **Yes** (precomputed, bounded staleness) |
+| Regulatory / financial write path | **Yes** (auditable, zero drift) | No |
+| Cross-service summary view | No | **Yes** (async projection) |
+
+### Safe materialized view refresh in PostgreSQL
+
+```sql
+CREATE MATERIALIZED VIEW monthly_order_summary AS
+SELECT date_trunc('month', created_at) AS month,
+       merchant_id,
+       COUNT(*) AS order_count,
+       SUM(total_cents) AS gross_cents
+FROM orders
+GROUP BY 1, 2;
+
+-- Required so REFRESH ... CONCURRENTLY does not block readers
+CREATE UNIQUE INDEX idx_monthly_order_summary_pk
+  ON monthly_order_summary (month, merchant_id);
+
+REFRESH MATERIALIZED VIEW CONCURRENTLY monthly_order_summary;
+```
+
+## Gotchas
+- **Denormalizing to "avoid joins":** Indexed foreign-key joins for a single entity take sub-millisecond time; denormalizing them trades correctness for zero real gain.
+- **Missing `CONCURRENTLY`:** Plain `REFRESH MATERIALIZED VIEW` takes an `AccessExclusiveLock` and blocks all readers until the refresh finishes.
+- **Silent staleness:** Always expose `refreshed_at` in dashboard responses so users know how fresh the read model is.
+
+## Production checklist
+- [ ] Keep transactional tables in 3NF with foreign keys and proper indexes.
+- [ ] Cap read-only reporting query timeouts (e.g. `statement_timeout = '5s'`) so reports cannot stall `autovacuum`.
+- [ ] Add a `UNIQUE` index on materialized views and refresh with `CONCURRENTLY`.
+- [ ] If you ever denormalize a column on a write table, enforce it via a database trigger/generated column + reconciliation check—not app code alone.
+
+## Check yourself
+
+<Quiz
+  questions={[
+    {
+      question: "When is denormalization genuinely justified in PostgreSQL?",
+      options: [
+        { label: "Whenever a query joins more than two tables", description: "Joins across indexed foreign keys are fast and do not justify duplicating data." },
+        { label: "When expensive multi-million-row aggregations threaten OLTP latency or buffer cache", description: "Precomputing heavy aggregates in a materialized view or separate read model protects the transactional workload.", correct: true },
+        { label: "To avoid writing foreign key constraints", description: "Foreign keys protect referential integrity." },
+      ],
+    },
+    {
+      question: "What is required to run REFRESH MATERIALIZED VIEW CONCURRENTLY in PostgreSQL?",
+      options: [
+        { label: "A UNIQUE index on the materialized view", description: "PostgreSQL needs a unique index to diff old and new rows without locking out concurrent readers.", correct: true },
+        { label: "Disabling WAL logging", description: "CONCURRENTLY works with normal WAL logging." },
+        { label: "Dropping and recreating the view", description: "Dropping the view breaks dependent queries and permissions." },
+      ],
+    },
+  ]}
+/>
