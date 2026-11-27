@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { LogoMark } from '@/components/brand/logo';
 import { Container } from '@/components/layout/container';
+import { InstallFooterButton } from '@/components/pwa/install-footer-button';
 import { NAV_LINKS } from '@/lib/layout.shared';
 import { appName, gitConfig } from '@/lib/shared';
 
@@ -36,6 +37,9 @@ export function SiteFooter() {
               <a href={`https://github.com/${gitConfig.user}/${gitConfig.repo}`} className={linkClass} rel="noreferrer">
                 GitHub
               </a>
+            </li>
+            <li>
+              <InstallFooterButton />
             </li>
           </ul>
         </nav>

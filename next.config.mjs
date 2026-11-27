@@ -17,7 +17,20 @@ const config = {
   // Security headers on every response the Worker builds (HTML, RSC, route
   // handlers). Static assets get the same list from public/_headers.
   async headers() {
-    return [{ source: '/:path*', headers: securityHeaders }];
+    return [
+      { source: '/:path*', headers: securityHeaders },
+      {
+        source: '/sw.js',
+        headers: [
+          { key: 'Cache-Control', value: 'no-cache' },
+          { key: 'Service-Worker-Allowed', value: '/' },
+        ],
+      },
+      {
+        source: '/sw-manifest.json',
+        headers: [{ key: 'Cache-Control', value: 'no-cache' }],
+      },
+    ];
   },
 };
 

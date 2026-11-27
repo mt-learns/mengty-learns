@@ -1,9 +1,12 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { AlertTriangle, CheckCircle2, Flame, PartyPopper } from 'lucide-react';
+import { useState, useEffect, type ChangeEvent } from 'react';
+import { AlertTriangle, Check, CheckCircle2, Copy, Download, Flame, PartyPopper, Upload, WifiOff } from 'lucide-react';
 import { Illustration } from '@/components/illustrations';
+import { ReviewInstallBanner } from '@/components/pwa/install-prompt';
+import { useOnlineStatus } from '@/components/pwa/use-online';
 import { Button } from '@/components/ui/button';
+import { parseReviewBackup, serializeReviewBackup } from '@/lib/review-backup';
 
 export interface CardItem {
   id: string;
@@ -52,6 +55,7 @@ function loadFsrs() {
  * LCP element). Without it, the client falls back to fetching the file.
  */
 export function ReviewClient({ initialCards }: { initialCards?: CardItem[] }) {
+  const isOnline = useOnlineStatus();
   const [reviewState, setReviewState] = useState<Record<string, any>>({});
   const [cards, setCards] = useState<CardItem[]>([]);
   const [dueCards, setDueCards] = useState<CardItem[]>([]);
@@ -65,6 +69,26 @@ export function ReviewClient({ initialCards }: { initialCards?: CardItem[] }) {
     kind: 'success' | 'error';
     message: string;
   } | null>(null);
+  const [copied, setCopied] = useState(false);
+  const [storagePersisted, setStoragePersisted] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (typeof navigator !== 'undefined' && navigator.storage?.persisted) {
+      navigator.storage
+        .persisted()
+        .then((persisted) => {
+          if (persisted) {
+            setStoragePersisted(true);
+            return;
+          }
+          if (navigator.storage.persist) {
+            return navigator.storage.persist().then((granted) => setStoragePersisted(granted));
+          }
+          setStoragePersisted(false);
+        })
+        .catch(() => {});
+    }
+  }, []);
 
   useEffect(() => {
     const saved = localStorage.getItem('mt-review-v1');
@@ -129,8 +153,19 @@ export function ReviewClient({ initialCards }: { initialCards?: CardItem[] }) {
     setCurrentIndex((prev) => prev + 1);
   };
 
+  const buildBackupJson = () => {
+    let completed: string[] = [];
+    try {
+      const savedCompleted = localStorage.getItem('mt-completed-v1');
+      if (savedCompleted) completed = JSON.parse(savedCompleted) as string[];
+    } catch {
+      // Ignore storage read errors.
+    }
+    return serializeReviewBackup(reviewState, streak, completed);
+  };
+
   const exportJson = () => {
-    const data = JSON.stringify({ state: reviewState, streak });
+    const data = buildBackupJson();
     const blob = new Blob([data], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
@@ -140,9 +175,22 @@ export function ReviewClient({ initialCards }: { initialCards?: CardItem[] }) {
     URL.revokeObjectURL(url);
   };
 
-  const importJson = () => {
+  const copyBackup = async () => {
     try {
-      const parsed = JSON.parse(jsonInput);
+      await navigator.clipboard.writeText(buildBackupJson());
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      setImportStatus({
+        kind: 'error',
+        message: 'Could not copy to clipboard. Use Export JSON to download the file instead.',
+      });
+    }
+  };
+
+  const applyImport = (raw: string) => {
+    try {
+      const parsed = parseReviewBackup(raw);
       if (parsed.state) {
         setReviewState(parsed.state);
         localStorage.setItem('mt-review-v1', JSON.stringify(parsed.state));
@@ -152,6 +200,9 @@ export function ReviewClient({ initialCards }: { initialCards?: CardItem[] }) {
         setStreak(parsed.streak);
         localStorage.setItem('mt-streak-v1', parsed.streak.toString());
       }
+      if (Array.isArray(parsed.completed)) {
+        localStorage.setItem('mt-completed-v1', JSON.stringify(parsed.completed));
+      }
       setImportStatus({
         kind: 'success',
         message: 'Backup imported. Your review schedule and streak were restored.',
@@ -160,9 +211,28 @@ export function ReviewClient({ initialCards }: { initialCards?: CardItem[] }) {
       setImportStatus({
         kind: 'error',
         message:
-          'That is not a valid backup. Paste the JSON file you exported from this page.',
+          'That is not a valid backup. Paste or upload the JSON file you exported from this page.',
       });
     }
+  };
+
+  const importJson = () => applyImport(jsonInput);
+
+  const handleFileImport = (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    file
+      .text()
+      .then((text) => {
+        setJsonInput(text);
+        applyImport(text);
+      })
+      .catch(() => {
+        setImportStatus({
+          kind: 'error',
+          message: 'Could not read the selected file.',
+        });
+      });
   };
 
   const currentCard = dueCards[currentIndex];
@@ -184,7 +254,15 @@ export function ReviewClient({ initialCards }: { initialCards?: CardItem[] }) {
             <span>{streak}</span>
           </span>
         </div>
+        {!isOnline && (
+          <div className="ml-auto inline-flex items-center gap-1.5 rounded-pill border bg-muted px-3 py-1 text-caption-1 text-muted-foreground">
+            <WifiOff className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
+            <span>Offline · saves locally</span>
+          </div>
+        )}
       </div>
+
+      <ReviewInstallBanner />
 
       {loading && !initialCards?.[0] ? (
         <div
@@ -281,16 +359,46 @@ export function ReviewClient({ initialCards }: { initialCards?: CardItem[] }) {
       )}
 
       <div className="rounded-card border bg-card p-6 space-y-4">
-        <h2 className="text-lg font-bold font-headline">Backup & Restore</h2>
-        <div className="flex gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h2 className="text-lg font-bold font-headline">Backup & Restore</h2>
+          {storagePersisted !== null && (
+            <span className="text-caption-1 text-muted-foreground">
+              {storagePersisted ? 'Persistent storage active' : 'Browser-managed storage'}
+            </span>
+          )}
+        </div>
+        <p className="text-subheadline text-muted-foreground">
+          Progress is stored locally on this device. On iPhone/iPad, Safari and the home-screen app use separate storage, and Safari can clear inactive site data after 7 days — export a backup before switching or taking a break.
+        </p>
+        <div className="flex flex-wrap gap-3">
           <Button onClick={exportJson} variant="outline" className="min-h-tap rounded-control">
-            Export JSON
+            <Download className="size-4" strokeWidth={1.75} aria-hidden="true" />
+            <span>Export JSON</span>
           </Button>
+          <Button onClick={copyBackup} variant="outline" className="min-h-tap rounded-control">
+            {copied ? (
+              <Check className="size-4 text-primary" strokeWidth={1.75} aria-hidden="true" />
+            ) : (
+              <Copy className="size-4" strokeWidth={1.75} aria-hidden="true" />
+            )}
+            <span>{copied ? 'Copied' : 'Copy backup'}</span>
+          </Button>
+          <label className="inline-flex min-h-tap cursor-pointer items-center gap-2 rounded-control border bg-background px-4 text-subheadline font-medium transition-colors hover:bg-accent">
+            <Upload className="size-4" strokeWidth={1.75} aria-hidden="true" />
+            <span>Import file</span>
+            <input
+              type="file"
+              accept="application/json,.json"
+              onChange={handleFileImport}
+              className="sr-only"
+            />
+          </label>
         </div>
         <div className="space-y-2">
           <textarea
             value={jsonInput}
             onChange={(e) => setJsonInput(e.target.value)}
+            aria-label="Backup JSON"
             placeholder="Paste backup JSON here to import..."
             className="w-full h-24 p-3 rounded-panel border bg-field text-subheadline"
           />

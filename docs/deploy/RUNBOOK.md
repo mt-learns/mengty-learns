@@ -25,6 +25,8 @@ Then:
 ```bash
 curl -sI https://learn.limmengty.com/ | grep -iE "^HTTP|content-security-policy|strict-transport|x-content-type|referrer-policy|permissions-policy|x-frame-options|x-opennext-cache"
 curl -sI https://learn.limmengty.com/_next/static/  # any hashed file from the page: Cache-Control public, max-age=31536000, immutable
+curl -sI https://learn.limmengty.com/sw.js | grep -iE "^HTTP|^cache-control|^service-worker-allowed"  # Cache-Control: no-cache, Service-Worker-Allowed: /
+curl -sI https://learn.limmengty.com/manifest.webmanifest | grep -iE "^HTTP|^content-type"             # 200, application/manifest+json
 curl -s  -o /dev/null -w "%{http_code}\n" https://learn.limmengty.com/this-page-does-not-exist/   # 404
 ```
 
@@ -49,6 +51,28 @@ Each deploy is a Worker **version**. Rolling back makes an older version live im
   ```
 
 Then fix forward: revert the bad commit on `main` and let CI deploy it. Otherwise the next push re-deploys the broken code. Cloudflare keeps the 100 most recent versions.
+
+### 3a. Service Worker emergency kill-switch
+
+If a broken `public/sw.js` is caching bad responses or stranding clients, `wrangler rollback` alone may not immediately clear clients that already installed the bad SW if they are offline or waiting. Ship a kill-switch `public/sw.js` as a PATCH release:
+
+```js
+// Emergency kill-switch sw.js: unregisters itself and clears all mt-* caches.
+self.addEventListener('install', () => self.skipWaiting());
+self.addEventListener('activate', (event) => {
+  event.waitUntil(
+    (async () => {
+      const keys = await caches.keys();
+      await Promise.all(keys.filter((k) => k.startsWith('mt-')).map((k) => caches.delete(k)));
+      await self.registration.unregister();
+      const clients = await self.clients.matchAll({ type: 'window' });
+      for (const client of clients) client.navigate(client.url);
+    })(),
+  );
+});
+```
+
+Verify `curl -sI https://learn.limmengty.com/sw.js` returns `Cache-Control: no-cache` so browsers fetch the kill-switch within one navigation.
 
 ## 4. Rotate the API token
 

@@ -16,6 +16,7 @@ import { OutdatedBanner } from '@/components/learn/OutdatedBanner';
 import { PageFooter } from '@/components/learn/PageFooter';
 import { MarkDone } from '@/components/learn/MarkDone';
 import { Illustration } from '@/components/illustrations';
+import { StandaloneBackBar } from '@/components/pwa/standalone-ui';
 
 export default async function Page({ params }: { params: Promise<{ slug?: string[] }> }) {
   const resolvedParams = await params;
@@ -36,6 +37,7 @@ export default async function Page({ params }: { params: Promise<{ slug?: string
         },
       }}
     >
+      <StandaloneBackBar />
       <OutdatedBanner verified={page.data.verified} status={page.data.status} />
       <div className="flex flex-col items-start gap-4 mb-2 sm:flex-row sm:justify-between">
         <div>

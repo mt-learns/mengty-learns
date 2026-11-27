@@ -9,6 +9,7 @@ next-env.d.ts
 tsconfig.tsbuildinfo
 public/cards.json
 public/card-ids.json
+public/sw-manifest.json
 qa/
 .lighthouseci/
 
