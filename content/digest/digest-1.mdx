@@ -1,0 +1,61 @@
+---
+title: "Digest #1: kube-proxy IPVS removal, Argo CD sync windows, OpenTofu 1.13.10, GitHub secret scanning, and Next.js security"
+date: "2026-11-27"
+summary: "Draft biweekly digest covering Kubernetes IPVS removal, Argo CD migration hooks under sync windows, OpenTofu v1.13.10, GitHub Slack secret scanning, and Next.js security auditing."
+status: draft
+items:
+  - title: "Scheduling the removal of the kube-proxy IPVS backend"
+    url: "https://kubernetes.io/blog/2026/11/16/ipvs-removal/"
+    why: "TODO(owner): Rewrite in your own voice — Kubernetes SIG Network plans to remove the deprecated ipvs backend in v1.40 and recommends migrating to nftables (GA since 1.33) or iptables."
+    action: "watch"
+  - title: "When a sync window closes: How Argo CD self-heal skipped the migration hook"
+    url: "https://www.cncf.io/blog/2026/11/20/when-a-sync-window-closes-how-argo-cd-self-heal-skipped-the-migration-hook/"
+    why: "TODO(owner): Rewrite in your own voice — Argo CD is on the Trial radar ring; this post shows how a deny sync window can leave a release looking synced without running its migration hook."
+    action: "try in a lab"
+  - title: "OpenTofu v1.13.10"
+    url: "https://github.com/opentofu/opentofu/releases/tag/v1.13.10"
+    why: "TODO(owner): Rewrite in your own voice — OpenTofu is on the Trial ring and used in labs/; v1.13.10 upgrades Go to 1.27.4 to address GO-2026-6859 alongside bug fixes."
+    action: "adopt"
+  - title: "Secret scanning reduces false positives for Slack"
+    url: "https://github.blog/changelog/2026-11-23-secret-scanning-reduces-false-positives-for-slack"
+    why: "TODO(owner): Rewrite in your own voice — GitHub narrowed its slack_incoming_webhook_url detector to exclude non-matching URLs, reducing alert noise."
+    action: "watch"
+  - title: "How we're using AI to make Next.js more secure"
+    url: "https://nextjs.org/blog/how-were-using-ai-to-make-nextjs-more-secure"
+    why: "TODO(owner): Rewrite in your own voice — This site runs Next.js 16; the Next.js team explains how proactive security bots drove 51 advisories in 2026 so far."
+    action: "adopt"
+---
+
+This is a **draft** digest generated from `node scripts/inbox.mjs --dry-run` (window: last 2 weeks ending 2026-11-27). It is excluded from the public `/digest` list and `/digest/rss.xml` in production while `status: draft`.
+
+## Entries
+
+### 1. Scheduling the removal of the kube-proxy IPVS backend
+- **What:** Kubernetes SIG Network plans to remove the deprecated `ipvs` kube-proxy backend in Kubernetes 1.40 and recommends migrating to `nftables` (GA in 1.33) or `iptables`.
+- **Why it matters to me:** `TODO(owner)` — Rewrite in your own voice before publishing.
+- **Action:** `watch`
+- **Source:** [Kubernetes Blog (2026-11-16)](https://kubernetes.io/blog/2026/11/16/ipvs-removal/)
+
+### 2. When a sync window closes: How Argo CD self-heal skipped the migration hook
+- **What:** A CNCF blog post walks through a case where a release pushed during an Argo CD deny sync window showed as synced while its migration hook did not run.
+- **Why it matters to me:** `TODO(owner)` — Rewrite in your own voice before publishing.
+- **Action:** `try in a lab`
+- **Source:** [CNCF Blog (2026-11-20)](https://www.cncf.io/blog/2026/11/20/when-a-sync-window-closes-how-argo-cd-self-heal-skipped-the-migration-hook/)
+
+### 3. OpenTofu v1.13.10
+- **What:** OpenTofu v1.13.10 upgrades the Go toolchain to 1.27.4 to address `GO-2026-6859` (an HTTP/1 server crash due to a `MaxBytesReader` header race) and includes bug fixes.
+- **Why it matters to me:** `TODO(owner)` — Rewrite in your own voice before publishing.
+- **Action:** `adopt`
+- **Source:** [OpenTofu Releases (2026-11-23)](https://github.com/opentofu/opentofu/releases/tag/v1.13.10)
+
+### 4. Secret scanning reduces false positives for Slack
+- **What:** GitHub secret scanning updated its `slack_incoming_webhook_url` detector to exclude URLs that do not use Slack's incoming-webhook URL format.
+- **Why it matters to me:** `TODO(owner)` — Rewrite in your own voice before publishing.
+- **Action:** `watch`
+- **Source:** [GitHub Changelog (2026-11-23)](https://github.blog/changelog/2026-11-23-secret-scanning-reduces-false-positives-for-slack)
+
+### 5. How we're using AI to make Next.js more secure
+- **What:** The Next.js team explains that proactive security bots and audits increased reported advisories (51 in 2026 as of publication, compared to 14 in 2025 and 6 in 2024).
+- **Why it matters to me:** `TODO(owner)` — Rewrite in your own voice before publishing.
+- **Action:** `adopt`
+- **Source:** [Next.js Blog (2026-11-17)](https://nextjs.org/blog/how-were-using-ai-to-make-nextjs-more-secure)
