@@ -1,0 +1,137 @@
+---
+title: "DevSecOps Pipeline: Automated Gates from Commit to Admission"
+description: How automated security gates—pre-commit secret scanning, SAST, SCA, IaC checks, Trivy, Cosign signing, and Kyverno admission—protect production without manual bottlenecks.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: concept
+type: explanation
+level: intermediate
+tags: [devsecops, security, trivy, cosign, kyverno, ci-cd]
+tested_with:
+  trivy: "0.76.2 (docs)"
+  kyverno: "1.20.0 (docs)"
+  cosign: "3.1.4 (docs)"
+cards:
+  - q: "Why should DevSecOps pipelines run secret scanning, linting, and SAST before container builds and DAST?"
+    a: "Running the cheapest, fastest checks first gives developers feedback in seconds and prevents wasting build minutes on commits that already violate policy."
+  - q: "Why is CI scanning alone insufficient without Kubernetes admission control (such as Kyverno)?"
+    a: "A CI gate only checks artifacts that went through the pipeline; admission control enforces signatures, digest pinning, and non-root policies at the cluster boundary for every deployment."
+  - q: "How do you prevent scan fatigue when enabling SCA and SAST gates in CI?"
+    a: "Fail builds only on actionable findings (for example Trivy --ignore-unfixed, curated SAST rulesets, and severity SLAs) rather than blocking on unfixable noise."
+  - q: "Why should security gate exceptions be stored as dated files rather than inline `# nosec` comments?"
+    a: "Dated exception files force a ticket reference and expiry date that CI can automatically fail when expired, preventing permanent silent suppressions."
+related:
+  - security/supply-chain
+  - ci-cd/pipeline-anatomy
+  - platform/security-baseline
+sources:
+  - title: "Trivy Docs: Vulnerability & Misconfiguration Scanning"
+    url: https://trivy.dev/docs/latest/
+  - title: "Sigstore Cosign Docs: Signing Containers"
+    url: https://docs.sigstore.dev/cosign/signing/signing_with_containers/
+  - title: "Kyverno Docs: Verify Images"
+    url: https://kyverno.io/docs/writing-policies/verify-images/
+  - title: "learn-devops: DevSecOps Cheat Sheet (author's notes)"
+    url: https://github.com/limme-learning/learn-devops/blob/main/cheatsheets/09-devsecops/README.md
+---
+
+## Intent
+
+<Intent>
+Turn security from a manual pre-release meeting into **automated, blocking code gates** ordered from fastest (pre-commit and SAST) to last-mile enforcement (Kyverno admission control and runtime detection).
+</Intent>
+
+## Problem
+
+Manual security sign-offs before release either slow delivery to a crawl or get bypassed under deadline pressure. Conversely, turning on every scanner in "warn-only" mode creates a wall of red alerts that everyone ignores.
+
+## Solution
+
+Layer controls at four checkpoints so each catches what the previous layer cannot see:
+
+1. **Pre-commit & fast PR checks (seconds):** `gitleaks` blocks secrets before they hit Git history; linters, SAST (Semgrep), SCA (`trivy fs` with `--ignore-unfixed`), and IaC scanners (`checkov` / `trivy config`) block high-severity issues early.
+2. **Build, SBOM & signing (minutes):** Build an immutable image, scan OS/app packages with `trivy image`, generate a CycloneDX SBOM (Syft), and sign the `sha256:` digest with **Cosign**.
+3. **Admission control (deploy time):** **Kyverno** verifies the Cosign signature, rejects `:latest` tags, and enforces non-root + resource limits before a Pod schedules—covering even out-of-band `kubectl` changes.
+4. **Runtime detection (continuous):** **Falco** and cluster audit logs watch for unexpected shells, privilege escalation, or anomalous egress and alert the SIEM.
+
+## Real-world analogy
+
+<Analogy>
+Think of airport security: your passport is checked at booking (**pre-commit**), luggage is X-rayed at the terminal (**SAST/SCA/Trivy**), boarding passes are stamped (**Cosign signature**), the gate agent scans the stamp before you board (**Kyverno admission**), and air marshals monitor in-flight behavior (**Falco runtime**).
+</Analogy>
+
+## ▶ Flow: watch it work
+
+<Flow
+  id="devsecops-pipeline"
+  title="DevSecOps Pipeline Gates: Commit to Admission"
+  nodes={[
+    { id: 'commit', label: 'Git & SAST', subtitle: 'gitleaks, SCA & IaC', icon: 'git', category: 'client', rank: 0, order: 0 },
+    { id: 'build', label: 'Build & Scan', subtitle: 'Trivy, SBOM, Cosign', icon: 'ci', category: 'service', rank: 1, order: 0 },
+    { id: 'registry', label: 'Artifact Registry', subtitle: 'Digest + signature', icon: 'db', category: 'data', rank: 2, order: 0 },
+    { id: 'kyverno', label: 'Admission Gate', subtitle: 'Kyverno verifies', icon: 'gateway', category: 'edge', rank: 3, order: 0 },
+    { id: 'runtime', label: 'Runtime Alerts', subtitle: 'Falco & SIEM logs', icon: 'pod', category: 'external', rank: 4, order: 0 },
+  ]}
+  steps={[
+    { edge: 'commit->build', title: 'Pre-commit & static gates', text: 'gitleaks blocks secrets; SAST, SCA, and IaC checks pass before building.' },
+    { edge: 'build->registry', title: 'Scan, sign, and push digest', text: 'Trivy scans the image, Syft writes an SBOM, and Cosign signs the digest.' },
+    { edge: 'registry->kyverno', title: 'Cluster checks at admission', text: 'Kyverno verifies the Cosign signature, digest pinning, and non-root policy.' },
+    { edge: 'kyverno->registry', title: 'Reject unsigned or mutable tags', text: 'Unsigned images or :latest tags are blocked before any Pod schedules.', kind: 'error' },
+    { edge: 'kyverno->runtime', title: 'Monitor running workloads', text: 'Falco and audit logs watch for unexpected shells or privilege escalation.' },
+  ]}
+/>
+
+## Structure
+
+Example CI image scan and signing commands:
+
+```bash
+# Scan filesystem dependencies and container image for actionable CVEs (not run)
+trivy fs --exit-code 1 --severity CRITICAL,HIGH --ignore-unfixed .
+trivy image --exit-code 1 --severity CRITICAL --ignore-unfixed app@sha256:...
+
+# Sign the immutable digest with Cosign (not run)
+cosign sign --yes registry.example.com/apps/payment@sha256:...
+```
+
+## When to use / when to avoid
+
+- **Use full gated DevSecOps** for production services, multi-team clusters, and regulated workloads.
+- **Avoid heavy blocking gates on day-one prototypes** if rulesets aren't tuned yet—start with secret scanning (`gitleaks`) + dependency scanning (`trivy fs --ignore-unfixed`), then add signing and admission policies before going live.
+
+## Pros / Cons
+
+- **Pros:** Fast developer feedback; tamper-evident supply chain (SBOM + Cosign); last-mile protection via Kyverno even if someone bypasses CI.
+- **Cons:** Requires tuning rulesets and maintaining an expiring exception workflow so false positives do not stall legitimate releases.
+
+## Relations
+
+- Extends [Supply-Chain Security](/docs/security/supply-chain) and [Platform Security Baseline](/docs/platform/security-baseline).
+- Integrates into [Pipeline Anatomy](/docs/ci-cd/pipeline-anatomy).
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "Why should a Kubernetes cluster run Kyverno admission policies even if Trivy and Cosign already run in CI?",
+    options: [
+      { label: "Admission control enforces signatures and Pod security at the cluster boundary, blocking any manual or out-of-band deployment that bypassed CI", description: "CI gates only protect builds that ran through CI; Kyverno protects the cluster itself.", correct: true },
+      { label: "Kyverno replaces Trivy by compiling source code inside the cluster", description: "Kyverno evaluates admission policies on Kubernetes manifests and signatures; it does not build or run SAST." },
+      { label: "Cosign signatures are only valid for 60 seconds after CI finishes", description: "Cosign signatures do not expire in 60 seconds; admission control is needed to verify them at deploy time." }
+    ]
+  },
+  {
+    question: "What flag helps prevent Trivy from blocking builds on CVEs that have no upstream patch available yet?",
+    options: [
+      { label: "--ignore-unfixed", description: "Filtering out unfixed CVEs keeps gates actionable and prevents scan fatigue.", correct: true },
+      { label: "--skip-db-update", description: "--skip-db-update skips downloading the vulnerability database, not unfixed CVEs." },
+      { label: "--exit-code 0", description: "--exit-code 0 disables blocking altogether instead of filtering unfixable findings." }
+    ]
+  }
+]} />
+
+## Sources
+- [Trivy Docs](https://trivy.dev/docs/latest/)
+- [Sigstore Cosign Docs: Signing Containers](https://docs.sigstore.dev/cosign/signing/signing_with_containers/)
+- [Kyverno Docs: Verify Images](https://kyverno.io/docs/writing-policies/verify-images/)
+- [learn-devops: DevSecOps Cheat Sheet (author's notes)](https://github.com/limme-learning/learn-devops/blob/main/cheatsheets/09-devsecops/README.md)

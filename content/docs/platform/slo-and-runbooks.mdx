@@ -1,0 +1,118 @@
+---
+title: "SLOs, Error Budgets & Actionable Runbooks"
+description: Define Service Level Indicators (SLIs), SLOs, and multi-window burn-rate alerts, and write runbooks that let on-call engineers mitigate incidents in minutes.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: how-to
+level: intermediate
+tags: [slo, sli, runbooks, alerting, incident-management, sre]
+tested_with:
+  prometheus: "3.16.0 (docs)"
+cards:
+  - q: "What is the relationship between an SLI, an SLO, and an error budget?"
+    a: "An SLI is the measured ratio (good events / valid events), an SLO is the target over a window (e.g. 99.9% over 30 days), and the error budget is the allowed unreliability (100% - SLO, e.g. 0.1% or ~43 minutes/month)."
+  - q: "Why do multi-window, multi-burn-rate SLO alerts beat static CPU or single-minute error thresholds?"
+    a: "Burn-rate alerts page only when the error budget is being consumed fast enough to threaten the SLO, catching both sudden outages (high burn) and slow leaks without paging on brief blips."
+  - q: "During an active incident, why should runbooks prioritize 'mitigate first, diagnose second'?"
+    a: "Restoring service (rollback, traffic shift, scaling, or circuit breaking) stops customer impact immediately; deep root-cause debugging can happen safely afterward."
+  - q: "What four roles keep an incident response organized?"
+    a: "Incident Commander (decides, does not debug), Ops Lead (executes mitigation), Comms (updates stakeholders/status page), and Scribe (records timeline)."
+related:
+  - process/incident-management
+  - foundations/observability
+  - platform/prometheus-grafana
+sources:
+  - title: "Google SRE Workbook: Alerting on SLOs"
+    url: https://sre.google/workbook/alerting-on-slos/
+  - title: "Google SRE Book: Service Level Objectives"
+    url: https://sre.google/sre-book/service-level-objectives/
+  - title: "learn-devops: Operations & Runbooks (author's notes)"
+    url: https://github.com/limme-learning/learn-devops/blob/main/docs/09-runbooks.md
+---
+
+## TL;DR
+Every production service needs **two artifacts before go-live**: an **SLO** (availability + latency SLIs with an error budget) and a **runbook** linked directly from every alert. Page on **SLO burn rate**, mitigate first (rollback or fail over) before root-causing, and run a blameless postmortem within 5 business days.
+
+## Why it exists
+Alerts like "CPU > 80%" or "Pod restarted once" train engineers to ignore pages. Meanwhile, an alert without a runbook leaves the 02:00 AM on-call engineer guessing which command checks database locks or how to roll back safely.
+
+## Mental model
+
+### 1. SLI → SLO → Error Budget
+- **Availability SLI:** `good_requests / total_valid_requests` (excluding client 4xx errors where appropriate).
+- **Latency SLI:** `requests_faster_than_threshold / total_valid_requests` (e.g. `<= 300ms` at p99).
+- **30-day 99.9% SLO** = **43.2 minutes** of allowed downtime per 30 days. When the budget hits zero, freeze risky feature launches and focus on reliability work.
+
+### 2. Multi-window burn-rate alerting
+- **Fast burn (page immediately):** Consuming > 2% of the 30-day budget in 1 hour (`14.4x` burn rate over `1h` AND `5m`) → severe outage.
+- **Slow burn (ticket / next-day):** Consuming > 5% of the budget in 6 hours (`6x` burn rate) or `1x–3x` over days → silent degradation.
+
+### 3. Runbook anatomy (one page, copy-pasteable)
+Every runbook linked via `annotations.runbook_url` should answer five things in under 60 seconds:
+1. **Impact & severity** (what users feel, tier/SLA).
+2. **Triage commands** (exact `kubectl` / PromQL / KQL queries to confirm the symptom).
+3. **Mitigation steps** (rollback digest, drain node, scale replicas, toggle feature flag).
+4. **Verification** (how to confirm the SLI recovered).
+5. **Escalation** (who to page next if mitigation fails).
+
+## Do it
+
+Example Prometheus multi-window burn-rate alert linking to a runbook:
+
+```yaml
+# Multi-window fast-burn SLO alert (not run)
+groups:
+  - name: payment-slo
+    rules:
+      - alert: PaymentErrorBudgetFastBurn
+        expr: |
+          (
+            job:http_errors:ratio_rate5m{service="payment"} > (14.4 * 0.001)
+            and
+            job:http_errors:ratio_rate1h{service="payment"} > (14.4 * 0.001)
+          )
+        for: 2m
+        labels:
+          severity: page
+        annotations:
+          summary: "Payment service burning 99.9% error budget at 14.4x"
+          runbook_url: "https://runbooks.internal.example/payment/high-error-rate"
+```
+
+## Gotchas
+- **100% SLO targets:** Demanding 100% leaves zero error budget for deployments, maintenance, or hardware failures—use 99.9% or 99.95% unless you have multi-region active-active funding.
+- **IC doing the debugging:** In a major incident, if the Incident Commander also runs `kubectl` commands, nobody tracks the timeline, stakeholder updates, or escalation clocks.
+- **Stale runbooks:** A runbook that references a retired namespace or old CLI flags fails during an incident; verify runbooks during quarterly game days.
+
+## Production checklist
+- [ ] Every tier-0/tier-1 service has written availability and latency SLIs/SLOs.
+- [ ] Paging alerts use multi-window burn rates and include a valid `runbook_url`.
+- [ ] Incident roles (IC, Ops, Comms, Scribe) and break-glass access rules are documented.
+- [ ] Blameless postmortems happen within 5 business days with tracked action items.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "Why does the Google SRE Workbook recommend checking BOTH a short window (e.g. 5m) and a longer window (e.g. 1h) in a burn-rate alert?",
+    options: [
+      { label: "It ensures the alert fires quickly on a real outage while resetting promptly once the issue is mitigated, avoiding false pages on brief spikes", description: "The long window filters out transient 1-minute blips, while the short window lets the alert resolve quickly after a fix.", correct: true },
+      { label: "Prometheus cannot evaluate single rate() expressions in alerts", description: "Prometheus evaluates single expressions; dual windows are an alert-quality design." },
+      { label: "It doubles the error budget automatically", description: "Error budget size is fixed by the SLO target." }
+    ]
+  },
+  {
+    question: "What is the primary job of the Incident Commander (IC) during a SEV1 outage?",
+    options: [
+      { label: "Coordinate roles, make mitigation decisions, and keep timelines/escalations moving without getting pulled into hands-on debugging", description: "Separating coordination from hands-on Ops prevents tunnel vision.", correct: true },
+      { label: "Write the root-cause fix and push directly to main", description: "Code fixes happen after mitigation and still follow review/CI." },
+      { label: "Silence all alerts until the database recovers", description: "Silencing alerts hides ongoing impact." }
+    ]
+  }
+]} />
+
+## Sources
+- [Google SRE Workbook: Alerting on SLOs](https://sre.google/workbook/alerting-on-slos/)
+- [Google SRE Book: Service Level Objectives](https://sre.google/sre-book/service-level-objectives/)
+- [learn-devops: Operations & Runbooks (author's notes)](https://github.com/limme-learning/learn-devops/blob/main/docs/09-runbooks.md)

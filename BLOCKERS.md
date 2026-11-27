@@ -9,3 +9,11 @@
    - **Needed in `components/illustrations/types.ts` & `SectionIcon.tsx`:** Add `'leadership'` to `SECTION_ICON_NAMES`, `DEFAULT_TITLES` (`'Leadership section icon'`), `SECTION_TINTS`, and render an original soft 3D clay icon.
    - **Needed in `lib/home-data.ts`:** Add `leadership` to `SECTION_COPY` (`Title: 'Leadership'`, `Blurb: 'Transitioning to team lead, clarity, delegation, feedback, and engineering health.'`) and rebalance the home section grid (13 cards total with `leadership`, `frontend`, and `platform`).
    - **Needed in `content/docs/index.mdx` and `content/docs/leadership/meta.json`:** Once `<SectionIcon name="leadership" />` exists, add `icon={<SectionIcon name="leadership" size={24} decorative />}` to the Leadership `<Card>` in `content/docs/index.mdx` and `"icon": "leadership"` to `content/docs/leadership/meta.json`.
+
+# Content Wave 11 (branch `content-wave11`)
+
+7. **Platform tools section icon (`components/illustrations/`) & home grid (`lib/home-data.ts`):**
+   - `components/illustrations/` and `lib/home-data.ts` are outside Wave 11's allowed scope.
+   - **Needed in `components/illustrations/types.ts` & `SectionIcon.tsx`:** Add `'platform'` to `SECTION_ICON_NAMES`, `DEFAULT_TITLES` (`'Platform tools section icon'`), `SECTION_TINTS`, and render a soft 3D clay icon (e.g., server rack / control-plane dial in a squircle).
+   - **Needed in `lib/home-data.ts`:** Add `platform` to `SECTION_COPY` (`Title: 'Platform tools'`, `Blurb: 'Ansible, Nginx, API gateways, Vault, Prometheus/Grafana, ELK, and DevSecOps.'`) and re-balance the home grid for 13 cards.
+   - **Needed in `content/docs/index.mdx`:** Once `<SectionIcon name="platform" />` exists, add `icon={<SectionIcon name="platform" size={24} decorative />}` to the Platform tools `<Card>`.

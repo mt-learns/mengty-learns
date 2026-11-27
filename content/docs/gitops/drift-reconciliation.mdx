@@ -19,6 +19,8 @@ cards:
     a: "When drift is detected, the GitOps agent automatically reapplies the Git manifests to overwrite the manual cluster change."
   - q: "Why can manual kubectl edit during an incident backfire in a self-healing GitOps cluster?"
     a: "The GitOps agent will revert the manual hotfix back to Git's state on the next reconciliation cycle unless you commit the fix to Git (or temporarily pause auto-sync)."
+  - q: "Why do many production Argo CD Applications set `selfHeal: true` while keeping `prune: false`?"
+    a: "selfHeal: true automatically reverts out-of-band drift, whereas prune: false prevents a broken Kustomize/Helm render or accidental file deletion in Git from immediately deleting live production resources."
 related:
   - gitops/what-is-gitops
   - kubernetes/kubectl-apply
@@ -29,6 +31,8 @@ sources:
     url: https://fluxcd.io/flux/components/kustomize/kustomizations/
   - title: "OpenGitOps: Principles of GitOps"
     url: https://opengitops.dev/
+  - title: "learn-devops: CI/CD & GitOps Cheat Sheet (author's notes)"
+    url: https://github.com/limme-learning/learn-devops/blob/main/cheatsheets/10-cicd-gitops/README.md
 ---
 
 ## TL;DR

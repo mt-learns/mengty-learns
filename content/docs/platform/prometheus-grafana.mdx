@@ -1,0 +1,123 @@
+---
+title: Prometheus & Grafana Cheatsheet
+description: Essential PromQL queries, metric types (Counter, Gauge, Histogram), cardinality traps, relabeling order, and SLO burn-rate alerting.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: cheatsheet
+type: reference
+level: intermediate
+tags: [prometheus, grafana, promql, observability, alerting]
+tested_with:
+  prometheus: "3.16.0 (docs)"
+  grafana: "13.3.2 (docs)"
+cards:
+  - q: "Why should you write `sum(rate(http_requests_total[5m]))` instead of `rate(sum(http_requests_total)[5m:])`?"
+    a: "Applying rate() before sum() handles counter resets per series; summing counters first hides individual pod restarts and breaks rate calculation."
+  - q: "Why should you never put unbounded values like user IDs or full URLs into Prometheus metric labels?"
+    a: "Every unique label-value combination creates a new time series in memory; high cardinality exhausts Prometheus RAM and slows all queries."
+  - q: "What is the difference between `relabel_configs` and `metric_relabel_configs` in Prometheus?"
+    a: "`relabel_configs` runs before scraping to filter targets or rewrite target labels, whereas `metric_relabel_configs` runs after scraping to drop or modify ingested samples."
+  - q: "Why are Prometheus Histograms preferred over Summaries for service latency?"
+    a: "Histograms expose `_bucket` counters that can be aggregated across multiple replicas with `histogram_quantile()`, whereas Summaries calculate quantiles client-side and cannot be summed across pods."
+related:
+  - foundations/observability
+  - kubernetes/probes
+  - platform/slo-and-runbooks
+sources:
+  - title: "Prometheus Docs: Querying Basics & Functions"
+    url: https://prometheus.io/docs/prometheus/latest/querying/basics/
+  - title: "Prometheus Docs: Metric Types (Counter, Gauge, Histogram, Summary)"
+    url: https://prometheus.io/docs/concepts/metric_types/
+  - title: "Grafana Docs: Alerting & Provisioning"
+    url: https://grafana.com/docs/grafana/latest/alerting/
+  - title: "learn-devops: Grafana & Prometheus Cheat Sheet (author's notes)"
+    url: https://github.com/limme-learning/learn-devops/blob/main/cheatsheets/07-grafana-prometheus/README.md
+---
+
+## TL;DR
+Prometheus **pulls** `/metrics` endpoints and stores time series keyed by metric name plus label set. Use **Counters** with `rate()`, **Histograms** with `histogram_quantile()`, keep label cardinality bounded (never user IDs or raw paths), and always compute `rate()` *before* `sum()`.
+
+## Metric types & PromQL
+
+| Type | Behavior | Query pattern |
+|---|---|---|
+| **Counter** | Monotonic, resets to `0` on restart | `rate(m[5m])` or `increase(m[5m])` |
+| **Gauge** | Arbitrary up/down value | Raw value, `avg_over_time(m[5m])` |
+| **Histogram** | `_bucket`, `_sum`, `_count` | `histogram_quantile(0.99, sum by (le) (rate(m_bucket[5m])))` |
+| **Summary** | Client-side quantiles | Cannot aggregate across instances |
+
+```text
+# Error ratio across all instances (rate BEFORE sum)
+sum(rate(http_requests_total{status=~"5.."}[5m]))
+  / sum(rate(http_requests_total[5m]))
+
+# p99 request latency per service from a Histogram
+histogram_quantile(
+  0.99,
+  sum by (le, service) (rate(http_request_duration_seconds_bucket[5m]))
+)
+
+# Detect missing targets or silent metric disappearance
+up == 0
+absent(up{job="payment-service"})
+```
+
+<Tip>
+  Keep your `rate()` range window at least **4× the scrape interval** (for a 15s scrape interval, use `[1m]` minimum or `[5m]` in alerts) so temporary scrape jitter never produces empty graphs.
+</Tip>
+
+## Relabeling & cardinality control
+
+```yaml
+# Prometheus scrape config snippet (not run)
+scrape_configs:
+  - job_name: kubernetes-pods
+    kubernetes_sd_configs:
+      - role: pod
+    relabel_configs:           # runs BEFORE scrape (target discovery)
+      - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+        action: keep
+        regex: "true"
+    metric_relabel_configs:    # runs AFTER scrape (drop noisy series)
+      - source_labels: [__name__]
+        action: drop
+        regex: "go_gc_duration_seconds.*"
+```
+
+## Gotchas
+- **High-cardinality labels:** Putting `user_id`, `request_id`, or unnormalized paths (`/users/12345` instead of `/users/:id`) into labels multiplies time series exponentially and OOMs Prometheus.
+- **Using `irate()` in alerts:** `irate()` only inspects the last two samples; use `rate()` for alerting and dashboards so brief spikes do not page on noise.
+- **Missing `absent()` alerts:** If a batch job or exporter stops reporting completely, threshold alerts (`error_rate > 0.05`) never fire because the series is gone.
+
+## Production checklist
+- [ ] All HTTP/RPC latency metrics use **Histograms** with normalized route templates (`/orders/:id`).
+- [ ] Recording rules pre-compute expensive `histogram_quantile` and error-ratio expressions used by dashboards.
+- [ ] Alerts include a `runbook_url` annotation and page on **symptom/SLO burn rate**, not raw CPU spikes.
+- [ ] Grafana dashboards and datasources are provisioned as code (Git + Terraform/ConfigMaps), not hand-edited in the UI.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "You want to compute the p95 latency across 10 replicas of an API service. Which metric type and PromQL pattern works?",
+    options: [
+      { label: "A Histogram metric queried with histogram_quantile(0.95, sum by (le) (rate(duration_seconds_bucket[5m])))", description: "Histogram buckets are cumulative counters that can be summed across pods before computing the quantile.", correct: true },
+      { label: "A Summary metric averaged with avg(duration_seconds{quantile=\"0.95\"})", description: "Averaging client-side quantiles across replicas is mathematically invalid." },
+      { label: "A Counter metric divided by request count", description: "Dividing sum by count gives the mean, not the p95." }
+    ]
+  },
+  {
+    question: "Which relabeling stage drops an unwanted high-cardinality metric name after Prometheus scrapes a target?",
+    options: [
+      { label: "metric_relabel_configs", description: "metric_relabel_configs runs after the scrape and before ingestion into the TSDB.", correct: true },
+      { label: "relabel_configs", description: "relabel_configs runs before scraping on target discovery metadata, not scraped metric names." },
+      { label: "remote_write", description: "remote_write forwards samples to long-term storage after ingestion." }
+    ]
+  }
+]} />
+
+## Sources
+- [Prometheus Docs: Querying Basics](https://prometheus.io/docs/prometheus/latest/querying/basics/)
+- [Prometheus Docs: Metric Types](https://prometheus.io/docs/concepts/metric_types/)
+- [Grafana Docs: Alerting](https://grafana.com/docs/grafana/latest/alerting/)
+- [learn-devops: Grafana & Prometheus Cheat Sheet (author's notes)](https://github.com/limme-learning/learn-devops/blob/main/cheatsheets/07-grafana-prometheus/README.md)
