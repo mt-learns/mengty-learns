@@ -31,6 +31,8 @@ export interface GroupBox {
   y: number;
   width: number;
   height: number;
+  /** Reserved top strip height for the group label (28px for 1 line, +15px per wrapped line). */
+  labelHeight?: number;
 }
 
 export interface EdgeRoute {

@@ -232,13 +232,13 @@ function assertLayoutInvariants(
     }
   }
 
-  // 3. No node-group-label overlaps (top 28px of group box is reserved for label)
+  // 3. No node-group-label overlaps (top strip of group box is reserved for label)
   for (const group of layoutResult.groups) {
     const labelRect = {
       x: group.x,
       y: group.y,
       width: group.width,
-      height: 28,
+      height: group.labelHeight ?? GROUP_LABEL_HEIGHT,
     };
     for (const box of boxes) {
       expect(
@@ -410,7 +410,7 @@ function assertEdgeLabelInvariants(
     x: g.x,
     y: g.y,
     width: g.width,
-    height: GROUP_LABEL_HEIGHT,
+    height: g.labelHeight ?? GROUP_LABEL_HEIGHT,
   }));
   const badges = new Map<string, { x: number; y: number; width: number; height: number }>();
   for (const route of layoutResult.edges) {
