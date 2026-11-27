@@ -81,17 +81,18 @@ Think of a **locked shipping container** (Aggregate) with a **manifest clerk** (
   title="Command → Aggregate Invariant → Domain Event"
   nodes={[
     { id: 'cmd', label: 'PlaceOrderCmd', subtitle: 'Application input', icon: 'gateway', category: 'edge', rank: 0, order: 0 },
-    { id: 'uc', label: 'PlaceOrderUC', subtitle: 'Loads aggregate', icon: 'service', category: 'service', rank: 1, order: 0 },
+    { id: 'evt', label: 'OrderPlaced', subtitle: 'Domain event', icon: 'queue', category: 'external', rank: 0, order: 1 },
+    { id: 'uc', label: 'PlaceOrderUC', subtitle: 'Orchestrates flow', icon: 'service', category: 'service', rank: 1, order: 0 },
     { id: 'agg', label: 'Order Aggregate', subtitle: 'Checks invariants', icon: 'class', category: 'abstraction', rank: 2, order: 0 },
-    { id: 'repo', label: 'OrderRepo', subtitle: 'Persists unit', icon: 'db', category: 'data', rank: 3, order: 0 },
-    { id: 'evt', label: 'OrderPlaced', subtitle: 'Domain event', icon: 'queue', category: 'external', rank: 3, order: 1 },
+    { id: 'repo', label: 'OrderRepo', subtitle: 'Persists unit', icon: 'db', category: 'data', rank: 2, order: 1 },
   ]}
   steps={[
     { edge: 'cmd->uc', title: 'Dispatch PlaceOrder command', text: 'Controller sends PlaceOrderCommand with customerId and line items.' },
-    { edge: 'uc->agg', title: 'Create & validate Order', text: 'Order aggregate checks Money >= 0 and at least one OrderLine exists.' },
-    { edge: 'agg->repo', title: 'Save aggregate atomically', text: 'OrderRepository persists Order and its OrderLines in one transaction.' },
-    { edge: 'repo->agg', title: 'Confirm persistence', text: 'Repository returns the saved Order aggregate.', kind: 'response' },
-    { edge: 'agg->evt', title: 'Emit OrderPlaced event', text: 'Order emits OrderPlaced so Billing/Shipping react without tight coupling.' },
+    { edge: 'uc->agg', title: 'Create & validate Order', text: 'Use case invokes Order aggregate, which enforces Money >= 0 and non-empty items.' },
+    { edge: 'agg->uc', title: 'Return validated aggregate', text: 'Order returns the validated aggregate and recorded OrderPlaced event.', kind: 'response' },
+    { edge: 'uc->repo', title: 'Save aggregate atomically', text: 'Use case passes Order to OrderRepository to persist in one transaction.' },
+    { edge: 'repo->uc', title: 'Confirm persistence', text: 'Repository confirms the Order aggregate is committed.', kind: 'response' },
+    { edge: 'uc->evt', title: 'Publish OrderPlaced event', text: 'Use case publishes OrderPlaced after commit so Billing/Shipping react.' },
     { edge: 'uc->cmd', title: 'Return OrderId', text: 'Use case returns the created OrderId to the caller.', kind: 'response' },
   ]}
 />
