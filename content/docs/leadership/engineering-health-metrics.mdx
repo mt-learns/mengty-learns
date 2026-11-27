@@ -1,0 +1,105 @@
+---
+title: "Engineering Health and Metrics"
+description: How leads measure delivery flow, reliability, quality, and team sustainability without weaponizing metrics against individual engineers.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: explanation
+level: intermediate
+tags: [leadership, metrics, dora, engineering-health, sustainability]
+tested_with:
+  dora_metrics: "DORA Five-Metric Model (2024)"
+cards:
+  - q: "What two dimensions do DORA's software delivery metrics balance?"
+    a: "Throughput (deployment frequency, change lead time) and Stability (change failure rate, failed deployment recovery time, and deployment rework rate)."
+  - q: "Why should engineering health metrics never be used to rank or punish individual developers?"
+    a: "Metrics measure system bottlenecks (review queues, flaky CI, oversized PRs); weaponizing them causes gaming (splitting trivial PRs, hiding bugs)."
+  - q: "What are common non-DORA signals of declining team health?"
+    a: "Rising work-in-progress (WIP) age, slow PR review turnaround, high on-call interruption load, and knowledge trapped in a single person."
+  - q: "How should a lead run a metric-driven process change?"
+    a: "Pick one bottleneck, record a baseline, run a time-boxed experiment with a clear hypothesis, and check whether the trend improved."
+related:
+  - process/dor-dod-quality-gates
+  - process/retrospectives
+  - leadership/operating-rhythm
+sources:
+  - title: "DORA: Software Delivery and Operational Performance"
+    url: https://dora.dev/research/
+  - title: "DORA Guides: Four Keys / Five Metrics"
+    url: https://dora.dev/guides/dora-metrics-four-keys/
+  - title: "key-learning: Team Productivity and Engineering Health (author's notes)"
+    url: https://github.com/limme-learning/key-learning/blob/main/technical-management-playbook/13-team-productivity-and-engineering-health.md
+  - title: "key-learning: Data-Driven Improvement (author's notes)"
+    url: https://github.com/limme-learning/key-learning/blob/main/management-playbook/13-data-driven-improvement.md
+---
+
+## TL;DR
+Healthy engineering productivity means **sustainable delivery with low rework**, not maximum individual busyness. Pair **DORA throughput and stability trends** with **team-health signals** (WIP age, PR review time, on-call load, bus factor), and use them strictly to fix **system bottlenecks**—never to grade individuals.
+
+## Why it exists
+When teams only measure "tickets closed" or "lines of code," they reward oversized PRs, skipped tests, and burnout. Good metrics reveal where work actually stalls—such as 3-day PR review queues, flaky CI pipelines, or single-person knowledge silos.
+
+## Mental model: Six balanced signal areas
+
+| Area | Signals to watch | What it reveals |
+|---|---|---|
+| **Throughput (DORA)** | Deployment frequency, change lead time | How fast and smoothly small changes reach users |
+| **Stability (DORA)** | Change failure rate, recovery time, rework rate | Whether speed is coming at the cost of outages or rollbacks |
+| **Flow** | WIP age, PR review turnaround, blocked time | Where work queues up between coding and merge |
+| **Quality** | Escaped defects, flaky tests, build failure rate | Strength of automated gates (`process/dor-dod-quality-gates`) |
+| **Team health** | Unplanned interruptions, on-call pages, bus factor | Whether the current pace is sustainable |
+| **Customer value** | Feature adoption, task completion, support volume | Whether shipped code solves real user problems |
+
+## Do it: Run one improvement experiment at a time
+
+```markdown
+# Improvement Experiment: Cut PR Review Wait Time
+
+- **Baseline:** Median time from PR open to first review is 26 hours.
+- **Hypothesis:** Adding a 2-hour review SLA for PRs under 300 lines will cut cycle time without hurting quality.
+- **Experiment:** For 2 sprints, split PRs > 400 lines and assign a review buddy at stand-up.
+- **Result & Decision:** Median review wait dropped to 4 hours; adopt permanently.
+```
+
+### High-leverage fixes for common bottlenecks
+- **Too much WIP:** Limit active tickets per person and unblock aging items before starting new ones.
+- **Knowledge silos:** Ensure at least two engineers can deploy, debug, and support every critical service via pairing and rotations.
+- **Meeting fragmentation:** Protect uninterrupted 2-hour maker blocks and move routine status async.
+
+## Gotchas
+- **Goodhart's Law:** The moment "PRs merged" or "deployment count" becomes an individual KPI, people game the number instead of helping teammates.
+- **Optimizing throughput alone:** DORA research shows fast deployments without test automation and maintainability only accelerate rework.
+- **Changing five things at once:** Fix one bottleneck per sprint so you can tell which change actually helped.
+
+## Production checklist
+- [ ] Metrics are reviewed as **team trends** monthly, never as individual scorecards.
+- [ ] Throughput metrics are always paired with **stability** and **team-health** signals.
+- [ ] Critical services have a bus factor ≥ 2 (two people who can deploy and debug).
+- [ ] Every metric-driven change is run as a time-boxed experiment with a baseline.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "A team's deployment frequency doubled this quarter, but rollbacks and hotfixes tripled. Which DORA dimension is warning you?",
+    options: [
+      { label: "Stability (change failure rate and deployment rework rate)", description: "DORA pairs throughput with stability so speed gains don't hide rising production failures.", correct: true },
+      { label: "Story point velocity", description: "Story points measure internal estimation effort, not production stability." },
+      { label: "Lines of code per commit", description: "LOC is not a DORA metric and does not measure reliability." }
+    ]
+  },
+  {
+    question: "Why should a Team Lead avoid ranking engineers by number of PRs merged or tickets closed?",
+    options: [
+      { label: "It incentivizes gaming the metric and discourages high-leverage work like mentoring, reviews, and unblocking peers", description: "Metrics should expose system bottlenecks, not pit teammates against each other.", correct: true },
+      { label: "Because GitHub does not track PR counts", description: "Tools can count PRs easily; the problem is behavioral distortion, not tooling." },
+      { label: "Because PR count is identical to MTTR", description: "PR count measures activity volume, not incident recovery time." }
+    ]
+  }
+]} />
+
+## Sources
+- [DORA: Software Delivery and Operational Performance](https://dora.dev/research/)
+- [DORA Guides: DORA Metrics](https://dora.dev/guides/dora-metrics-four-keys/)
+- [key-learning: Team Productivity and Engineering Health (author's notes)](https://github.com/limme-learning/key-learning/blob/main/technical-management-playbook/13-team-productivity-and-engineering-health.md)
+- [key-learning: Data-Driven Improvement (author's notes)](https://github.com/limme-learning/key-learning/blob/main/management-playbook/13-data-driven-improvement.md)
