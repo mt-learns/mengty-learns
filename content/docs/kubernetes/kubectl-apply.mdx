@@ -107,7 +107,7 @@ You can validate a Deployment manifest locally with `kubectl apply --dry-run=cli
 # Client-side validation without mutating a cluster (not run against a live cluster)
 kubectl apply -f deployment.yaml --dry-run=client -o yaml
 
-# Apply and watch the reconciliation stages
+# Apply and watch the reconciliation stages (not run against a live cluster)
 kubectl apply -f deployment.yaml
 kubectl get deployment,rs,pods -w
 ```
