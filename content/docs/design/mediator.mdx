@@ -1,0 +1,277 @@
+---
+title: Mediator Pattern
+description: Centralize complex many-to-many communication between components behind a single coordinator so colleagues stay decoupled.
+kind: concept
+type: explanation
+level: intermediate
+tags: [design-patterns, mediator, behavioral, typescript, decoupling]
+tested_with:
+  typescript: "7.0.2"
+status: stable
+updated: "2026-11-27"
+verified: "2026-11-27"
+cards:
+  - q: "What problem does the Mediator pattern solve?"
+    a: "It replaces a tangled many-to-many web of direct references between components with a central coordinator, reducing coupling from O(N^2) connections to O(N)."
+  - q: "In the Mediator pattern, do colleague components hold references to each other?"
+    a: "No. Colleagues only know about the Mediator interface and notify it when something happens; the Mediator decides which other colleagues to invoke."
+  - q: "What is the biggest anti-pattern risk when using Mediator?"
+    a: "Letting the Mediator absorb domain rules from every colleague until it becomes an untestable God Object."
+  - q: "How does Mediator differ from Observer?"
+    a: "Observer broadcasts one-to-many events without knowing subscribers, whereas Mediator explicitly orchestrates multi-step coordination among specific colleagues."
+related:
+  - design/observer
+  - design/anti-patterns
+  - architecture/queues-async
+sources:
+  - title: "Refactoring.Guru: Mediator Pattern"
+    url: https://refactoring.guru/design-patterns/mediator
+  - title: "TypeScript Handbook: Classes & Interfaces"
+    url: https://www.typescriptlang.org/docs/handbook/2/classes.html
+  - title: "key-learning: mediator pattern (author's notes)"
+    url: https://github.com/limme-learning/key-learning/blob/main/software-design/03-design-patterns/04-mediator-pattern.md
+---
+
+## TL;DR
+The **Mediator** pattern replaces a tangled web of direct component-to-component calls with a single **coordinator** that orchestrates the workflow while keeping domain rules inside each component.
+
+## 1. Intent
+
+<Intent>
+Reduce chaotic dependencies between collaborating objects by forcing them to communicate only through a central **Mediator** object.
+</Intent>
+
+## 2. Problem
+
+Imagine a release-promotion workflow in a platform service. Four components need to cooperate: `ArtifactRegistry` (verifies image digest), `HealthProbe` (checks staging readiness), `TrafficRouter` (shifts production weight), and `IncidentNotifier` (posts to chat).
+
+If each component calls the others directly—`HealthProbe` tells `TrafficRouter` to shift traffic and tells `IncidentNotifier` to alert on failure, while `TrafficRouter` asks `ArtifactRegistry` for metadata—every component becomes coupled to three others. Changing one signature breaks callers across the module, and testing any component requires mocking its neighbors.
+
+<Diagram
+  id="mediator-problem"
+  ariaLabel="Four components calling each other directly in a tangled mesh"
+  caption="Without a Mediator, N components form up to N*(N-1) direct dependencies."
+  nodes={[
+    { id: 'reg', label: 'ArtifactRegistry', icon: 'db', category: 'data', rank: 0, order: 0, variant: 'problem' },
+    { id: 'probe', label: 'HealthProbe', icon: 'service', category: 'service', rank: 0, order: 1, variant: 'problem' },
+    { id: 'router', label: 'TrafficRouter', icon: 'gateway', category: 'edge', rank: 1, order: 0, variant: 'problem' },
+    { id: 'notify', label: 'Notifier', icon: 'queue', category: 'external', rank: 1, order: 1, variant: 'problem' },
+  ]}
+  edges={[
+    { from: 'reg', to: 'probe' },
+    { from: 'probe', to: 'router' },
+    { from: 'router', to: 'notify' },
+    { from: 'probe', to: 'notify' },
+    { from: 'router', to: 'reg' },
+  ]}
+/>
+
+## 3. Solution
+
+Extract the coordination logic into a **Mediator** (for example, `ReleaseMediator`). Each colleague component only depends on a minimal `Mediator` interface—or is invoked directly by the Mediator—and never holds references to other colleagues.
+
+Colleagues stay focused on their own responsibility (verifying a digest, checking `/healthz`, shifting traffic, sending a message), while the Mediator owns only the sequence and error handling between them.
+
+## 4. Real-world analogy
+
+<Analogy>
+Think of an **air traffic control tower**. Aircraft do not negotiate landing slots directly with every other plane in the sky—that would be a catastrophic many-to-many protocol. Instead, each pilot communicates only with the tower (the Mediator), which sequences takeoffs and landings safely.
+</Analogy>
+
+## 5. Flow: watch it work
+
+<Flow
+  id="mediator"
+  title="ReleaseMediator Coordinating Deployment Steps"
+  nodes={[
+    { id: 'cli', label: 'Deploy CLI', subtitle: 'Triggers release', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'med', label: 'ReleaseMediator', subtitle: 'Orchestrator', icon: 'service', category: 'service', rank: 1, order: 0 },
+    { id: 'probe', label: 'HealthProbe', subtitle: 'Check staging', icon: 'pod', category: 'concrete', rank: 2, order: 0 },
+    { id: 'router', label: 'TrafficRouter', subtitle: 'Shift traffic', icon: 'gateway', category: 'edge', rank: 2, order: 1 },
+  ]}
+  steps={[
+    { edge: 'cli->med', title: 'Request promotion', text: 'Deploy CLI asks ReleaseMediator to promote build v2.4.1' },
+    { edge: 'med->probe', title: 'Check staging health', text: 'Mediator asks HealthProbe whether staging pods pass readiness' },
+    { edge: 'probe->med', title: 'Staging healthy', text: 'HealthProbe reports 100% ready endpoints', kind: 'response' },
+    { edge: 'med->router', title: 'Shift production traffic', text: 'Mediator instructs TrafficRouter to route 100% to v2.4.1' },
+    { edge: 'router->med', title: 'Traffic shifted', text: 'TrafficRouter confirms route weight update', kind: 'response' },
+    { edge: 'med->cli', title: 'Report release complete', text: 'ReleaseMediator returns promotion summary to Deploy CLI', kind: 'response' },
+  ]}
+/>
+
+## 6. Structure
+
+<Diagram
+  id="mediator-structure"
+  ariaLabel="Mediator interface decouples concrete colleagues from each other"
+  caption="Colleagues depend only on the Mediator abstraction, never on sibling colleagues."
+  nodes={[
+    { id: 'iface', label: 'ReleaseMediator', subtitle: '«interface»', icon: 'interface', category: 'abstraction', rank: 0, order: 0 },
+    { id: 'impl', label: 'CanaryMediator', subtitle: 'Coordinates flow', icon: 'service', category: 'service', rank: 1, order: 0 },
+    { id: 'c1', label: 'HealthProbe', subtitle: 'Colleague A', icon: 'pod', category: 'concrete', rank: 2, order: 0 },
+    { id: 'c2', label: 'TrafficRouter', subtitle: 'Colleague B', icon: 'gateway', category: 'edge', rank: 2, order: 1 },
+  ]}
+  edges={[
+    { from: 'impl', to: 'iface', kind: 'response', dashed: true },
+    { from: 'impl', to: 'c1', label: 'checks' },
+    { from: 'impl', to: 'c2', label: 'routes' },
+  ]}
+/>
+
+## 7. Code
+
+```ts
+export interface Mediator {
+  notify(sender: string, event: 'staging_ready' | 'staging_failed'): Promise<void>;
+}
+
+export class HealthProbe {
+  constructor(private mediator: Mediator) {}
+
+  async check(releaseId: string, healthy: boolean): Promise<void> {
+    if (healthy) {
+      await this.mediator.notify('HealthProbe', 'staging_ready');
+    } else {
+      await this.mediator.notify('HealthProbe', 'staging_failed');
+    }
+  }
+}
+
+export class TrafficRouter {
+  async shiftTo(weight: number): Promise<string> {
+    return `Traffic shifted to ${weight}%`;
+  }
+}
+
+export class AlertNotifier {
+  async send(message: string): Promise<void> {
+    console.log(`[ALERT] ${message}`);
+  }
+}
+
+export class ReleaseMediator implements Mediator {
+  constructor(
+    private router: TrafficRouter,
+    private notifier: AlertNotifier,
+  ) {}
+
+  async notify(sender: string, event: 'staging_ready' | 'staging_failed'): Promise<void> {
+    if (sender === 'HealthProbe' && event === 'staging_ready') {
+      const status = await this.router.shiftTo(100);
+      await this.notifier.send(status);
+      return;
+    }
+
+    if (event === 'staging_failed') {
+      await this.router.shiftTo(0);
+      await this.notifier.send('Promotion aborted: staging probe failed');
+    }
+  }
+}
+```
+
+## 8. When to use / when to avoid
+
+<Checklist
+  use={[
+    "Several components communicate in complex ways, forming a tightly coupled dependency web.",
+    "You want to reuse a component (like HealthProbe or TrafficRouter) in another workflow without dragging its neighbors along.",
+    "A use case spans multiple services and needs explicit ordering or compensation on failure.",
+  ]}
+  avoid={[
+    "Only two components talk to each other—direct method calls or a simple callback are clearer.",
+    "Components only need fire-and-forget broadcast notifications (use Observer or an event bus instead).",
+  ]}
+/>
+
+## 9. How to implement
+
+<Steps>
+  <Step>
+    ### Identify the coupled group
+    Find components that currently hold direct references to one another.
+  </Step>
+  <Step>
+    ### Declare the Mediator interface
+    Define a focused coordination contract (such as `notify(sender, event)` or a use-case command).
+  </Step>
+  <Step>
+    ### Remove direct sibling references
+    Inject the Mediator into each colleague so colleagues never import each other.
+  </Step>
+  <Step>
+    ### Keep domain rules in colleagues
+    Let the Mediator own only workflow ordering, transactions, or compensating rollbacks.
+  </Step>
+  <Step>
+    ### Test colleagues and Mediator separately
+    Unit test each colleague in isolation, then test happy and failure paths on the Mediator.
+  </Step>
+</Steps>
+
+## 10. Pros / Cons
+
+<ProsCons
+  pros={[
+    "Single Responsibility: extracts interaction logic out of domain components.",
+    "Open/Closed: you can introduce new workflows by writing a new Mediator without editing colleagues.",
+    "Reduces coupling between sibling components so each is easier to unit test.",
+  ]}
+  cons={[
+    "Risk of becoming a God Object if business rules leak into the Mediator.",
+    "Adds one level of indirection when tracing how an event triggers downstream work.",
+  ]}
+/>
+
+## 11. Relations
+
+<Relations
+  items={[
+    {
+      name: "Mediator vs Observer",
+      summary: "Observer decouples publishers from subscribers via dynamic subscriptions; Mediator centralizes explicit orchestration between known colleagues.",
+      href: "/docs/design/observer",
+    },
+    {
+      name: "Anti-Patterns",
+      summary: "Explains how to keep a Mediator from mutating into a God Service.",
+      href: "/docs/design/anti-patterns",
+    },
+    {
+      name: "Queues & Async Work",
+      summary: "In distributed systems, a Mediator-like orchestrator (saga) often coordinates async steps over a queue.",
+      href: "/docs/architecture/queues-async",
+    },
+  ]}
+/>
+
+## 12. Check yourself
+
+<Quiz
+  questions={[
+    {
+      question: "How does the Mediator pattern reduce coupling between collaborating components?",
+      options: [
+        { label: "By merging all components into a single class", description: "Merging everything into one class creates a God Object rather than decoupling." },
+        { label: "By routing communication through a central coordinator so components do not reference each other directly", description: "Colleagues only depend on the Mediator, turning an O(N^2) dependency mesh into O(N) connections to one coordinator.", correct: true },
+        { label: "By replacing all method calls with global variables", description: "Global state increases coupling instead of reducing it." },
+      ],
+    },
+    {
+      question: "What should live inside the Mediator versus inside the colleague components?",
+      options: [
+        { label: "All domain validation and SQL queries should live in the Mediator", description: "Putting domain rules and persistence in the Mediator turns it into an untestable God Service." },
+        { label: "The Mediator should own workflow orchestration, while colleagues keep their own domain rules", description: "Keeping domain rules inside colleagues preserves single responsibility and makes each unit independently testable.", correct: true },
+        { label: "Colleagues should hold no logic and only act as data bags", description: "Anemic colleagues push all complexity into the Mediator." },
+      ],
+    },
+    {
+      question: "When is Observer a better fit than Mediator?",
+      options: [
+        { label: "When you need strict step-by-step ordering with rollback", description: "Ordered multi-step orchestration with rollback fits Mediator." },
+        { label: "When a publisher broadcasts events to an open-ended set of independent subscribers", description: "Observer excels at one-to-many broadcasts where the publisher does not care who listens or in what order.", correct: true },
+        { label: "When two classes need to call each other synchronously", description: "Two classes calling each other directly rarely need either pattern." },
+      ],
+    },
+  ]}
+/>
