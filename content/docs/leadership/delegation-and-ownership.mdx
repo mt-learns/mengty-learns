@@ -1,0 +1,107 @@
+---
+title: "Delegation and Ownership"
+description: How to delegate outcomes instead of micro-tasks, match autonomy levels to experience, and avoid delegating accountability without authority.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: how-to
+level: beginner
+tags: [leadership, delegation, ownership, autonomy, management]
+tested_with:
+  rework_guide: "Google re:Work (Manager Actions: Empower & Don't Micromanage)"
+  raci_playbook: "Atlassian Team Playbook (RACI)"
+cards:
+  - q: "What is the difference between delegating a task and delegating an outcome?"
+    a: "Task delegation dictates 'build this endpoint'; outcome delegation defines context, success criteria, constraints, decision boundaries, and a check-in date—letting the owner choose how."
+  - q: "Why should you never delegate accountability without authority?"
+    a: "Holding someone accountable for a result when they lack the access, decision rights, or resources to influence it creates helplessness and burnout."
+  - q: "What are the four progressive levels of delegation?"
+    a: "Direct (lead defines method), Guided (owner proposes, lead approves), Consultative (owner decides after consulting), and Autonomous (owner decides and owns outcome)."
+  - q: "What should a lead do when a delegated deliverable has a minor imperfection?"
+    a: "Coach the owner to fix or improve it rather than taking the work back—taking work back destroys ownership."
+related:
+  - process/raci
+  - process/code-review
+  - leadership/clarity-and-alignment
+sources:
+  - title: "Google re:Work: Guide to Developing and Supporting Your Team"
+    url: https://rework.withgoogle.com/en/guides/managers-develop-and-support-your-team
+  - title: "Atlassian Team Playbook: RACI Chart"
+    url: https://www.atlassian.com/team-playbook/plays/raci
+  - title: "key-learning: Delegation and Ownership (author's notes)"
+    url: https://github.com/limme-learning/key-learning/blob/main/management-playbook/06-delegation-and-ownership.md
+---
+
+## TL;DR
+Delegate **outcomes, constraints, and decision boundaries**—not step-by-step instructions. Match your involvement to the engineer's readiness across four levels (**Direct → Guided → Consultative → Autonomous**), and never assign accountability without matching authority.
+
+## Why it exists
+Google's Project Oxygen research highlighted that effective managers **empower their team and avoid micromanaging**. When a lead delegates only tiny tasks ("create this DTO, write this SQL query"), they remain the single brain in the room, and engineers never build system-level judgment.
+
+## Mental model: four levels of delegation
+
+| Level | Lead involvement | Best fit | Example |
+|---|---|---|---|
+| **1. Direct** | Lead defines method and checks closely | New hire or high-risk first-time task | Junior engineer fixing their first production bug |
+| **2. Guided** | Owner proposes approach; lead reviews before build | Mid-level engineer stretching into design | Engineer designing a new service endpoint |
+| **3. Consultative** | Owner decides after consulting lead/peers | Experienced engineer on cross-cutting work | Engineer choosing a caching or retry strategy |
+| **4. Autonomous** | Owner owns decision, execution, and outcome | Senior engineer in an established domain | Senior engineer driving CI/CD reliability |
+
+## Do it: 6-step outcome delegation
+
+1. **Pick a meaningful outcome:** Frame the deliverable, not just an activity.
+2. **Share the "why":** Explain the business context and who depends on it.
+3. **State non-negotiable constraints:** Security, auditability, latency, or release dates.
+4. **Define the decision boundary:** Clarify what the owner can decide alone vs what needs review.
+5. **Agree on check-in points:** Set a risk-check date *before* the deadline (e.g., *"Flag blockers by Tuesday"*).
+6. **Review and recognize:** Debrief what went well and credit the owner publicly.
+
+### Weak vs strong delegation
+
+```text
+Weak:
+"Build the stock-adjustment API."
+
+Strong:
+"You own delivering the stock-adjustment API to staging by Thursday.
+It must enforce role permissions, write an immutable audit log, pass
+unit and integration tests, and include OpenAPI docs for QA. You choose
+the internal module structure; flag any schema blockers by Tuesday."
+```
+
+## Gotchas
+- **Accountability without authority:** Asking someone to "own release quality" while denying them permission to block an untested PR sets them up to fail.
+- **Stealing ownership back:** If you rewrite their PR yourself at the first imperfection, you teach them that *you* are still the real owner. Coach and pair instead.
+- **Silent abdication:** "Autonomous" does not mean disappearing. Keep lightweight check-ins and remove organizational blockers.
+
+## Production checklist
+- [ ] Every delegated item has a clear **outcome**, **constraints**, and **risk-escalation date**.
+- [ ] The owner has the repo, environment, and decision authority required to succeed.
+- [ ] Ownership is visible in the issue tracker and team RACI (`process/raci`).
+- [ ] You use delegation deliberately to grow people one level up, not just to offload chores.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "An engineer is designing their first public API endpoint. Which delegation level fits best?",
+    options: [
+      { label: "Guided: the engineer proposes the design and trade-offs, and the lead reviews before implementation", description: "Guided delegation builds design judgment while catching structural issues early.", correct: true },
+      { label: "Direct: the lead writes the exact file structure and SQL queries for them to type", description: "Over-specifying every line prevents the engineer from learning API design." },
+      { label: "Autonomous with zero check-ins until production", description: "Public APIs are hard to change later; a design review checkpoint protects both the team and the engineer." }
+    ]
+  },
+  {
+    question: "Why is 'taking the task back and finishing it yourself' harmful when a teammate struggles?",
+    options: [
+      { label: "It destroys their sense of ownership and teaches the team that the lead will always rescue them", description: "Coaching them through the fix builds capability for next time.", correct: true },
+      { label: "It violates Git branching rules", description: "The harm is cultural and developmental, not a Git constraint." },
+      { label: "It always takes longer than pairing", description: "Even when doing it yourself feels faster today, it guarantees you remain the bottleneck tomorrow." }
+    ]
+  }
+]} />
+
+## Sources
+- [Google re:Work: Guide to Developing and Supporting Your Team](https://rework.withgoogle.com/en/guides/managers-develop-and-support-your-team)
+- [Atlassian Team Playbook: RACI Chart](https://www.atlassian.com/team-playbook/plays/raci)
+- [key-learning: Delegation and Ownership (author's notes)](https://github.com/limme-learning/key-learning/blob/main/management-playbook/06-delegation-and-ownership.md)
