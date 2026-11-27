@@ -15,6 +15,14 @@
 7. **Own words, own diagrams.** No copied text or images. Quote briefly with a link.
 8. Small is fine: publish `status: draft`, then improve it.
 
+### Readability rules (all pages)
+- **Sentences ≤ 25 words.** Split long sentences.
+- **One idea per paragraph, and paragraphs ≤ 4 lines.**
+- **Plain-language words** (digital.gov / Microsoft Writing Style Guide).
+- **Every page longer than 8 minutes needs a `<OnePicture>`** (static `<Diagram>` summary).
+- **Every *process* is drawn as a `<Flow>`.**
+- **Every list of more than 5 items becomes a table or a checklist.**
+
 ### Definition of done (a page)
 - [ ] TL;DR, `type`, `kind`, `level`, `tags`
 - [ ] `tested_with` + `verified`, and the commands actually ran
