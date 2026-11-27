@@ -19,6 +19,8 @@ cards:
     a: "kubectl explain <resource>.<field> (for example kubectl explain pod.spec.securityContext)."
   - q: "How do you check why a Pod is stuck in Pending or CrashLoopBackOff?"
     a: "kubectl describe pod <pod-name> to inspect Events, probe failures, and scheduling messages."
+  - q: "How do you debug a distroless Pod that has no shell, or triage a Service returning connection refused?"
+    a: "Use `kubectl debug -it <pod> --image=nicolaka/netshoot --target=<container>` for distroless Pods, and `kubectl get endpointslices` first to verify Ready endpoints exist."
 related:
   - kubernetes/service-routing
   - kubernetes/pods-deployments
@@ -28,6 +30,8 @@ sources:
     url: https://kubernetes.io/docs/reference/kubectl/quick-reference/
   - title: kubectl Commands Reference
     url: https://kubernetes.io/docs/reference/generated/kubectl/kubectl-commands
+  - title: "learn-devops: Kubernetes Interview Q&A (author's notes)"
+    url: https://github.com/limme-learning/learn-devops/blob/main/cheatsheets/02-kubernetes/interview-qna.md
 ---
 
 ## TL;DR
@@ -62,6 +66,7 @@ kubectl delete -f manifest.yaml         # remove resources defined in the file
 kubectl logs -f <pod-name>              # stream stdout/stderr from a single-container pod
 kubectl logs --previous <pod-name>      # view logs from the last crashed container
 kubectl exec -it <pod-name> -- sh       # open a POSIX shell (works on Alpine/BusyBox)
+kubectl debug -it <pod-name> --image=nicolaka/netshoot --target=<container>  # ephemeral container for distroless
 # kubectl exec -it <pod-name> -- /bin/bash  # use bash only when installed in the image
 kubectl port-forward svc/web 8080:80    # forward local :8080 to Service web:80
 ```
@@ -103,3 +108,4 @@ kubectl get events --sort-by=.metadata.creationTimestamp
 ## Sources
 - [kubectl Quick Reference](https://kubernetes.io/docs/reference/kubectl/quick-reference/)
 - [kubectl Commands Reference](https://kubernetes.io/docs/reference/generated/kubectl/kubectl-commands)
+- [learn-devops: Kubernetes Interview Q&A (author's notes)](https://github.com/limme-learning/learn-devops/blob/main/cheatsheets/02-kubernetes/interview-qna.md)
