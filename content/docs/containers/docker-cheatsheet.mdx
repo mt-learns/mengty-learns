@@ -18,6 +18,8 @@ cards:
     a: "docker system prune (add --volumes to include unused volumes)"
   - q: "How do you inspect the layer history and sizes of an image?"
     a: "docker history <image>"
+  - q: "How do you debug a distroless container that has no shell installed?"
+    a: "Attach a temporary debug container sharing its PID and network namespaces: docker run --rm -it --pid=container:<name> --network=container:<name> nicolaka/netshoot."
 related:
   - containers/docker-basics
   - containers/image-layers-cache
@@ -27,6 +29,8 @@ sources:
     url: https://docs.docker.com/reference/cli/docker/
   - title: "Docker Compose CLI Reference"
     url: https://docs.docker.com/reference/cli/docker/compose/
+  - title: "learn-devops: Docker Interview Q&A (author's notes)"
+    url: https://github.com/limme-learning/learn-devops/blob/main/cheatsheets/01-docker/interview-qna.md
 ---
 
 ## TL;DR
@@ -51,6 +55,8 @@ docker run --rm -d --name api -p 8080:8080 myapp:1.0.0
 docker logs -f --tail 100 api         # follow the last 100 log lines
 docker exec -it api sh                # open an interactive shell in a running container
 docker inspect api                    # dump low-level JSON config and network state
+docker diff api                       # show files added/changed in the container's writable layer
+docker run --rm -it --pid=container:api --network=container:api nicolaka/netshoot  # debug distroless
 docker rm -f api                      # force-stop and remove a container
 ```
 
@@ -96,3 +102,4 @@ docker system prune                   # remove stopped containers, dangling imag
 ## Sources
 - [Docker CLI Reference](https://docs.docker.com/reference/cli/docker/)
 - [Docker Compose CLI Reference](https://docs.docker.com/reference/cli/docker/compose/)
+- [learn-devops: Docker Interview Q&A (author's notes)](https://github.com/limme-learning/learn-devops/blob/main/cheatsheets/01-docker/interview-qna.md)
