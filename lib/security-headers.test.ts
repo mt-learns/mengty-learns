@@ -59,9 +59,14 @@ describe('content security policy', () => {
     expect(directives['form-action']).toEqual(["'self'"]);
   });
 
-  it('allows no eval and no third-party script origins', () => {
+  it('allows no eval and only the Cloudflare Web Analytics script origin', () => {
     expect(directives['script-src']).not.toContain("'unsafe-eval'");
-    expect(directives['script-src'].every((v: string) => v.startsWith("'"))).toBe(true);
+    const origins = directives['script-src'].filter((v: string) => !v.startsWith("'"));
+    expect(origins).toEqual(['https://static.cloudflareinsights.com']);
+  });
+
+  it('connects only to self and the Cloudflare Web Analytics endpoint', () => {
+    expect(directives['connect-src']).toEqual(["'self'", 'https://cloudflareinsights.com']);
   });
 
   it('sets HSTS for a year without preload', () => {
