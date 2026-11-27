@@ -1,0 +1,181 @@
+---
+title: Docker Networking & Embedded DNS
+description: Compare bridge, host, and none network drivers, user-defined bridge DNS resolution, container-to-container traffic, and safe port publishing.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: concept
+type: explanation
+level: intermediate
+tags: [containers, docker, networking, dns, bridge, security]
+tested_with:
+  docker: "29.x (docs)"
+cards:
+  - q: "What key feature does a user-defined Docker bridge network provide that the default bridge network does not?"
+    a: "Automatic service discovery via Docker's embedded DNS server (127.0.0.11), so containers can resolve each other by container or Compose service name."
+  - q: "Why should you bind published container ports to 127.0.0.1 (e.g. -p 127.0.0.1:5432:5432) when a reverse proxy runs on the host?"
+    a: "Omitting the host IP binds 0.0.0.0 and Docker's NAT rules can expose the port publicly even if a host firewall like UFW blocks incoming traffic by default."
+  - q: "When would you attach a container to the 'none' network driver?"
+    a: "When the container runs offline batch processing or untrusted code that needs only a loopback interface and zero network access."
+  - q: "What is the main trade-off of Docker's 'host' network driver?"
+    a: "It removes bridge NAT overhead by sharing the host's network namespace, but sacrifices port isolation—two containers cannot bind the same host port."
+related:
+  - containers/compose
+  - foundations/networking-basics
+sources:
+  - title: "Docker Docs: Networking Overview"
+    url: https://docs.docker.com/engine/network/
+  - title: "Docker Docs: Bridge Network Driver"
+    url: https://docs.docker.com/engine/network/drivers/bridge/
+  - title: "Docker Docs: Host Network Driver"
+    url: https://docs.docker.com/engine/network/drivers/host/
+---
+
+## TL;DR
+Put containers that talk to each other on a **user-defined `bridge` network** so they resolve names via Docker's **embedded DNS (`127.0.0.11`)** instead of fragile IP addresses. Use **`none`** for offline jobs, **`host`** only when NAT overhead matters, and publish internal ports to **`127.0.0.1`** so they don't leak to the public internet.
+
+## Intent
+<Intent>
+Understand how Docker isolates container network namespaces, resolves container names on user-defined bridges, and publishes ports safely to the host.
+</Intent>
+
+## Problem
+Beginners often hardcode container IPs (which change on every restart), publish database ports with `-p 5432:5432` (accidentally exposing Postgres to `0.0.0.0`), or attach everything to the default `bridge` network where container-name DNS doesn't work.
+
+## Solution
+
+### 1. Core network drivers
+| Driver | Isolation | Name DNS | Typical use |
+|---|---|---|---|
+| **User-defined `bridge`** | Isolated L2 bridge + NAT | Yes (`127.0.0.11`) | Default choice for multi-container apps and [Docker Compose](/docs/containers/compose) |
+| **Default `bridge`** | Shared legacy bridge | No (IP only) | Avoid for new workloads |
+| **`host`** | Shares host network namespace | Host DNS | Ultra-high-throughput proxies (Linux); no `-p` mapping needed |
+| **`none`** | Loopback (`lo`) only | None | Air-gapped batch jobs, build sandboxes |
+
+### 2. User-defined bridge DNS and container-to-container traffic
+When you create a user-defined bridge (`docker network create app-net`), Docker injects `/etc/resolv.conf` pointing to **`127.0.0.11`** inside each attached container. Container A can dial `http://api:3000` or `postgres://db:5432` without publishing any ports to the host at all.
+
+### 3. Port publishing (`-p`)
+- **Only publish what external callers need:** Containers on the same bridge talk directly over their container ports.
+- **Bind loopback for local proxies:** Use `-p 127.0.0.1:3000:3000` when Caddy/Nginx on the host terminates TLS and proxies to the container. Using `-p 3000:3000` binds `0.0.0.0` and inserts `DOCKER` NAT rules that can bypass default-deny UFW policies.
+
+## Real-world analogy
+<Analogy>
+A user-defined bridge network is like an office building's internal phone extension directory: every desk (`api`, `db`) can call another desk by extension name without needing an external public phone number (`-p` published port).
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="docker-networking"
+  title="Container-to-Container Traffic via Embedded DNS"
+  nodes={[
+    { id: 'c1', label: 'Container A (api)', subtitle: 'Dials db:5432', icon: 'pod', category: 'service', rank: 0, order: 0 },
+    { id: 'dns', label: 'Embedded DNS', subtitle: '127.0.0.11 resolver', icon: 'gateway', category: 'network', rank: 1, order: 0 },
+    { id: 'c2', label: 'Container B (db)', subtitle: '172.18.0.3:5432', icon: 'db', category: 'data', rank: 2, order: 0 },
+  ]}
+  steps={[
+    { edge: 'c1->dns', title: 'Query embedded DNS', text: 'Container A asks Docker’s embedded DNS at 127.0.0.11 for the IP of "db".', label: 'DNS query' },
+    { edge: 'dns->c1', title: 'Return bridge IP', text: 'Embedded DNS resolves "db" to Container B’s user-defined bridge IP (172.18.0.3).', kind: 'response', label: '172.18.0.3' },
+    { edge: 'c1->c2', title: 'Send TCP packet over bridge', text: 'Container A connects directly to 172.18.0.3:5432 across the isolated bridge.', label: 'TCP :5432' },
+    { edge: 'c2->c1', title: 'Return database response', text: 'Container B replies directly to Container A without traversing host public ports.', kind: 'response', label: 'Rows' },
+  ]}
+/>
+
+## Code
+Creating an isolated user-defined bridge and publishing only the app port on loopback:
+
+```bash
+# Create a user-defined bridge network (not run)
+docker network create app-net
+
+# Run Postgres with zero published host ports (only reachable on app-net) (not run)
+docker run -d --name db --network app-net -e POSTGRES_PASSWORD=dev postgres:19
+
+# Run API on the same bridge, binding host port 3000 to loopback only (not run)
+docker run -d --name api --network app-net -p 127.0.0.1:3000:3000 my-api:1.0
+```
+
+## When you DON'T need this
+- **Single standalone container:** A lone CLI tool or static file server doesn't need custom bridge networks.
+- **Multi-node orchestration:** Once containers span multiple hosts, a single-host `bridge` cannot route across machines—you need an overlay network or Kubernetes CNI.
+- **Cost / complexity trade-off:** Creating separate bridges (`frontend-net`, `backend-net`) adds a few lines of Compose config in exchange for strong east-west isolation (preventing a compromised proxy from reaching internal admin ports).
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'Use user-defined bridge networks (or Docker Compose default project networks) for all multi-container apps.',
+    'Use 127.0.0.1:<host>:<container> when publishing ports behind a host reverse proxy.',
+  ]}
+  avoid={[
+    'Never attach containers to the default bridge network when they need name-based DNS.',
+    'Never publish database ports with -p 5432:5432 on a public VPS.',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Define dedicated bridge networks
+    Group services into minimal networks (e.g., `edge` for proxy + app, `internal` with `--internal` for app + DB).
+  </Step>
+  <Step>
+    ### Reference services by name
+    Use `postgres://db:5432/app` in environment variables instead of `localhost` or container IPs.
+  </Step>
+  <Step>
+    ### Audit published ports
+    Run `docker ps` and verify `PORTS` shows `127.0.0.1:...` or only your intended public proxy port.
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'Built-in service discovery via 127.0.0.11 without external DNS servers.',
+    'Internal services stay unreachable from the host network when ports are not published.',
+  ]}
+  cons={[
+    'Single-host scope—bridge networks do not span multiple VMs without an overlay driver.',
+    'Publishing ports without a bind IP bypasses UFW inbound rules via Docker NAT.',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'Docker Compose',
+      href: '/docs/containers/compose',
+      summary: 'Compose automatically creates a user-defined bridge per project.',
+    },
+    {
+      name: 'Networking Basics',
+      href: '/docs/foundations/networking-basics',
+      summary: 'DNS, TCP, and TLS fundamentals underneath container bridges.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "Container 'api' wants to connect to container 'db' on port 5432. Both are on a user-defined bridge 'app-net', and 'db' has no -p flag. Will 'postgres://db:5432' work?",
+    options: [
+      { label: "Yes—Docker's embedded DNS (127.0.0.11) resolves 'db' and routes over the bridge", description: "Containers on the same user-defined bridge can reach all of each other's listening ports without -p.", correct: true },
+      { label: "No—you must publish -p 5432:5432 on 'db' first", description: "-p only publishes ports to the host; it is not needed for container-to-container traffic on the same bridge." },
+      { label: "No—containers must use localhost:5432 to reach other containers", description: "Each container has its own network namespace, so localhost inside 'api' refers only to 'api'." }
+    ]
+  },
+  {
+    question: "Why is '-p 5432:5432' dangerous on a public VPS running UFW?",
+    options: [
+      { label: "It binds 0.0.0.0 and Docker's NAT rules can expose the port publicly despite UFW default-deny", description: "Always bind internal services to 127.0.0.1 or don't publish them at all.", correct: true },
+      { label: "It automatically switches the container to the 'none' network", description: "-p publishes a bridge port; it does not use the 'none' driver." },
+      { label: "It disables Docker's embedded DNS", description: "Port publishing does not disable 127.0.0.11 DNS." }
+    ]
+  }
+]} />
+
+## Sources
+- [Docker Docs: Networking Overview](https://docs.docker.com/engine/network/)
+- [Docker Docs: Bridge Network Driver](https://docs.docker.com/engine/network/drivers/bridge/)
+- [Docker Docs: Host Network Driver](https://docs.docker.com/engine/network/drivers/host/)
