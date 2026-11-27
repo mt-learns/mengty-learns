@@ -53,6 +53,7 @@ const SECTION_COPY: Record<SectionIconName, { title: string; blurb: string }> = 
   design: { title: 'Design', blurb: 'OOP, SOLID and patterns, shown with TypeScript.' },
   architecture: { title: 'Architecture', blurb: 'Layered, hexagonal and how dependencies should point.' },
   security: { title: 'Security', blurb: 'The common web risks and the habits that prevent them.' },
+  process: { title: 'Process', blurb: 'Idea to production, ADRs, quality gates, and retros for small teams.' },
 };
 
 export interface LearningPath {

@@ -194,7 +194,9 @@ export default function HomePage() {
             title="Learning paths"
             lede={`${paths.length} sections, from Git basics to architecture. Progress is saved in this browser.`}
           />
-          <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {/* 10 sections: 1 column, then 2 (5 rows), then 5 (2 rows) once the
+              1200px container is full width, so no row ends on an orphan card. */}
+          <ul className="grid gap-4 sm:grid-cols-2 min-[75rem]:grid-cols-5">
             {paths.map((path) => {
               const body = (
                 <>
@@ -220,12 +222,12 @@ export default function HomePage() {
                   {path.href ? (
                     <Link
                       href={path.href}
-                      className="flex w-full flex-col rounded-card border border-border bg-card p-6 transition-[border-color,box-shadow] hover:border-primary/40 hover:shadow-[0_2px_4px_rgb(var(--shadow-color)/0.04),0_12px_24px_-12px_rgb(var(--shadow-color)/0.18)] motion-reduce:transition-none"
+                      className="flex w-full flex-col rounded-card border border-border bg-card p-6 transition-[border-color,box-shadow] min-[75rem]:p-5 hover:border-primary/40 hover:shadow-[0_2px_4px_rgb(var(--shadow-color)/0.04),0_12px_24px_-12px_rgb(var(--shadow-color)/0.18)] motion-reduce:transition-none"
                     >
                       {body}
                     </Link>
                   ) : (
-                    <div className="flex w-full flex-col rounded-card border border-dashed border-border bg-transparent p-6">{body}</div>
+                    <div className="flex w-full flex-col rounded-card border border-dashed border-border bg-transparent p-6 min-[75rem]:p-5">{body}</div>
                   )}
                 </li>
               );
