@@ -1,0 +1,131 @@
+---
+title: "Platform Security Baseline: Hosts, Clusters, and Exceptions"
+description: Enforce a practical, auditable security baseline across Linux hosts (CIS, SELinux, firewalld, auditd, AIDE) and Kubernetes namespaces (PodSecurity, NetworkPolicy, Kyverno).
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: reference
+level: intermediate
+tags: [security, cis, kubernetes, selinux, kyverno, baseline]
+tested_with:
+  ansible-core: "2.22 (docs)"
+  kubernetes: "1.35.10 (docs)"
+  kyverno: "1.20.0 (docs)"
+cards:
+  - q: "Why should CIS benchmark exceptions include an explicit reason and expiry date in code?"
+    a: "Time-boxed exceptions prevent temporary waivers from becoming permanent holes; CI or Ansible assertions automatically fail once an exception expires."
+  - q: "What three PodSecurity levels does Kubernetes define, and which should production app namespaces enforce?"
+    a: "Privileged, Baseline, and Restricted; production application namespaces should enforce Restricted (non-root, drop ALL capabilities, no privilege escalation, RuntimeDefault seccomp)."
+  - q: "If you apply a default-deny-all NetworkPolicy to a namespace, what outbound traffic must you explicitly allow for normal apps?"
+    a: "DNS lookups (UDP/TCP port 53 to kube-dns/CoreDNS) in addition to the app's required database or upstream service ports."
+  - q: "Why should Ansible validate sshd_config with `sshd -t -f %s` before restarting sshd?"
+    a: "Validating syntax before applying prevents locking operators out of remote hosts due to a malformed SSH configuration."
+related:
+  - foundations/linux-server-hardening
+  - foundations/firewall-basics
+  - kubernetes/pods-deployments
+sources:
+  - title: "Kubernetes Docs: Pod Security Admission"
+    url: https://kubernetes.io/docs/concepts/security/pod-security-admission/
+  - title: "Kubernetes Docs: Network Policies"
+    url: https://kubernetes.io/docs/concepts/services-networking/network-policies/
+  - title: "Kyverno Docs: Writing Policies"
+    url: https://kyverno.io/docs/writing-policies/
+  - title: "learn-devops: Security Baseline & CIS Role (author's notes)"
+    url: https://github.com/limme-learning/learn-devops/blob/main/docs/03-security-baseline.md
+---
+
+## TL;DR
+A security baseline only holds if it is **codified and enforced automatically**. Harden Linux hosts with CIS controls, SELinux `enforcing`, default-deny `firewalld`, `auditd`, and AIDE; harden Kubernetes namespaces with `PodSecurity: restricted`, default-deny `NetworkPolicy`, and Kyverno admission policies—and track every waiver with an expiry date.
+
+## Why it exists
+Manual hardening checklists rot within weeks: a developer disables SELinux to debug a socket error, a Pod ships as root, or a temporary firewall port stays open for years. Encoding the baseline into Ansible roles and Kubernetes admission policies turns security posture into a repeatable, testable artifact.
+
+## Mental model
+
+### 1. Host baseline (Linux VMs)
+- **CIS Benchmark + time-boxed exceptions:** Apply a CIS role (e.g. `rhel9_cis`), store approved waivers in a structured list with `rule`, `reason`, and `expires`, and fail the playbook if `expires <= today`.
+- **SSH & Mandatory Access Control:** Disable root login and password auth, validate `sshd_config` with `sshd -t -f %s` before reload, and assert `SELinux == enforcing` in production.
+- **Default-deny firewall:** Set `firewalld` default zone to `drop` (or `nftables` default-drop) and open only the exact ports each host role requires.
+- **Audit & file integrity:** Forward `auditd` privileged-command logs to the SIEM and run scheduled `AIDE` integrity checks.
+
+### 2. Cluster & namespace baseline (Kubernetes)
+- **Pod Security Admission (`restricted`):** Label every application namespace with `pod-security.kubernetes.io/enforce: restricted` so the API server rejects root containers, `privileged: true`, and missing seccomp profiles.
+- **Default-deny `NetworkPolicy`:** Block all ingress and egress by default, then add explicit allow rules for CoreDNS (`53/UDP`, `53/TCP`), ingress controllers, and required data stores.
+- **Policy-as-code (Kyverno):** Require signed image digests, disallow `:latest` tags, require `resources.limits`, and mandate ownership labels (`owner`, `team`).
+
+## Do it
+
+Enforce `restricted` Pod Security and default-deny networking on an app namespace:
+
+```yaml
+# Namespace with Pod Security Admission enforced (not run)
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: app-orders
+  labels:
+    pod-security.kubernetes.io/enforce: restricted
+    pod-security.kubernetes.io/audit: restricted
+    pod-security.kubernetes.io/warn: restricted
+---
+# Default-deny all ingress & egress in app-orders (not run)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: default-deny-all
+  namespace: app-orders
+spec:
+  podSelector: {}
+  policyTypes: ["Ingress", "Egress"]
+```
+
+Assert in Ansible that no CIS exception has expired:
+
+```yaml
+# Fail if a documented CIS waiver has passed its expiry date (not run)
+- name: Fail on expired CIS exceptions
+  ansible.builtin.assert:
+    that: item.expires > ansible_date_time.date
+    fail_msg: "CIS exception {{ item.rule }} expired on {{ item.expires }}."
+  loop: "{{ cis_exceptions }}"
+```
+
+## Gotchas
+- **Forgetting DNS egress in `NetworkPolicy`:** Applying `default-deny-all` with `Egress` enabled breaks service discovery immediately unless you add an explicit egress rule to `kube-dns` on port 53.
+- **Permissive SELinux left on in prod:** Setting SELinux to `permissive` "temporarily" hides policy denials instead of fixing file contexts; use `assert` in Ansible to block permissive mode in production.
+- **Unbounded waivers:** Inline `# nosec` comments or permanent CIS skips accumulate silently; require an expiry date and ticket reference for every exception.
+
+## Production checklist
+- [ ] Linux hosts run with CIS baseline, SELinux `enforcing`, default-deny firewall, `auditd`, and AIDE.
+- [ ] Every CIS or scanner exception has an owner, ticket, and expiry date checked in CI/Ansible.
+- [ ] Kubernetes app namespaces enforce `pod-security.kubernetes.io/enforce: restricted` and `default-deny-all` `NetworkPolicy`.
+- [ ] Kyverno blocks `:latest` tags, unsigned images, and Pods without resource limits.
+- [ ] `etcd` encryption at rest uses a KMS provider, and API server audit logs ship to a SIEM.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "What happens if you apply a default-deny-all NetworkPolicy (covering both Ingress and Egress) to a namespace without adding a DNS rule?",
+    options: [
+      { label: "Pods cannot resolve Kubernetes Service names because egress to CoreDNS on port 53 is blocked", description: "Default-deny Egress blocks all outbound traffic, including UDP/TCP port 53 to kube-dns.", correct: true },
+      { label: "Kubernetes automatically exempts port 53 from NetworkPolicies", description: "NetworkPolicy has no automatic DNS exemption; you must explicitly allow egress to kube-dns." },
+      { label: "Only inbound Ingress traffic is affected", description: "When policyTypes includes Egress, outbound traffic is also denied." }
+    ]
+  },
+  {
+    question: "Why should sshd_config templates in Ansible include `validate: 'sshd -t -f %s'`?",
+    options: [
+      { label: "To syntax-check the rendered config before overwriting /etc/ssh/sshd_config and restarting sshd", description: "Catching syntax errors before reload prevents locking out SSH access.", correct: true },
+      { label: "To automatically generate new SSH host keys", description: "sshd -t only tests configuration syntax and does not generate keys." },
+      { label: "To test firewalld port rules", description: "sshd -t validates the SSH daemon configuration file only." }
+    ]
+  }
+]} />
+
+## Sources
+- [Kubernetes Docs: Pod Security Admission](https://kubernetes.io/docs/concepts/security/pod-security-admission/)
+- [Kubernetes Docs: Network Policies](https://kubernetes.io/docs/concepts/services-networking/network-policies/)
+- [Kyverno Docs: Writing Policies](https://kyverno.io/docs/writing-policies/)
+- [learn-devops: Security Baseline & CIS Role (author's notes)](https://github.com/limme-learning/learn-devops/blob/main/docs/03-security-baseline.md)
