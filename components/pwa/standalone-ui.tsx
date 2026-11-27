@@ -46,33 +46,3 @@ export function StandaloneBackBar() {
     </div>
   );
 }
-
-/**
- * Syncs `<meta name="theme-color">` whenever the `.dark` class on `<html>`
- * changes, so standalone status bars update on in-app theme toggle (R5).
- */
-export function ThemeColorSync() {
-  useEffect(() => {
-    const sync = () => {
-      const isDark = document.documentElement.classList.contains('dark');
-      const color = isDark ? '#0E1013' : '#FAFAF8';
-      let meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]:not([media])');
-      if (!meta) {
-        meta = document.createElement('meta');
-        meta.name = 'theme-color';
-        document.head.appendChild(meta);
-      }
-      meta.content = color;
-    };
-
-    sync();
-    const observer = new MutationObserver(sync);
-    observer.observe(document.documentElement, {
-      attributes: true,
-      attributeFilter: ['class'],
-    });
-    return () => observer.disconnect();
-  }, []);
-
-  return null;
-}

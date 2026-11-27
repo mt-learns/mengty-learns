@@ -1,6 +1,6 @@
 import { Atkinson_Hyperlegible_Next, Inter, JetBrains_Mono } from 'next/font/google';
 import { Provider } from '@/components/provider';
-import { ThemeColorSync } from '@/components/pwa/standalone-ui';
+import { ThemeColorSync } from '@/components/pwa/theme-color-sync';
 import { SwRegister } from '@/components/pwa/sw-register';
 import './global.css';
 import { type ReactNode } from 'react';

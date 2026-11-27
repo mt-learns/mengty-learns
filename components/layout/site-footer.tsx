@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { LogoMark } from '@/components/brand/logo';
 import { Container } from '@/components/layout/container';
-import { InstallMenuButton } from '@/components/pwa/install-prompt';
+import { InstallFooterButton } from '@/components/pwa/install-footer-button';
 import { NAV_LINKS } from '@/lib/layout.shared';
 import { appName, gitConfig } from '@/lib/shared';
 
@@ -39,7 +39,7 @@ export function SiteFooter() {
               </a>
             </li>
             <li>
-              <InstallMenuButton />
+              <InstallFooterButton />
             </li>
           </ul>
         </nav>
