@@ -155,7 +155,7 @@ All of them follow DIAGRAM-RULES (they fit at 265–1024px with no pan, labels �
 | Wave | Scope | Worker | Depends on |
 |---|---|---|---|
 | **S0: Code: tracks, icons, reading components** | 12 icons, the tracks IA (home + sidebar), section landing pages with learning maps, `<YouWillLearn>`/`<OnePicture>`/`<KeyTakeaways>`/`<Example>`/`<Rule>`/`<Say>`/`<Template>`/`<Dialogue>`/`<DecisionTree>`, reading time, the 5-minute toggle, print CSS, the `lesson` kind in the schema | agy (or Claude) | `pwa-perf` merged (it shares app/ and components/) |
-| **S1: English** | 5.1 (~20 lessons) | agy | S0 components |
+| **S1: English** | ENGLISH-SYLLABUS.md, waves E1–E5 (~130 micro-lessons) | agy | S0 components |
 | **S2: Craft + Communication** | 5.2 + 5.3 (~22) | agy | S0 |
 | **S3: Career + Interviews** | 5.4 (~14) | agy | S0 |
 | **S4: Business** | 5.5 (~12) | agy | S0 |
