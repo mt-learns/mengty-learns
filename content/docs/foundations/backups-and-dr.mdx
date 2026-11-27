@@ -18,6 +18,8 @@ cards:
     a: "When you have a large database or need Point-in-Time Recovery (PITR) to a specific second rather than a slow logical dump/restore."
   - q: "Why is an untested backup considered equivalent to no backup?"
     a: "Corrupt archives, missing encryption keys, or broken restore scripts only surface when you run a real restore drill into a clean environment."
+  - q: "How does the 3-2-1-1-0 rule harden backups against ransomware?"
+    a: "It adds 1 immutable/air-gapped copy (such as S3/MinIO Object Lock in compliance mode with a PutObject-only writer) and requires 0 errors in verified restore drills."
 related:
   - containers/volumes-vs-bind-mounts
   - ci-cd/deploy-and-rollback
@@ -30,6 +32,8 @@ sources:
     url: https://www.postgresql.org/docs/current/app-pgbasebackup.html
   - title: "Google SRE Book: Data Integrity — What You Read Is What You Wrote"
     url: https://sre.google/sre-book/data-integrity/
+  - title: "learn-devops: Backup Strategy & Disaster Recovery (author's notes)"
+    url: https://github.com/limme-learning/learn-devops/blob/main/docs/07-backup-dr.md
 ---
 
 ## TL;DR
@@ -43,7 +47,8 @@ RAID mirrors, database replication, and `git push` protect against a single disk
 ### 1. RPO, RTO, and the 3-2-1 rule
 - **RPO (Recovery Point Objective):** Maximum data loss in time (e.g., `24h` with nightly snapshots, `< 1m` with continuous WAL archiving).
 - **RTO (Recovery Time Objective):** Maximum time from incident start until service is restored (e.g., `4h` for cold restore, `< 5m` for multi-region failover).
-- **3-2-1 rule:** **3** copies of data, on **2** separate systems/media, with **1** off-site (in a different cloud account/region with object-lock or immutable retention).
+- **3-2-1-1-0 rule:** **3** copies of data, on **2** separate systems/media, with **1** off-site, **1** immutable/air-gapped (Object Lock in compliance mode with a `PutObject`-only writer identity—no `DeleteObject`), and **0** errors in scheduled restore drills.
+- **Git is the backup for config:** Only *state* (databases, PVCs, Raft snapshots) needs a backup tool; manifests, playbooks, and Terraform belong in Git.
 
 ### 2. Logical vs Physical backups (PostgreSQL)
 | Type | Tool | Pros | Cons |
@@ -109,3 +114,4 @@ pg_restore --dbname=restore_drill --no-owner app_2026-11-26.dump
 - [PostgreSQL Docs: pg_dump](https://www.postgresql.org/docs/current/app-pgdump.html)
 - [PostgreSQL Docs: pg_basebackup](https://www.postgresql.org/docs/current/app-pgbasebackup.html)
 - [Google SRE Book: Data Integrity](https://sre.google/sre-book/data-integrity/)
+- [learn-devops: Backup Strategy & Disaster Recovery (author's notes)](https://github.com/limme-learning/learn-devops/blob/main/docs/07-backup-dr.md)
