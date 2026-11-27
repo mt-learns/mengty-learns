@@ -1,0 +1,195 @@
+---
+title: "Accessibility WCAG Basics: Perceivable, Operable, Understandable, Robust"
+description: WCAG 2.2 fundamentals for web teams — four principles, core success criteria, and how to verify each one.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: explanation
+level: intermediate
+tags: [accessibility, wcag, web, inclusive]
+tested_with:
+  wcag: "2.2"
+  npm: "10.2.0"
+cards:
+  - q: "What are the four WCAG principles?"
+    a: "Perceivable, Operable, Understandable, and Robust (POUR)."
+  - q: "What is the minimum contrast ratio for normal text at AA level?"
+    a: "4.5:1 against the background."
+  - q: "Does meeting WCAG Level A make a site fully accessible?"
+    a: "No, Level A is only the baseline floor; most products aim for Level AA."
+related:
+  - frontend/tailwind-and-design-tokens
+  - frontend/forms-react-hook-form-zod
+sources:
+  - title: "WCAG 2.2 Overview"
+    url: https://www.w3.org/WAI/WCAG22/Overview
+  - title: "software-engineering: Accessibility WCAG basics (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/09-accessibility/01-wcag-basics.md
+---
+## TL;DR
+WCAG 2.2 organizes success criteria around four principles—PERCEIVABLE, OPERABLE, UNDERSTANDABLE, ROBUST—each with testable criteria. Prioritize AA compliance; fix critical (A) blockers first, then iterate toward AA for public-facing products.
+
+## Why it exists
+Many teams treat accessibility as a checklist feature rather than a structural requirement. Without a shared mental model of the four WCAG principles, developers add ARIA labels that don't fix the underlying barrier, or they pass audit tools while still excluding screen-reader users. A principles-first approach ensures every fix addresses a real exclusion.
+
+## Mental model
+**The four WCAG principles, in order of priority:**
+
+| Principle | Mnemonic | Core idea | AA focus |
+|---|---|---|---|
+| **Perceivable** | P | Information and UI components must be presentable to users in ways they can perceive. Provide text alternatives, captions, adaptable layout, and distinguishable colors. | 1.4.3 Contrast (Minimum), 1.2.2 Captions (Live), 1.1.1 Non-text Content |
+| **Operable** | O | UI components and navigation must be operable. Ensure keyboard access, enough time, no seizures, and clear navigation. | 2.1.1 Keyboard, 2.4.3 Focus Order, 2.4.7 Focus Visible, 2.3.1 Three Flashes |
+| **Understandable** | U | Information and the operation of the user interface must be understandable. Make text readable, predictable, and help users avoid and correct mistakes. | 3.1.1 Language of Page, 3.2.1 On Input, 3.3.1 Error Identification |
+| **Robust** | R | Content must be robust enough that it can be reliably interpreted by a wide variety of user agents, including assistive technologies. Use clean markup and valid HTML. | 4.1.1 Parsing, 4.1.2 Name, Role, Value |
+
+**Rule of thumb:** start with Perceivable (color contrast, alt text), then Operable (keyboard, focus), then Understandable (language, error messages), then Robust (markup validity).
+
+## Do it
+### 1. Color contrast
+- Measure every foreground/background pair in both light and dark themes.
+- Text: ≥ 4.5:1 (AA), ≥ 3:1 for large text (≥ 18pt or 14pt bold).
+- UI graphics: ≥ 3:1.
+- Use a script (e.g., `scripts/contrast.mjs`) in CI; fail the build on failure.
+
+### 2. Keyboard accessibility
+- Test every interactive element with Tab/Shift+Tab alone.
+- Ensure focus is visible (not just `outline: none`).
+- Logical focus order: match visual layout or use `order` consciously.
+- Trap focus in modals/dialogs and restore focus on close.
+
+### 3. Alt text for images
+- Decorative images: `alt=""` (empty string) or CSS background.
+- Informative images: brief, descriptive alt text (< 125 characters).
+- Complex charts: provide a data table or long description via `aria-describedby`.
+
+### 4. Focus management
+- `focus()` programmatically only after user gesture or in `useEffect` with a clear trigger.
+- Never trap focus arbitrarily; if you do, provide an escape.
+- Announce modal dialogs with `aria-modal` and a role="alert" live region.
+
+### 5. Language declaration
+- Add `lang="en"` (or your language code) to `<html>`.
+- Use `lang` attribute on nested elements for content in other languages.
+
+## Gotchas
+- **`color: red` alone does not convey error.** Combine with text, icons, or programmatic error state.
+- **Screen readers read DOM order, not visual order.** A reordered flex layout can cause confusing navigation.
+- **`aria-label` overrides visible text.** If you add an `aria-label`, ensure it makes sense on its own.
+- **WCAG A is the floor, not the ceiling.** Meeting A does not mean your site is accessible.
+- **Automated tools catch ~30–50% of issues.** Manual testing with screen readers is essential.
+
+## Production checklist
+- [ ] Color contrast ≥ 4.5:1 for text and ≥ 3:1 for UI graphics, in both light and dark themes.
+- [ ] All interactive elements reachable via keyboard only (Tab/Shift+Tab).
+- [ ] Focus ring visible and meets 3:1 contrast against UI.
+- [ ] Meaningful `alt` text on all informative images; `alt=""` on decorative images.
+- [ ] `lang` attribute on `<html>` and on content in other languages.
+- [ ] No content that flashes more than 3 times per second (avoid `animation: flash`).
+- [ ] Error messages identified with `aria-invalid` and described via `aria-describedby`.
+- [ ] Form fields linked to labels via `for`/`id` pairing.
+- [ ] Focus is not trapped arbitrarily; modals provide an escape.
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "Which WCAG principle comes first when prioritizing fixes: Perceivable, Operable, Understandable, or Robust?",
+    options: [
+      { label: "Perceivable", description: "Start with color contrast, alt text, and captions — the most visible barriers.", correct: true },
+      { label: "Operable", description: "Keyboard access is essential, but visual perception comes first.", correct: false },
+      { label: "Understandable", description: "Predictable UI helps, but users must first perceive the interface.", correct: false }
+    ]
+  },
+  {
+    question: "A button has `aria-label='Submit'` but the visible text says 'Submit request'. A screen reader announces 'Submit'. Is this correct?",
+    options: [
+      { label: "Yes, the aria-label takes precedence over visible text", description: "The aria-label replaces the accessible name.", correct: true },
+      { label: "No, the visible text should always be used", description: "The aria-label overrides the visible accessible name.", correct: false },
+      { label: "It depends on the browser", description: "The accessible name computation follows a fixed algorithm." }
+    ]
+  },
+  {
+    question: "Which contrast ratio is required for normal text at AA level?",
+    options: [
+      { label: "4.5:1", description: "Normal text requires at least 4.5:1 contrast against the background.", correct: true },
+      { label: "3:1", description: "3:1 is for large text (≥ 18pt) or UI graphics.", correct: false },
+      { label: "7:1", description: "7:1 is the AAA level for normal text.", correct: false }
+    ]
+  }
+]} />
+
+## Sources
+- [WCAG 2.2 Overview](https://www.w3.org/WAI/WCAG22/Overview)
+- [WCAG 2.2 Four Principles](https://www.w3.org/WAI/WCAG22/Principles)
+- [MDN: Accessibility tutorial](https://developer.mozilla.org/en-US/docs/Learn/Accessibility)
+- [ software-engineering: Accessibility WCAG basics (author's notes)](https://github.com/limme-learning/software-engineering/blob/main/09-accessibility/01-wcag-basics.md)
+
+## Flow: WCAG principles path
+<Flow
+  id="wcag-principles-path"
+  title="WCAG 2.2 principles"
+  nodes={[
+    { id: 'perceivable', label: 'Perceivable', subtitle: 'P', icon: 'user', category: 'abstraction', rank: 0, order: 0 },
+    { id: 'operable', label: 'Operable', subtitle: 'O', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+    { id: 'understandable', label: 'Understandable', subtitle: 'U', icon: 'interface', category: 'abstraction', rank: 2, order: 0 },
+    { id: 'robust', label: 'Robust', subtitle: 'R', icon: 'service', category: 'data', rank: 3, order: 0 },
+  ]}
+  steps={[
+    { edge: 'perceivable->operable', title: 'Perceivable enables Operable', text: 'If content is not perceivable, it cannot be operated upon.', kind: 'response' },
+    { edge: 'operable->understandable', title: 'Operable enables Understanding', text: 'If users cannot operate the UI, they cannot understand its purpose.', kind: 'response' },
+    { edge: 'understandable->robust', title: 'Understanding requires Robustness', text: 'If content is not robustly marked up, assistive technologies cannot convey it.', kind: 'response' },
+  ]}
+/>
+
+**This site is the worked example.** Color contrast is measured in CI via `scripts/contrast.mjs`. Focus order is tested with keyboard-only navigation. The `lang` attribute is set on `<html>` and on every nested language section. Error boundaries announce failures via `aria-live="assertive"`. `<Flow>` is lazy-imported with `next/dynamic` and only renders when scrolled into view; the server-rendered step list works without JS.
+
+## Gotchas
+- **`color: red` alone does not convey error.** Combine with text, icons, or programmatic error state.
+- **Screen readers read DOM order, not visual order.** A reordered flex layout can cause confusing navigation.
+- **`aria-label` overrides visible text.** If you add an `aria-label`, ensure it makes sense on its own.
+- **WCAG A is the floor, not the ceiling.** Meeting A does not mean your site is accessible.
+- **Automated tools catch ~30–50% of issues.** Manual testing with screen readers is essential.
+
+## Production checklist
+- [ ] Color contrast ≥ 4.5:1 for text and ≥ 3:1 for UI graphics, in both light and dark themes.
+- [ ] All interactive elements reachable via keyboard only (Tab/Shift+Tab).
+- [ ] Focus ring visible and meets 3:1 contrast against UI.
+- [ ] Meaningful `alt` text on all informative images; `alt=""` on decorative images.
+- [ ] `lang` attribute on `<html>` and on content in other languages.
+- [ ] No content that flashes more than 3 times per second.
+- [ ] Error messages identified with `aria-invalid` and described via `aria-describedby`.
+- [ ] Form fields linked to labels via `for`/`id` pairing.
+- [ ] Focus is not trapped arbitrarily; modals provide an escape.
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "Which WCAG principle comes first when prioritizing fixes?",
+    options: [
+      { label: "Perceivable", description: "Start with color contrast, alt text, and captions — the most visible barriers.", correct: true },
+      { label: "Operable", description: "Keyboard access is essential, but visual perception comes first.", correct: false },
+      { label: "Understandable", description: "Predictable UI helps, but users must first perceive the interface.", correct: false }
+    ]
+  },
+  {
+    question: "A button has `aria-label='Submit'` but the visible text says 'Submit request'. A screen reader announces 'Submit'. Is this correct?",
+    options: [
+      { label: "Yes, the aria-label takes precedence over visible text", description: "The aria-label replaces the accessible name.", correct: true },
+      { label: "No, the visible text should always be used", description: "The aria-label overrides the visible accessible name.", correct: false },
+      { label: "It depends on the browser", description: "The accessible name computation follows a fixed algorithm." }
+    ]
+  },
+  {
+    question: "Which contrast ratio is required for normal text at AA level?",
+    options: [
+      { label: "4.5:1", description: "Normal text requires at least 4.5:1 contrast against the background.", correct: true },
+      { label: "3:1", description: "3:1 is for large text (≥ 18pt) or UI graphics.", correct: false },
+      { label: "7:1", description: "7:1 is the AAA level for normal text.", correct: false }
+    ]
+  }
+]} />
+
+## Sources
+- [WCAG 2.2 Overview](https://www.w3.org/WAI/WCAG22/Overview)
+- [WCAG 2.2 Four Principles](https://www.w3.w3.org/WAI/WCAG22/Principles)
+- [MDN: Accessibility tutorial](https://developer.mozilla.org/en-US/docs/Learn/Accessibility)
+- [software-engineering: Accessibility WCAG basics (author's notes)](https://github.com/limme-learning/software-engineering/blob/main/09-accessibility/01-wcag-basics.md)

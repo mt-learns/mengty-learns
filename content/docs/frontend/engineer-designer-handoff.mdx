@@ -1,0 +1,93 @@
+---
+title: "Engineer-Designer Handoff: Tokens, Grids, and Components"
+description: Bridge the gap between design tools and code using design tokens, component libraries, and shared documentation to reduce friction and rework.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: explanation
+level: intermediate
+tags: [design, development, handoff, tokens, ux]
+tested_with:
+  figma: "2026.x"
+  tailwindcss: "4.3.5"
+cards:
+  - q: "What is the primary goal of using design tokens in the handoff process?"
+    a: "To create a shared language between design and engineering, where names like '--primary' replace hex codes and raw values."
+  - q: "Why should engineers be involved during the design phase?"
+    a: "To provide technical feasibility feedback early, preventing designs that are impossible or too expensive to implement."
+  - q: "What does a 'handoff' document typically include?"
+    a: "Component specs (spacing, typography), interaction states (hover, active), responsive behavior, and accessibility notes."
+related:
+  - frontend/tailwind-and-design-tokens
+  - frontend/accessibility-wcag-basics
+sources:
+  - title: "Figma docs: Handoff"
+    url: https://help.figma.com/hc/en-us/sections/360006509934-Handoff
+  - title: "software-engineering: Engineer-designer handoff (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/09-accessibility/05-engineer-designer-handoff.md
+---
+
+## TL;DR
+Handoff is a conversation, not a document. Use design tokens for colors and spacing, define shared component names, and document interaction states (hover, active, loading) before code begins.
+
+## Why it exists
+Without a structured handoff, engineers guess at spacing, ignore edge cases like loading states, and hard-code hex values that drift from the design system. This leads to high rework, inconsistent UI, and frustration between disciplines. A shared system of tokens and components ensures what is designed is what is built.
+
+## Mental model
+**Shared Language.** Designers and engineers use the same names for the same things.
+
+| Concept | Design Tool (Figma) | Implementation (Tailwind) |
+|---|---|---|
+| **Color** | Primary / 600 | `--color-primary` |
+| **Spacing** | 16px (Step 4) | `p-4` / `1rem` |
+| **Component** | Card / Default | `<Card />` |
+| **State** | Pressed | `:active` |
+
+## Do it
+### 1. Design Tokens First
+Agree on a naming convention for colors, typography, and spacing. Use these tokens in Figma variables and map them directly to Tailwind `theme` variables.
+
+### 2. Interaction Audit
+Don't just hand off "the screen". Hand off:
+- **Hover/Active/Focused** states for every button and link.
+- **Loading/Empty/Error** states for data-driven regions.
+- **Responsive behavior**: how the layout changes from mobile to desktop.
+
+### 3. Shared Component Library
+Document common UI patterns (buttons, inputs, cards) in a shared library. Reference the same component names in design and code.
+
+## Gotchas
+- **Hard-coded hex values** in Figma are "design debt"; they must be replaced with tokens before handoff.
+- **Missing edge cases** (e.g. long text in a narrow column) cause broken layouts during development.
+- **One-way handoff** (designers "tossing it over the wall") always leads to rework.
+
+## Production checklist
+- [ ] Design tokens (colors, type, spacing) are synchronized between Figma and CSS.
+- [ ] Every component has defined hover, focus, and active states.
+- [ ] Edge cases (loading, empty, error, long text) are documented.
+- [ ] Responsive breakpoints and container behavior are clearly defined.
+- [ ] Engineers have reviewed the designs for technical feasibility before they are finalized.
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "What is the most effective way to prevent CSS 'magic numbers' like `margin: 17px`?",
+    options: [
+      { label: "Enforce a shared spacing token system (e.g. 4px grid)", description: "Tokens ensure designers and engineers use a consistent scale.", correct: true },
+      { label: "Manually measure every pixel in Figma", description: "Manual measurement is error-prone and leads to inconsistencies.", correct: false },
+      { label: "Use automatic CSS generators", description: "Generators often produce messy, unmaintainable code.", correct: false }
+    ]
+  },
+  {
+    question: "Which of these should be documented during a designer-engineer handoff?",
+    options: [
+      { label: "Hover states, loading skeletons, and responsive breakpoints", description: "Comprehensive handoff includes interaction and edge cases.", correct: true },
+      { label: "The designer's favorite font", description: "Designers should specify tokens, not personal preferences.", correct: false },
+      { label: "Individual hex codes for every element", description: "Tokens should be used instead of hex codes.", correct: false }
+    ]
+  }
+]} />
+
+## Sources
+- [Figma docs: Handoff](https://help.figma.com/hc/en-us/sections/360006509934-Handoff)
+- [software-engineering: Engineer-designer handoff (author's notes)](https://github.com/limme-learning/software-engineering/blob/main/09-accessibility/05-engineer-designer-handoff.md)

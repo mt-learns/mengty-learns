@@ -1,0 +1,218 @@
+---
+title: "React Component Architecture"
+description: Composition over configuration — slots, compound components, container/presentational split, server/client boundary, memoization discipline, and error/Suspense boundaries in React 19.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: explanation
+level: intermediate
+tags: [react, components, composition, nextjs, server-components, architecture]
+tested_with:
+  react: "19.3.1"
+  next: "16.4.6"
+cards:
+  - q: "Which is preferred in React: inheritance, configuration props, or composition?"
+    a: "Composition. Children/slots first; compound components with scoped context second; a pile of boolean 'variant' props last. React has no useful component inheritance."
+  - q: "What does 'use client' actually mark in React Server Components?"
+    a: "A boundary in the module graph, not a single file: everything imported transitively below it ships to the browser. Push it to the leaves."
+  - q: "Which props can cross the Server→Client boundary?"
+    a: "Serializable values only: strings, numbers, bigint, booleans, null/undefined, plain objects, arrays, Map/Set, Date, Promises, Server Functions, and JSX. Not class instances or ordinary functions."
+  - q: "When does React.memo actually help?"
+    a: "When a component re-renders often with identical props AND its render is measurably expensive. Noise if props change every render. React Compiler can do this automatically."
+  - q: "What granularity should error and Suspense boundaries have?"
+    a: "One per independently valuable region, not one at the page root — a failed widget shouldn't blank the whole page."
+related:
+  - frontend/nextjs-rendering-strategies
+  - frontend/loading-error-empty-states
+  - frontend/responsive-mobile-first
+  - design/composition-vs-inheritance
+sources:
+  - title: "React docs: Thinking in React"
+    url: https://react.dev/learn/thinking-in-react
+  - title: "React docs: Passing Props to a Component (children, slots)"
+    url: https://react.dev/learn/passing-props-to-a-component
+  - title: "React docs: 'use client' directive — boundary + serializable props"
+    url: https://react.dev/reference/rsc/use-client
+  - title: "React docs: React Compiler"
+    url: https://react.dev/learn/react-compiler/introduction
+  - title: "React docs: memo"
+    url: https://react.dev/reference/react/memo
+  - title: "Next.js docs: Server and Client Components"
+    url: https://nextjs.org/docs/app/getting-started/server-and-client-components
+  - title: "Next.js docs: The Server and Client Boundary"
+    url: https://nextjs.org/docs/app/guides/server-and-client-boundary
+  - title: "software-engineering: React component architecture (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/07-frontend-best-practices/01-react-component-architecture.md
+  - title: "software-engineering: component structure example (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/10-example-code/react/component-structure-example.md
+---
+
+## TL;DR
+
+- **Composition over configuration**: `children`/slots first, compound components second, `showX`/`variant` boolean piles last. React has no useful component inheritance.
+- **Server Components are the default**; `'use client'` marks a boundary in the *module graph*, not one file. Push it to the leaves and keep the serializable-prop contract in mind.
+- **Boundaries are architecture**: one `<Suspense>` + error boundary per independently valuable region, and memoization only after a Profiler measurement.
+
+## Why it exists
+
+A component starts as `<Table rows={rows} />`. Then requirements accumulate, and every stakeholder adds one more prop: `readOnly`, `hideReserve`, `selectable`, `extraColumns`, `disablePagination`. Now N booleans mean 2^N states you must be correct across, mutually exclusive combinations type-check fine, and a change for one consumer silently breaks another. The component isn't too big; it's **too configured**. Every new requirement widens one interface instead of adding one composition.
+
+The same disease appears across a tree: data threading ("prop drilling") through five layers because a leaf needs one value, and the server/client split drawn at the route root so a heavy library meant for one leaf ships to the browser for the whole page.
+
+## Mental model
+
+**Three ways a parent influences a child, in order of preference:**
+
+| Technique | Looks like | Cost |
+|---|---|---|
+| **Children / slots** | `<Panel header={<Title/>}>{rows}</Panel>` | None — parent owns the JSX, child owns layout |
+| **Compound components** | `<Table><Table.Toolbar/><Table.Body/></Table>` | A context *internal* to the component family |
+| **Configuration props** | `<Panel showHeader compact variant="legacy"/>` | Combinatorial: N booleans = 2^N states |
+
+Rule of thumb: **a third boolean wanted a slot; a fifth drilled prop wanted composition (pass the rendered node down where data lives) or a scoped context.** Inheritance is not on the list — `extends` on a component was already a smell in 2019.
+
+**Data access vs. rendering.** Keep server state in hooks (`useX`) or in Server Components, not in the markup component. A "presentational" component is pure and prop-driven — that's what makes it testable with a literal object. The old *container/presentational* split into two files is worth it only when the presentational half is reused with a *second* data source; a wrapper that only calls a hook and forwards props adds a layer with no behaviour. (See [data fetching](/docs/frontend/data-fetching-tanstack-query) for where server state belongs.)
+
+**Server vs. client, precisely** (React official docs):
+
+- **Server Components** run on the server, never ship to the browser, can `await` directly, can read secrets/databases/filesystem.
+- **`'use client'` marks a boundary, not a file.** Everything imported transitively below it becomes client code. The directive is a root; push it to the *interactive leaf* (the toggle, the sortable header, the dialog trigger), never the page.
+- **What crosses must be serializable**: strings, numbers, `bigint`, booleans, `null`, `undefined`, globally-registered symbols, iterables (arrays, `Map`, `Set`, `TypedArray`, `ArrayBuffer`) of serializable values, `Date`, plain objects, `Promise`s, **Server Functions**, and JSX. **Not** class instances, ordinary functions, or `Symbol('x')`.
+- **A Client Component can receive server-rendered children**: `<ClientShell>{await <ServerTable/>}</ClientShell>` — the shell is interactive and tiny; expensive content stays on the server. This site uses exactly this for `<Flow>`.
+
+**Memoization is a measurement, not a ritual.** `memo` earns its place when a component re-renders often with *identical props* and its render is *measurably expensive* (a 500-row grid, a chart). It's noise when a new object/callback identity arrives each render anyway. **React Compiler** (stable; opt-in in Next.js 16 via `reactCompiler`, which needs `babel-plugin-react-compiler`) applies memoization automatically; hand-written `memo`/`useMemo`/`useCallback` then become rare escape hatches. Reach for it after a React Profiler check, never before. *(This site does not enable React Compiler.)*
+
+**Boundaries are failure + loading granularity.** One error boundary per *independently valuable region*; one `<Suspense>` per region that can resolve independently. A single boundary at the page root turns any panel failure into a blank page, and one `<Suspense>` around everything makes the fastest region wait for the slowest.
+
+## Worked example (original)
+
+A `<TaskBoard>` with three kanban columns. Bad: `showHeader`, `readOnly`, `disableDnD`, `extraActions`, `dense`, … Compose instead:
+
+```tsx
+// server component — no 'use client'
+export default async function TaskBoardPage() {
+  const tasks = await getTasks(); // runs on the server; fetching code never ships
+  return (
+    <Board tasks={tasks}>
+      <Board.Header />
+      <Board.Columns />
+      <Board.EmptyState />
+    </Board>
+  );
+}
+```
+
+```tsx
+// components/board.tsx — compound component; context is scoped to the family
+import { createContext, useContext, type ReactNode } from 'react';
+
+type BoardCtx = { tasks: Task[] };
+const Ctx = createContext<BoardCtx | null>(null);
+const useBoard = () => {
+  const c = useContext(Ctx);
+  if (!c) throw new Error('Board.* must render inside <Board>');
+  return c;
+};
+
+export function Board({ tasks, children }: { tasks: Task[]; children: ReactNode }) {
+  return <Ctx.Provider value={{ tasks }}>{children}</Ctx.Provider>;
+}
+Board.Header = function Header() { return <h2>{useBoard().tasks.length} tasks</h2>; };
+Board.Columns = function Columns() { /* reads useBoard(), no prop drilling */ return null; };
+Board.EmptyState = function EmptyState() { return useBoard().tasks.length ? null : <p>Nothing here</p>; };
+```
+
+A variant that needs no header simply omits `<Board.Header/>`. No `showHeader` prop exists. Only the innermost interactive leaf (e.g. a `DragHandle`) needs `'use client'`. (Snippets shown for structure; not run.)
+
+## ▶ Flow: composition vs. configuration
+
+<Flow
+  id="react-composition-boundaries"
+  title="React component composition"
+  nodes={[
+    { id: 'page', label: 'Server page', subtitle: 'async, no JS', icon: 'service', category: 'service', rank: 0, order: 0 },
+    { id: 'shell', label: 'Client shell', subtitle: "'use client'", icon: 'class', category: 'abstraction', rank: 1, order: 0 },
+    { id: 'slots', label: 'Slots', subtitle: 'children', icon: 'interface', category: 'abstraction', rank: 2, order: 0 },
+    { id: 'leaf', label: 'Interactive leaf', subtitle: 'state + events', icon: 'user', category: 'client', rank: 3, order: 0 },
+    { id: 'data', label: 'Server content', subtitle: 'passed as children', icon: 'service', category: 'service', rank: 2, order: 1 },
+  ]}
+  steps={[
+    { edge: 'page->shell', title: 'Pass children', text: 'A server component renders into a client boundary. Only serializable props cross.' },
+    { edge: 'shell->slots', title: 'Arrange slots', text: 'The shell lays out slots; it does not know what fills them. No boolean flag explosion.' },
+    { edge: 'slots->leaf', title: 'Mount interactive leaf', text: 'Only the leaf ships JS and uses useState / event handlers.' },
+    { edge: 'page->data', title: 'Server renders content', text: 'Expensive or data-bound subtrees render on the server…' },
+    { edge: 'data->shell', title: 'Passed as children', text: '…and arrive as already-rendered children; their code never enters the bundle.', kind: 'response' },
+  ]}
+/>
+
+**This site is the worked example.** `FlowServer` (a Server Component) validates + precomputes dagre layouts at build time; `FlowLazy` is a tiny client wrapper; the heavy `@xyflow/react` is `next/dynamic`-imported only when scrolled into view; server-rendered step list + skeleton work without JS. See `components/flow/FlowServer.tsx`, `components/flow/FlowLazy.tsx`, `components/mdx.tsx`.
+
+## Gotchas
+
+- **`'use client'` at the top of `page.tsx`** ships the whole subtree's imports to the browser. Move it down to the interactive leaf.
+- **Functions don't cross the boundary.** A `formatMoney` passed from a Server Component, or `onClick={fn}` from server to client, throws at render. Format on the server; pass serializable data; use a **Server Function** for mutations.
+- **Classes don't serialize.** `new Decimal(...)`, `Map` subclasses, class instances fail; send `{ amount: "10.42", currency: "EUR" }`. (Plain `Map`/`Set`/`Date` are fine.)
+- **A Client Component can still render on the server** for HTML, then hydrate; don't rely on `typeof window` during render. Use `useSyncExternalStore`, effects, or suppress hydration for browser-only values.
+- **Stable `key`, never index.** `key={item.id}`; index keys reuse DOM nodes across reorders/filters — a checked checkbox or focus lands on the wrong record.
+- **Hand-rolled memoization** without a Profiler measurement usually costs more than it saves.
+- **One `<Suspense>`/error boundary** for the whole page hides partial failure and serializes loading.
+
+## Production checklist
+
+- [ ] Server Components by default; `'use client'` only on interactive leaves, at the top of that file.
+- [ ] Props crossing the boundary are serializable; no server-only functions passed down; secrets stay server-side.
+- [ ] `children`/slots tried before any boolean/variant prop; no component reaches a third boolean.
+- [ ] Presentational components are pure; data access lives in hooks or Server Components; container split only if reused with a second source.
+- [ ] `key` is a stable domain id; list reorder/filter keeps state on the right row.
+- [ ] `<Suspense>` + error boundary per independently valuable region; fallbacks reserve layout.
+- [ ] `memo`/`useMemo`/`useCallback` only after a Profiler check (or enabled React Compiler), not by default.
+- [ ] Tests render presentational components with literal props; boundary contracts (throw outside parent) are asserted.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "A new requirement would add a fifth boolean prop like `showToolbar`. What does good React architecture suggest instead?",
+    options: [
+      { label: "Render a slot: let the caller compose `<Table.Toolbar/>` (or omit it) instead of a `showToolbar` flag", description: "Slots/compound components remove the combinatorial prop state space; the caller arranges structure.", correct: true },
+      { label: "Add the fifth boolean; booleans compose cleanly", description: "N booleans create 2^N states to test; several are mutually exclusive yet type-check." },
+      { label: "Use inheritance: extend the component class and override render", description: "React has no useful component inheritance; composition replaces it." }
+    ]
+  },
+  {
+    question: "You add `'use client'` to `page.tsx`. What happens to everything it imports transitively?",
+    options: [
+      { label: "It all becomes client code and ships to the browser, including heavy libraries meant for a server", description: "The directive marks a boundary root in the module graph; push it to leaves.", correct: true },
+      { label: "Only that one file ships; imports stay server-side unless marked", description: "Imports below a client boundary are evaluated on the client too." },
+      { label: "Nothing changes; 'use client' is advisory", description: "It changes which module graph the module belongs to." }
+    ]
+  },
+  {
+    question: "Which value can a Server Component NOT pass to a Client Component?",
+    options: [
+      { label: "A class instance like `new Decimal(10.42)` (or an ordinary function)", description: "Only serializable values cross; pass `{ amount: '10.42' }`, format server-side, or use a Server Function.", correct: true },
+      { label: "A `Date`", description: "Date is explicitly serializable." },
+      { label: "A `Promise`", description: "React supports passing Promises to client components." }
+    ]
+  },
+  {
+    question: "One widget on a dashboard throws during render. With a single error boundary at the page root, what does the user see?",
+    options: [
+      { label: "The whole page's fallback — every working widget disappears", description: "One boundary = one fate; scope boundaries per independently valuable region.", correct: true },
+      { label: "Only the failing widget is replaced", description: "That requires a boundary around the failing region." },
+      { label: "A blank page always", description: "The root fallback renders instead, but the point is all regions are lost." }
+    ]
+  }
+]} />
+
+## Sources
+
+- [React docs: Thinking in React](https://react.dev/learn/thinking-in-react)
+- [React docs: Passing Props to a Component](https://react.dev/learn/passing-props-to-a-component)
+- [React docs: 'use client' directive — boundary + serializable props](https://react.dev/reference/rsc/use-client)
+- [React docs: React Compiler](https://react.dev/learn/react-compiler/introduction)
+- [React docs: memo](https://react.dev/reference/react/memo)
+- [Next.js docs: Server and Client Components](https://nextjs.org/docs/app/getting-started/server-and-client-components)
+- [Next.js docs: The Server and Client Boundary](https://nextjs.org/docs/app/guides/server-and-client-boundary)
+- [software-engineering: React component architecture (author's notes)](https://github.com/limme-learning/software-engineering/blob/main/07-frontend-best-practices/01-react-component-architecture.md)
+- [software-engineering: component structure example (author's notes)](https://github.com/limme-learning/software-engineering/blob/main/10-example-code/react/component-structure-example.md)

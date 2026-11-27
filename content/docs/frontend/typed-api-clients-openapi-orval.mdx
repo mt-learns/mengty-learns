@@ -1,0 +1,116 @@
+---
+title: "Typed API Clients with OpenAPI and Orval: Contracts Without Drift"
+description: Generate fully typed React Query hooks and TypeScript client SDKs directly from an OpenAPI specification to eliminate manual API client maintenance.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: how-to
+level: intermediate
+tags: [react, typescript, openapi, orval, tanstack-query, api]
+tested_with:
+  orval: "7.5.0"
+  "@tanstack/react-query": "5.108.4"
+  next: "16.4.6"
+cards:
+  - q: "What is the primary benefit of generating API clients with Orval from an OpenAPI spec?"
+    a: "Eliminates manual type definitions and client code, ensuring frontend code never drifts from backend API changes."
+  - q: "What data fetching library does Orval generate hooks for out-of-the-box?"
+    a: "TanStack Query (React Query), SWR, and vanilla fetch clients."
+  - q: "What happens in CI when a backend developer changes an OpenAPI endpoint without updating frontend usage?"
+    a: "TypeScript compilation fails immediately during build due to mismatched generated types."
+related:
+  - frontend/data-fetching-tanstack-query
+  - frontend/forms-react-hook-form-zod
+sources:
+  - title: "Orval docs: Overview"
+    url: https://orval.dev/
+  - title: "OpenAPI Specification 3.1.0"
+    url: https://spec.openapis.org/oas/v3.1.0
+  - title: "software-engineering: Typed API clients with OpenAPI and Orval (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/05-apis/04-typed-clients-orval.md
+---
+
+## TL;DR
+Never write manual fetch wrappers or TypeScript interfaces for backend endpoints. Generate typed TanStack Query hooks and client SDKs automatically from your OpenAPI specification using `Orval`.
+
+## Why it exists
+Hand-writing `fetch('/api/v1/accounts/' + id)` and casting responses with `as Account` creates silent API drift. When a backend engineer renames `accountId` to `id`, TypeScript remains unaware until runtime errors occur in production. Generating types and hooks from a single OpenAPI schema ensures frontend and backend contracts stay synchronized automatically.
+
+## Mental model
+**Contract-first development.** The OpenAPI YAML or JSON specification is the single source of truth. Backend and frontend both validate against it.
+
+| Step | Action | Tool |
+|---|---|---|
+| **1. Spec** | Define endpoints, schemas, and responses | OpenAPI 3.1 / Swagger |
+| **2. Generate** | Produce typed fetchers and React Query hooks | Orval |
+| **3. Consume** | Call `useGetAccountQuery(id)` in components | React / TanStack Query |
+
+## Do it
+### Orval Configuration (`orval.config.ts`)
+```ts
+import { defineConfig } from 'orval'
+
+export default defineConfig({
+  api: {
+    input: './openapi.yaml',
+    output: {
+      mode: 'tags',
+      target: './src/api/generated',
+      schemas: './src/api/model',
+      client: 'react-query',
+      prettier: true,
+    },
+  },
+})
+```
+
+### Consuming in Components
+```tsx
+'use client'
+import { useGetAccount } from '@/api/generated/accounts/accounts'
+
+export function AccountProfile({ accountId }: { accountId: string }) {
+  const { data, isLoading, error } = useGetAccount(accountId)
+
+  if (isLoading) return <p>Loading account...</p>
+  if (error || !data) return <p>Failed to load account.</p>
+
+  return <div><h2>{data.name}</h2><p>Balance: {data.balance}</p></div>
+}
+```
+
+## Gotchas
+- **Committing generated files** into git can cause merge conflicts; either gitignore them and generate during build, or commit them so CI can build without external API access.
+- **Outdated specs** generated locally will fail in CI if the backend spec is newer; run generation during the CI pipeline build step.
+- **Over-fetching** can occur if OpenAPI tags are too broad; scope Orval output to specific tags or paths.
+
+## Production checklist
+- [ ] OpenAPI specification file (`openapi.yaml`) is maintained as the single source of truth.
+- [ ] Orval is configured to generate typed TanStack Query hooks and models.
+- [ ] Code generation runs in CI before the TypeScript typecheck and build steps.
+- [ ] Manual `fetch` wrappers for REST endpoints are removed in favor of generated hooks.
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "What problem does generating API clients with Orval solve?",
+    options: [
+      { label: "Manual API client maintenance and silent type drift between frontend and backend", description: "Generated code guarantees frontend types always match the OpenAPI spec.", correct: true },
+      { label: "Slow server rendering speeds", description: "Orval runs at build/generation time, not request time.", correct: false },
+      { label: "CSS styling conflicts", description: "Orval handles API contracts, not CSS styling.", correct: false }
+    ]
+  },
+  {
+    question: "What is the single source of truth in a contract-first Orval workflow?",
+    options: [
+      { label: "The OpenAPI specification (YAML or JSON)", description: "All hooks, types, and client methods are derived directly from the OpenAPI spec.", correct: true },
+      { label: "The React component files", description: "Components consume generated hooks, they do not define the schema.", correct: false },
+      { label: "The browser network tab", description: "Network inspection is for debugging, not contracts.", correct: false }
+    ]
+  }
+]} />
+
+## Sources
+- [Orval docs: Overview](https://orval.dev/)
+- [OpenAPI Specification 3.1.0](https://spec.openapis.org/oas/v3.1.0)
+- [software-engineering: Typed API clients with OpenAPI and Orval (author's notes)](https://github.com/limme-learning/software-engineering/blob/main/05-apis/04-typed-clients-orval.md)

@@ -1,0 +1,18 @@
+{
+  "title": "Frontend",
+  "pages": [
+    "react-component-architecture",
+    "nextjs-rendering-strategies",
+    "data-fetching-tanstack-query",
+    "forms-react-hook-form-zod",
+    "tailwind-and-design-tokens",
+    "accessibility-wcag-basics",
+    "loading-error-empty-states",
+    "url-state-nuqs",
+    "motion-with-purpose",
+    "responsive-mobile-first",
+    "typed-api-clients-openapi-orval",
+    "vue-nuxt-composition-api",
+    "engineer-designer-handoff"
+  ]
+}

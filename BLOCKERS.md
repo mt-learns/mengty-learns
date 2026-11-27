@@ -17,3 +17,12 @@
    - **Needed in `components/illustrations/types.ts` & `SectionIcon.tsx`:** Add `'platform'` to `SECTION_ICON_NAMES`, `DEFAULT_TITLES` (`'Platform tools section icon'`), `SECTION_TINTS`, and render a soft 3D clay icon (e.g., server rack / control-plane dial in a squircle).
    - **Needed in `lib/home-data.ts`:** Add `platform` to `SECTION_COPY` (`Title: 'Platform tools'`, `Blurb: 'Ansible, Nginx, API gateways, Vault, Prometheus/Grafana, ELK, and DevSecOps.'`) and re-balance the home grid for 13 cards.
    - **Needed in `content/docs/index.mdx`:** Once `<SectionIcon name="platform" />` exists, add `icon={<SectionIcon name="platform" size={24} decorative />}` to the Platform tools `<Card>`.
+
+# Content Wave 10 (Frontend) - Notes & Out-of-Scope Code Changes
+
+8. **Frontend section icon (`components/illustrations/`), landing-page grid (`lib/home-data.ts`), and `index.mdx` icon prop:**
+   - `lib/home-data.ts` and `components/illustrations/` are code outside Wave 10's allowed scope, and this worker is content-only.
+   - The Frontend `<Card>` in `content/docs/index.mdx` is intentionally added **without an `icon` prop** (same pattern as the Leadership/Platform cards from Waves 9/11).
+   - **Needed in `components/illustrations/types.ts` & `SectionIcon.tsx`:** Add `'frontend'` to `SECTION_ICON_NAMES`, `DEFAULT_TITLES` (`'Frontend section icon'`), `SECTION_TINTS`, and render an original soft 3D clay icon (e.g., browser window / component blocks in a squircle); then add `"icon": "frontend"` to `content/docs/frontend/meta.json`.
+   - **Needed in `lib/home-data.ts`:** Add `frontend` to `SECTION_COPY` (`Title: 'Frontend'`, `Blurb: 'React composition, Next.js rendering, data fetching, forms, Tailwind tokens, accessibility, and UX states.'`) and re-balance the home section grid for 13 cards (see KNOWLEDGE-IMPORT-PLAN.md section 5).
+   - **Needed in `content/docs/index.mdx`:** Once `<SectionIcon name="frontend" />` exists, add `icon={<SectionIcon name="frontend" size={24} decorative />}` to the Frontend `<Card>`.

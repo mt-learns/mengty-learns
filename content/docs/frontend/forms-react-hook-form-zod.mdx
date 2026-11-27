@@ -1,0 +1,295 @@
+---
+title: "Forms with React Hook Form and Zod: One Schema, Both Sides"
+description: Author validation once in a shared Zod schema, run it on the client for feedback and on the server for truth, and map server errors back onto the exact fields with React Hook Form.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: how-to
+level: intermediate
+tags: [react, forms, react-hook-form, zod, validation, accessibility, nextjs]
+tested_with:
+  react-hook-form: "7.92.0"
+  "@hookform/resolvers": "7.0.9"
+  zod: "4.6.7"
+  react: "19.3.1"
+cards:
+  - q: "Why is client-side validation not enough on its own?"
+    a: "It runs in a browser the user controls, so it can be skipped with curl or devtools. The server must re-validate the same rules; the client copy is only a UX feature."
+  - q: "What does `schema.pick({ ... })` give a multi-step wizard?"
+    a: "Each step validates a subset of the same schema, so the composite rules never drift from the step rules. Object-level `superRefine` rules are re-run whole on submit."
+  - q: "Where do cross-field rules like 'ownership must total at most 100%' belong?"
+    a: "In `superRefine`, attaching the issue to a specific `path` so the message renders against the field or section, not a generic banner."
+  - q: "Which validation mode gives the least hostile feedback?"
+    a: "`mode: 'onBlur'` with `reValidateMode: 'onChange'`: validate when the user leaves a field, then re-validate as they fix it."
+  - q: "How do you make an error message reachable by a screen reader?"
+    a: "Set `aria-invalid` on the control and point `aria-describedby` at the message id (keeping any hint id), and announce the summary in a live region."
+related:
+  - frontend/accessibility-wcag-basics
+  - frontend/typed-api-clients-openapi-orval
+  - frontend/loading-error-empty-states
+  - security/csrf-ssrf
+sources:
+  - title: "React Hook Form docs: useForm"
+    url: https://react-hook-form.com/docs/useform
+  - title: "React Hook Form resolvers: Zod"
+    url: https://github.com/react-hook-form/resolvers
+  - title: "Zod docs"
+    url: https://zod.dev/
+  - title: "Next.js docs: Mutating Data (Server Actions)"
+    url: https://nextjs.org/docs/app/getting-started/mutating-data
+  - title: "WCAG 2.2: 3.3.1 Error Identification"
+    url: https://www.w3.org/WAI/WCAG22/Understanding/error-identification.html
+  - title: "software-engineering: Forms with React Hook Form and Zod (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/07-frontend-best-practices/08-forms-with-react-hook-form-and-zod.md
+---
+
+## TL;DR
+
+- **One schema, two executions:** the same Zod schema runs in the browser for feedback and in the Server Action for truth. The client copy is a UX feature; the server copy is the control.
+- **React Hook Form** keeps field state in refs and re-renders narrowly, so a 60-field application stays responsive; `zodResolver` connects the schema to the form.
+- **Errors are a data contract:** `superRefine` for cross-field rules, dotted paths from the server, `setError` + focus on the first invalid field, and a live region for screen readers.
+
+## Why it exists
+
+A validation rule written twice is a rule that will disagree with itself. One team writes the React `onChange` check from a requirements document; another team writes the Bean Validation annotation three months later. Then the company registration regex differs by one character, the per-field percentage check never sees the total, and the trading-address schema forgot the postcode. Users fill nine steps, upload documents, and get a terminal error on submit with no field mapping. The fix is not more checks; it is deleting both rule sets and replacing them with one schema that the form and the server both import.
+
+## Mental model
+
+**One schema, two executions.** Client execution is fast, per-field feedback. Server execution is the decision, and it runs even when the request did not come from your form. Sharing the schema is what makes the two agree.
+
+**React Hook Form's model.** Input state lives in refs and subscriptions are narrow, so typing in field 40 does not re-render fields 1-39. The pieces you use:
+
+| API | Role |
+|---|---|
+| `useForm({ resolver: zodResolver(schema), defaultValues })` | Typed form instance; defaults start inference |
+| `register` / `Controller` | Native inputs vs. controlled third-party widgets |
+| `useFieldArray` | Repeating sections: owners, directors, line items |
+| `formState` | `errors`, `isSubmitting`, `isDirty`, `isValid` |
+| `setError` | The channel for mapping server errors back to fields |
+| `mode: 'onBlur'` | Validate when the user leaves the field, not on every keystroke |
+
+**Slices, not forks.** A multi-step wizard uses `schema.pick({ ... })` per step. It is still the same schema, so the step rules cannot drift. Object-level `superRefine` does not run on a slice, so cross-field rules are re-run whole on the server.
+
+## Flow: watch it work
+
+<Flow
+  id="forms-single-schema"
+  title="One schema, client and server"
+  nodes={[
+    { id: 'form', label: 'Client form', subtitle: 'React Hook Form', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'schema', label: 'Shared schema', subtitle: 'Zod rules', icon: 'interface', category: 'abstraction', rank: 1, order: 0 },
+    { id: 'action', label: 'Server action', subtitle: 'Re-validate', icon: 'service', category: 'service', rank: 2, order: 0 },
+    { id: 'store', label: 'Persist + case', subtitle: 'Idempotent', icon: 'db', category: 'data', rank: 3, order: 0 },
+  ]}
+  steps={[
+    { edge: 'form->schema', title: 'Validate on blur', text: 'The client runs the shared schema for immediate, per-field feedback.' },
+    { edge: 'schema->form', title: 'Field error', text: 'An invalid field gets aria-invalid and a described message next to it.', kind: 'response' },
+    { edge: 'form->action', title: 'Submit payload', text: 'The form sends the data; the browser is not trusted to have validated it.' },
+    { edge: 'action->schema', title: 'Re-validate on server', text: 'The same schema runs again, even for a replayed or hand-crafted request.' },
+    { edge: 'action->store', title: 'Authorise and persist', text: 'An idempotency key ensures a double submit returns one case, not two.' },
+    { edge: 'store->action', title: 'Case reference', text: 'The stored application returns its reference to the action.', kind: 'response' },
+    { edge: 'action->form', title: 'Success or field errors', text: 'Dotted paths map back to fields; focus moves to the first invalid one.', kind: 'response' },
+  ]}
+/>
+
+## Do it
+
+Define the rules once, with messages that say what to do:
+
+```ts
+import { z } from 'zod'
+
+const address = z.object({
+  line1: z.string().trim().min(1, 'Enter the first line of the address'),
+  city: z.string().trim().min(1, 'Enter a town or city'),
+  postcode: z.string().trim().regex(/^[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2}$/i, 'Enter a valid postcode'),
+})
+
+export const applicationSchema = z
+  .object({
+    legalName: z.string().trim().min(2, 'Enter the registered legal name'),
+    registrationNumber: z
+      .string()
+      .trim()
+      .toUpperCase()
+      .regex(/^(?:\d{8}|[A-Z]{2}\d{6})$/, 'Enter 8 digits, or 2 letters followed by 6 digits'),
+    registeredAddress: address,
+    tradingAddress: address,
+    owners: z
+      .array(
+        z.object({
+          name: z.string().trim().min(2, 'Enter the owner name'),
+          percent: z.coerce.number().min(25.01, 'Only owners above 25% must be declared').max(100),
+        }),
+      )
+      .min(1, 'Declare at least one owner above 25%'),
+  })
+  .superRefine((data, ctx) => {
+    const total = data.owners.reduce((sum, owner) => sum + owner.percent, 0)
+    if (total > 100) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['owners'],
+        message: `Declared ownership totals ${total.toFixed(2)}%. It cannot exceed 100%.`,
+      })
+    }
+  })
+```
+
+The Server Action runs the same object and returns dotted paths:
+
+```ts
+'use server'
+import { applicationSchema } from '@acme/contracts/application'
+
+export async function submitApplication(_prev: FormState, payload: unknown): Promise<FormState> {
+  const user = await requireUser()
+  const parsed = applicationSchema.safeParse(payload)
+  if (!parsed.success) {
+    const fieldErrors: Record<string, string[]> = {}
+    for (const issue of parsed.error.issues) {
+      const path = issue.path.join('.')
+      ;(fieldErrors[path] ??= []).push(issue.message)
+    }
+    return { status: 'error', fieldErrors }
+  }
+  const result = await onboarding.submit({
+    application: parsed.data,
+    submittedBy: user.id,
+    idempotencyKey: `application:${user.id}:${parsed.data.registrationNumber}`,
+  })
+  return { status: 'success', caseRef: result.caseRef }
+}
+```
+
+The form wires the resolver, the field array, and the server errors:
+
+```tsx
+'use client'
+import { useActionState, useEffect, useRef, startTransition } from 'react'
+import { useForm, useFieldArray } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { applicationSchema, type Application } from '@acme/contracts/application'
+
+export function ApplicationForm() {
+  const [state, formAction, isPending] = useActionState(submitApplication, { status: 'idle' })
+  const form = useForm<Application>({
+    resolver: zodResolver(applicationSchema),
+    mode: 'onBlur',
+    reValidateMode: 'onChange',
+    defaultValues: { owners: [{ name: '', percent: 25.01 }] },
+  })
+  const owners = useFieldArray({ control: form.control, name: 'owners' })
+  const summary = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    if (state.status !== 'error' || !state.fieldErrors) return
+    for (const [path, messages] of Object.entries(state.fieldErrors)) {
+      form.setError(path as never, { type: 'server', message: messages[0] })
+    }
+    form.setFocus(Object.keys(state.fieldErrors)[0] as never)
+    summary.current?.focus()
+  }, [state, form])
+
+  return (
+    <form onSubmit={form.handleSubmit((data) => startTransition(() => formAction(data)))} noValidate>
+      <div ref={summary} tabIndex={-1} role="alert" aria-live="assertive">
+        {state.status === 'error' ? state.message : null}
+      </div>
+      <fieldset disabled={isPending}>
+        <label htmlFor="legalName">Registered legal name</label>
+        <input id="legalName" {...form.register('legalName')} aria-invalid={!!form.formState.errors.legalName} />
+        {form.formState.errors.legalName && <p>{form.formState.errors.legalName.message}</p>}
+        {/* owners.map(...) with register(`owners.${i}.name`) */}
+        <button type="submit" aria-busy={isPending} disabled={isPending}>
+          {isPending ? 'Submitting...' : 'Submit application'}
+        </button>
+      </fieldset>
+    </form>
+  )
+}
+```
+
+Build the accessible field primitive **once**, so no call site can forget the association:
+
+```tsx
+'use client'
+import { useId, type ReactNode } from 'react'
+
+export function Field({ label, hint, error, children }: {
+  label: string; hint?: string; error?: string
+  children: (ids: { id: string; 'aria-invalid'?: true; 'aria-describedby'?: string }) => ReactNode
+}) {
+  const id = useId()
+  const hintId = `${id}-hint`
+  const errorId = `${id}-error`
+  const describedBy = [hint ? hintId : null, error ? errorId : null].filter(Boolean).join(' ')
+  return (
+    <div>
+      <label htmlFor={id}>{label}</label>
+      {hint ? <p id={hintId}>{hint}</p> : null}
+      {children({ id, ...(error ? { 'aria-invalid': true as const } : {}), ...(describedBy ? { 'aria-describedby': describedBy } : {}) })}
+      {error ? <p id={errorId}>{error}</p> : null}
+    </div>
+  )
+}
+```
+
+The snippets above are illustrative and not run in this repo; the page records the verified library versions only.
+
+## Gotchas
+
+- **`schema.pick()` drops `superRefine`.** Step slices validate fields but not object-level rules; the full schema must run on submit.
+- **`defaultValues` is not validation.** A value typed as required but omitted from defaults makes the form dirty on mount and can hide errors.
+- **`setError` with a path string is untyped.** Cast deliberately, or derive the path from the schema so a rename breaks the compiler.
+- **A disabled submit button is a UX control, not concurrency control.** Make the server operation idempotent; a double submit must not create two cases.
+- **`aria-describedby` replaces, not appends.** If you overwrite a hint id with the error id, the user loses the guidance.
+- **Validating on every keystroke** tells someone their email is invalid while they are still typing it. Use `onBlur` then `onChange`.
+
+## Production checklist
+
+- [ ] One schema lives in a shared package imported by the form and the Server Action.
+- [ ] Server re-validation runs on every request, including replayed ones.
+- [ ] Cross-field rules are in `superRefine` with an explicit `path`.
+- [ ] Errors set `aria-invalid`, keep the hint in `aria-describedby`, and are announced in a live region.
+- [ ] Focus moves to the first invalid field after a failed submit.
+- [ ] Submit is disabled while pending **and** the server is idempotent.
+- [ ] Tests pin the drift cases: the prefixed registration number, the missing postcode, the ownership total.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "The client and server both validate, but with two separately written rule sets. What is the failure mode?",
+    options: [
+      { label: "They drift, so a value the client accepts is rejected by the server with no field mapping", description: "Two sources of truth disagree silently; users hit a terminal error after completing the form.", correct: true },
+      { label: "Nothing; two checks are safer than one", description: "Two disagreeing checks are worse than one shared check." },
+      { label: "The server always wins, so the client is redundant", description: "The client is still needed for feedback, but it must use the same rules." }
+    ]
+  },
+  {
+    question: "Where does 'the declared ownership percentages must not total more than 100%' belong?",
+    options: [
+      { label: "In `superRefine`, with the issue attached to the owners path", description: "It is an object-level rule that per-field validation cannot see.", correct: true },
+      { label: "In each owner's `percent` field rule", description: "Each field can be valid while the total is not." },
+      { label: "Only in the database", description: "The form and server should reject it before persistence." }
+    ]
+  },
+  {
+    question: "A screen-reader user submits a form with three invalid fields. What must happen?",
+    options: [
+      { label: "The summary is announced, each control is marked invalid with its message described, and focus moves to the first invalid field", description: "This satisfies error identification, suggestion and status messages.", correct: true },
+      { label: "The fields turn red", description: "Colour alone is not programmatic and is not announced." },
+      { label: "The page scrolls to the top", description: "Scrolling does not identify which fields failed or why." }
+    ]
+  }
+]} />
+
+## Sources
+
+- [React Hook Form docs: useForm](https://react-hook-form.com/docs/useform)
+- [React Hook Form resolvers: Zod](https://github.com/react-hook-form/resolvers)
+- [Zod docs](https://zod.dev/)
+- [Next.js docs: Mutating Data (Server Actions)](https://nextjs.org/docs/app/getting-started/mutating-data)
+- [WCAG 2.2: 3.3.1 Error Identification](https://www.w3.org/WAI/WCAG22/Understanding/error-identification.html)
+- [software-engineering: Forms with React Hook Form and Zod (author's notes)](https://github.com/limme-learning/software-engineering/blob/main/07-frontend-best-practices/08-forms-with-react-hook-form-and-zod.md)

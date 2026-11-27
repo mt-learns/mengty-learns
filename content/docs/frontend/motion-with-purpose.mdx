@@ -1,0 +1,102 @@
+---
+title: "Motion with Purpose: Physics, Duration, and Accessibility"
+description: Use UI animation to guide attention and explain spatial relationships while strictly respecting prefers-reduced-motion and performance budgets.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: how-to
+level: intermediate
+tags: [react, animation, motion, ux, accessibility]
+tested_with:
+  motion: "12.4.0"
+  react: "19.3.1"
+cards:
+  - q: "What is the primary rule of purposeful UI motion?"
+    a: "Motion must communicate spatial relationships or state changes, never mere decoration."
+  - q: "Why should animations respect `prefers-reduced-motion`?"
+    a: "To prevent vestibular disorders and dizziness triggered by unnecessary movement."
+  - q: "Which CSS properties should be animated for 60fps performance?"
+    a: "Transform and opacity, which run on the compositor thread without layout recalculations."
+related:
+  - frontend/tailwind-and-design-tokens
+  - frontend/accessibility-wcag-basics
+sources:
+  - title: "W3C Accessibility Guidelines: Reduced Motion"
+    url: https://www.w3.org/WAI/WCAG22/Understanding/animation-from-interactions.html
+  - title: "Motion (formerly Framer Motion) docs"
+    url: https://motion.dev/
+  - title: "software-engineering: Motion with purpose (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/07-frontend-best-practices/05-motion-with-purpose.md
+---
+
+## TL;DR
+Animation exists to guide attention and explain spatial orientation. Keep durations fast (200–300ms), animate only `transform` and `opacity`, and always disable motion when `prefers-reduced-motion` is active.
+
+## Why it exists
+Unconstrained UI animation creates cognitive load and motion sickness. Bouncing icons, 800ms fade-ins on static text, and layout-shifting height expansions make an app feel sluggish and unprofessional. Motion with purpose acts as a visual cue that maintains user orientation during page transitions and state changes.
+
+## Mental model
+**Physics over keyframes.** Natural motion accelerates and decelerates smoothly (spring or ease-out). 
+
+| Parameter | Recommended range | Why |
+|---|---|---|
+| **Duration** | 200ms – 350ms | Fast enough not to delay interaction; slow enough to track visually. |
+| **Properties** | `transform`, `opacity` | Handled by GPU compositor thread; zero layout reflow. |
+| **Easing** | Cubic bezier (`0.32, 0.72, 0, 1`) | iOS-style spring feel: quick start, gentle deceleration. |
+
+## Do it
+### Respecting Reduced Motion in React / CSS
+```tsx
+'use client'
+import { motion, useReducedMotion } from 'motion/react'
+
+export function FadeInCard({ children }: { children: React.ReactNode }) {
+  const shouldReduceMotion = useReducedMotion()
+
+  return (
+    <motion.div
+      initial={shouldReduceMotion ? { opacity: 1 } : { opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+    >
+      {children}
+    </motion.div>
+  )
+}
+```
+
+## Gotchas
+- **Animating `width`, `height`, or `top`** forces browser layout recalculation (reflow) on every frame, causing jank. Use `transform: scale()` or `translate()` instead.
+- **Ignoring `prefers-reduced-motion`** violates accessibility standards and can induce nausea in sensitive users.
+- **Endless loaders or bouncing badges** distract attention away from core content.
+
+## Production checklist
+- [ ] Animations run on `transform` and `opacity` only (no layout reflow).
+- [ ] Durations are kept under 300ms for UI micro-interactions.
+- [ ] `prefers-reduced-motion` hook or CSS media query disables non-essential motion.
+- [ ] Motion serves a clear pedagogical or spatial purpose (e.g. sheet open, tab switch).
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "Why should you avoid animating CSS properties like `height` or `width`?",
+    options: [
+      { label: "They trigger layout reflows on every frame, causing jank", description: "Animating layout properties forces the browser to recalculate geometry constantly.", correct: true },
+      { label: "They are prohibited by Tailwind", description: "Tailwind supports them, but browser performance suffers.", correct: false },
+      { label: "They disable screen readers", description: "Performance is the primary issue.", correct: false }
+    ]
+  },
+  {
+    question: "What is the recommended duration range for standard UI micro-interactions?",
+    options: [
+      { label: "200ms – 350ms", description: "Fast enough to feel responsive, slow enough to be perceptible.", correct: true },
+      { label: "1000ms – 2000ms", description: "Too slow; makes the interface feel sluggish.", correct: false },
+      { label: "0ms", description: "Some motion is valuable for orientation.", correct: false }
+    ]
+  }
+]} />
+
+## Sources
+- [W3C Accessibility Guidelines: Reduced Motion](https://www.w3.org/WAI/WCAG22/Understanding/animation-from-interactions.html)
+- [Motion docs](https://motion.dev/)
+- [software-engineering: Motion with purpose (author's notes)](https://github.com/limme-learning/software-engineering/blob/main/07-frontend-best-practices/05-motion-with-purpose.md)

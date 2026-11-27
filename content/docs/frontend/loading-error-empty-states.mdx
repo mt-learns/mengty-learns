@@ -1,0 +1,125 @@
+---
+title: "Loading, Error, and Empty States: The Four UI States"
+description: Handle loading skeletons, boundary errors, empty collections, and success states predictably instead of showing infinite spinners or blank screens.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: cheatsheet
+type: reference
+level: intermediate
+tags: [react, ui, ux, accessibility, loading, error-handling]
+tested_with:
+  react: "19.3.1"
+  next: "16.4.6"
+cards:
+  - q: "What is the primary rule of a loading skeleton?"
+    a: "It must match the exact dimensions and layout of the final content to prevent layout shift (CLS)."
+  - q: "Why should an error state include a recovery action?"
+    a: "So the user can retry or navigate away instead of hitting a dead end."
+  - q: "What distinguishes an empty state from an error state?"
+    a: "An empty state represents a valid zero-data condition with a clear call to action; an error represents a failure."
+related:
+  - frontend/react-component-architecture
+  - frontend/nextjs-rendering-strategies
+sources:
+  - title: "React docs: Suspense"
+    url: https://react.dev/reference/react/Suspense
+  - title: "Next.js docs: Error Handling and Loading UI"
+    url: https://nextjs.org/docs/app/building-your-application/routing/loading-ui-and-streaming
+  - title: "software-engineering: Loading, error and empty states (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/09-accessibility/04-loading-error-empty-states.md
+---
+
+## TL;DR
+Every asynchronous UI region has four states: **Loading** (layout-matching skeleton), **Error** (actionable failure message + retry), **Empty** (zero-data guidance + CTA), and **Success** (rendered content). Design all four before shipping.
+
+## Why it exists
+Interfaces written with only the "Success" state in mind break the moment network latency, server failures, or empty collections occur. A spinner in the middle of a page or a blank screen causes user confusion and unnecessary support tickets. Treating the four states as standard contracts makes applications robust and predictable.
+
+## The Four States Reference
+
+| State | Purpose | UX Rule |
+|---|---|---|
+| **Loading** | Signal progress without layout shift | Use skeleton blocks matching final dimensions; avoid spinners for page transitions. |
+| **Error** | Explain what failed and how to recover | Plain language, persistent error code if helpful, and a clear "Try again" action. |
+| **Empty** | Guide the user when zero items exist | Contextual illustration/icon, clear explanation, and a primary call to action (e.g., "Create item"). |
+| **Success** | Deliver the expected content | Fast render, proper aria attributes, and smooth transition. |
+
+## Do it
+### 1. Loading Skeletons
+```tsx
+export function TableSkeleton() {
+  return (
+    <div className="animate-pulse space-y-3">
+      <div className="h-8 w-1/3 rounded-card bg-muted" />
+      <div className="h-48 w-full rounded-card bg-muted" />
+    </div>
+  )
+}
+```
+
+### 2. Error Boundaries
+```tsx
+'use client'
+export function ErrorState({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+  return (
+    <div role="alert" className="rounded-card border border-border p-6 text-center">
+      <h3 className="text-body font-semibold">Something went wrong</h3>
+      <p className="text-muted-foreground">{error.message}</p>
+      <button onClick={reset} className="mt-4 rounded-control bg-primary px-4 py-2 text-primary-foreground">
+        Try again
+      </button>
+    </div>
+  )
+}
+```
+
+### 3. Empty States
+```tsx
+export function EmptyState({ title, description, action }: { title: string; description: string; action?: React.ReactNode }) {
+  return (
+    <div className="rounded-card border border-dashed border-border p-12 text-center">
+      <h3 className="text-body font-semibold">{title}</h3>
+      <p className="mt-1 text-muted-foreground">{description}</p>
+      {action && <div className="mt-4">{action}</div>}
+    </div>
+  )
+}
+```
+
+## Gotchas
+- **Spinners everywhere** cause layout thrashing and anxiety; use skeletons that match final layout.
+- **Generic error messages** like "An error occurred" leave users helpless; state what failed and how to fix it.
+- **Empty states without CTAs** are dead ends; always give the user a next step.
+- **Hiding loading states** on fast connections hides regressions that slow connections will suffer from.
+
+## Production checklist
+- [ ] Every asynchronous query has a matching skeleton that preserves container dimensions.
+- [ ] Error boundaries catch render failures and provide a recovery action (`reset`).
+- [ ] Empty states guide the user toward creating or finding data with a clear CTA.
+- [ ] Screen readers announce loading and error state changes via ARIA live regions.
+- [ ] Network failures and 4xx/5xx responses are tested in staging.
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "Why should a loading skeleton match the exact dimensions of the incoming content?",
+    options: [
+      { label: "To prevent cumulative layout shift (CLS) when content loads", description: "Preserving dimensions stops the page from jumping around.", correct: true },
+      { label: "To make the app feel slower", description: "Skeletons make loading feel faster, not slower." },
+      { label: "To satisfy Tailwind requirements", description: "Layout stability is a core web vital requirement." }
+    ]
+  },
+  {
+    question: "What is the key difference between an empty state and an error state?",
+    options: [
+      { label: "An empty state is a valid zero-data condition; an error state is a failure", description: "Zero items is normal; failure requires recovery.", correct: true },
+      { label: "Empty states use spinners", description: "Empty states show guidance and a CTA." },
+      { label: "Errors never have action buttons", description: "Errors should always have a retry or recovery action." }
+    ]
+  }
+]} />
+
+## Sources
+- [React docs: Suspense](https://react.dev/reference/react/Suspense)
+- [Next.js docs: Loading UI and Streaming](https://nextjs.org/docs/app/building-your-application/routing/loading-ui-and-streaming)
+- [software-engineering: Loading, error and empty states (author's notes)](https://github.com/limme-learning/software-engineering/blob/main/09-accessibility/04-loading-error-empty-states.md)
