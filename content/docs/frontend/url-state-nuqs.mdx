@@ -1,0 +1,113 @@
+---
+title: "URL State with nuqs: Type-Safe Query Parameters in Next.js"
+description: Treat the URL search parameters as your primary state store for filters, pagination, and tabs with nuqs and React Server Components.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: how-to
+level: intermediate
+tags: [react, nextjs, url-state, nuqs, search-params]
+tested_with:
+  nuqs: "2.4.2"
+  next: "16.4.6"
+  react: "19.3.1"
+cards:
+  - q: "Why store filters and pagination in the URL search parameters rather than React `useState`?"
+    a: "The URL is shareable, bookmarkable, and survives page reloads or back/forward navigation without custom state persistence."
+  - q: "How does nuqs integrate with React Server Components in Next.js?"
+    a: "Server components read searchParams directly on every request, and nuqs updates the URL without full page reloads."
+  - q: "What happens when a search parameter is reset to its default value with nuqs?"
+    a: "It is automatically cleaned from the URL to keep search queries clean and uncluttered."
+related:
+  - frontend/nextjs-rendering-strategies
+  - frontend/data-fetching-tanstack-query
+sources:
+  - title: "nuqs docs: Overview"
+    url: https://nuqs.47ng.com/
+  - title: "Next.js docs: Reading Search Parameters"
+    url: https://nextjs.org/docs/app/api-reference/functions/use-search-params
+  - title: "software-engineering: URL state management with nuqs (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/07-frontend-best-practices/07-url-state-nuqs.md
+---
+
+## TL;DR
+Filters, pagination, and active tabs belong in the URL search parameters, not component `useState`. `nuqs` provides type-safe parsers (`parseAsInteger`, `parseAsString`) that sync React state with the browser URL cleanly.
+
+## Why it exists
+When filters live in local `useState`, sharing a link with a colleague resets their view. Hitting the browser back button loses the current search term. Hand-parsing `URLSearchParams` in every component leads to repetitive boilerplate and string-coercion bugs. `nuqs` treats URL query parameters as first-class typed state.
+
+## Mental model
+**URL as single source of truth.** The URL is global, shareable state. Components read search params during SSR, render initial state without a flash, and update params client-side without full reloads.
+
+| Feature | `useState` | `nuqs` (URL state) |
+|---|---|---|
+| **Shareable** | No | Yes (copy URL) |
+| **Back/Forward** | No | Yes (native history) |
+| **SSR-friendly** | Needs hydration sync | Instant on first paint |
+| **Persistence** | Lost on reload | Survives reloads |
+
+## Do it
+### Define parsers and hooks
+```tsx
+'use client'
+import { useQueryState, parseAsString, parseAsInteger } from 'nuqs'
+
+export function SearchFilter() {
+  const [search, setSearch] = useQueryState(
+    'q',
+    parseAsString.withDefault('').withOptions({ shallow: false })
+  )
+  const [page, setPage] = useQueryState(
+    'page',
+    parseAsInteger.withDefault(1)
+  )
+
+  return (
+    <div>
+      <input
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        placeholder="Search accounts..."
+      />
+      <button onClick={() => setPage(page + 1)}>Next Page (Page {page})</button>
+    </div>
+  )
+}
+```
+
+## Gotchas
+- **Forgetting to debounce** fast typing can flood browser history with query updates; use `{ throttleMs: 300 }`.
+- **Server component mismatch** occurs if server and client parse query parameters with differing default values.
+- **Shallow routing vs server re-fetch**: setting `shallow: false` triggers a Server Component re-fetch when params change, which is required when data fetching depends on server-side search params.
+
+## Production checklist
+- [ ] Filters, sorting, and pagination live in URL search parameters rather than `useState`.
+- [ ] `nuqs` parsers validate types (`parseAsInteger`, `parseAsString`, `parseAsArrayOf`).
+- [ ] Fast inputs use throttling (`throttleMs`) to avoid history stack pollution.
+- [ ] Server components correctly receive and react to updated search params.
+- [ ] Shareable links tested across browsers.
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "What is the primary advantage of storing filter state in URL search parameters?",
+    options: [
+      { label: "The state is shareable, bookmarkable, and persists across reloads", description: "URL state provides native link sharing and history management.", correct: true },
+      { label: "It eliminates all JavaScript memory usage", description: "Memory usage is unaffected; it's about shareability and persistence.", correct: false },
+      { label: "It makes database queries run faster automatically", description: "URL state is strictly a frontend state management choice.", correct: false }
+    ]
+  },
+  {
+    question: "When should you set `shallow: false` in nuqs?",
+    options: [
+      { label: "When server components need to re-fetch data based on the new query parameters", description: "Shallow: false triggers a server round-trip to re-render server components.", correct: true },
+      { label: "Never, shallow routing is always preferred", description: "Server-driven pages require server re-fetches.", correct: false },
+      { label: "Only when offline", description: "Shallow options control client navigation behaviour.", correct: false }
+    ]
+  }
+]} />
+
+## Sources
+- [nuqs docs: Overview](https://nuqs.47ng.com/)
+- [Next.js docs: Reading Search Parameters](https://nextjs.org/docs/app/api-reference/functions/use-search-params)
+- [software-engineering: URL state management with nuqs (author's notes)](https://github.com/limme-learning/software-engineering/blob/main/07-frontend-best-practices/07-url-state-nuqs.md)
