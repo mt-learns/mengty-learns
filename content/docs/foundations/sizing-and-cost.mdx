@@ -1,0 +1,124 @@
+---
+title: Capacity Sizing & Infrastructure Cost
+description: Estimate CPU, RAM, and storage from traffic, choose vertical vs horizontal scaling, weigh managed vs self-hosted ops time, and see why Kubernetes is overkill for a static site.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: explanation
+level: intermediate
+tags: [foundations, sizing, cost, scaling, cloudflare-workers, kubernetes]
+tested_with:
+  opennextjs_cloudflare: "1.20.18"
+  cloudflare_workers: "2026-11 (docs)"
+cards:
+  - q: "Why should infrastructure cost comparisons always include engineering and operations time?"
+    a: "A cheap self-hosted VPS or database can cost far more than a managed service once you factor in hours spent on OS patching, backup drills, TLS renewal, and on-call recovery."
+  - q: "When is vertical scaling (a bigger VM) a better first step than horizontal scaling?"
+    a: "When your workload fits on one machine, because vertical scaling avoids load-balancer, distributed session, and multi-node deployment complexity."
+  - q: "What three dimensions must you estimate when sizing a backend and database?"
+    a: "CPU (concurrent request work at peak), RAM (app processes plus database hot working set/indexes), and storage (active data plus WAL, logs, and backup retention)."
+  - q: "Why is Kubernetes overkill for a static documentation site like Mengty Learns?"
+    a: "The site serves pre-rendered static assets with zero runtime database; Cloudflare Workers serves it globally at the edge with no control plane, node patching, or idle cluster cost."
+related:
+  - architecture/monolith-vs-microservices
+  - foundations/backups-and-dr
+  - kubernetes/pods-deployments
+sources:
+  - title: "Cloudflare Workers Docs: Pricing"
+    url: https://developers.cloudflare.com/workers/platform/pricing/
+  - title: "OpenNext Cloudflare Adapter Docs"
+    url: https://opennext.js.org/cloudflare
+  - title: "Kubernetes Docs: Overview"
+    url: https://kubernetes.io/docs/concepts/overview/what-is-kubernetes/
+---
+
+## TL;DR
+Size systems from **peak concurrency**, **RAM working set**, and **storage + backup retention**—not guesses. Scale **vertically** until a single box genuinely hurts, include **your own ops hours** when comparing managed vs self-hosted bills, and pick the simplest runtime that fits (for this static site, **Cloudflare Workers** beats a VPS and makes **Kubernetes** pure overhead).
+
+## Why it exists
+Teams routinely burn money in two opposite ways: over-provisioning a multi-node Kubernetes cluster for a site that gets 500 visits a day, or under-sizing a tiny single-core VM whose database swaps to disk the first time a post hits a news aggregator.
+
+## Mental model
+Total cost of ownership (TCO) = **compute/bandwidth bill + ops hours × hourly rate + downtime risk**. Every extra moving part (clusters, brokers, self-hosted DBs) trades monthly cloud spend for your engineering time.
+
+<Diagram
+  id="sizing-runtime-tiers"
+  ariaLabel="Traffic and operational complexity grow from edge static hosting to single VPS to multi-node Kubernetes"
+  caption="Match runtime complexity to real workload requirements: start at the left."
+  nodes={[
+    { id: 'edge', label: 'Edge / Static', subtitle: 'Workers + CDN', icon: 'gateway', category: 'edge', rank: 0, order: 0 },
+    { id: 'vps', label: 'Single VPS', subtitle: 'Vertical scale first', icon: 'pod', category: 'service', rank: 1, order: 0 },
+    { id: 'k8s', label: 'Kubernetes', subtitle: 'Multi-team / HA', icon: 'service', category: 'concrete', rank: 2, order: 0 },
+  ]}
+  edges={[
+    { from: 'edge', to: 'vps', kind: 'request', label: 'Needs state' },
+    { from: 'vps', to: 'k8s', kind: 'request', label: 'Multi-node' },
+  ]}
+/>
+
+## Core concepts
+
+### 1. Estimating CPU, RAM, and storage from traffic
+Use back-of-the-envelope capacity math before buying hardware:
+- **CPU:** `peak_rps = avg_rps × peak_multiplier` (often 3–5× for spiky traffic). Multiply by average CPU time per request (`10 ms` CPU time at `100 RPS` needs at least `1.0` full core, so target `2+` vCPUs for headroom).
+- **RAM:** Sum your app runtime footprint + connection pools + **database hot working set** (active B-tree indexes and hot rows). When Postgres indexes spill out of RAM to disk, p99 latency spikes sharply.
+- **Storage:** Active table size + index overhead + WAL/logs + **backup retention** (if you keep 7 daily snapshots, budget for growth and restore space, not just today's `df -h`).
+
+### 2. Vertical vs horizontal scaling
+- **Vertical scaling (scale up):** Upgrade from 2 vCPU / 4 GB RAM to 8 vCPU / 32 GB RAM. Zero code changes, no distributed locks, and a single Postgres primary handles far more traffic than most apps ever see. Trade-off: brief restart downtime on resize and an eventual hardware ceiling.
+- **Horizontal scaling (scale out):** Run N stateless replicas behind a load balancer. Requires externalizing sessions/uploads (Redis, object storage) and handling DB connection pooling. Necessary for zero-downtime rolling deploys, multi-AZ high availability, or exceeding one machine's limits.
+
+### 3. Managed vs self-hosted cost (including your own time)
+A bare VPS looks cheaper on paper than a managed database or serverless platform—until you add:
+- OS & security patching, TLS automation, and firewall hardening.
+- Automated backups, off-site replication, and periodic restore drills.
+- Debugging disk-full alerts or OOMKills outside work hours.
+If you are a solo builder or small product team, paying a modest managed-service premium often buys back dozens of engineering hours a month.
+
+### 4. Worked example: this site on Cloudflare Workers vs VPS vs Kubernetes
+| Option | What runs | Ops burden | Fit for Mengty Learns |
+|---|---|---|---|
+| **Cloudflare Workers** (`@opennextjs/cloudflare`) | Static HTML/CSS/JS + `cards.json` served from global edge cache | Near zero (git push → CI build → deploy) | **Best fit:** sub-second global loads, zero idle server, no OS/TLS/firewall maintenance |
+| **Single Ubuntu VPS** (Caddy + Node/static) | 1 VM running Caddy serving static files | Medium (SSH hardening, `ufw`, `unattended-upgrades`, monitoring) | **Viable, unnecessary:** you pay monthly for an idle VM and own OS patching for static files |
+| **Kubernetes cluster** (EKS/GKE/self-managed) | Control plane + worker nodes + Ingress + cert-manager + Deployments | High (cluster upgrades, YAML, RBAC, probes, observability) | **Overkill:** pays control-plane/node overhead and constant maintenance for zero dynamic scaling need |
+
+## When you DON'T need this
+- **Pre-revenue / < 1,000 daily users:** Don't spend a week building spreadsheets or load-testing—pick the smallest tier on a managed platform or a single small VPS and add basic CPU/memory alerts.
+- **Static sites with no backend:** Edge CDNs and Workers scale to massive traffic spikes automatically with zero capacity planning.
+- **Cost / complexity trade-off:** Upfront sizing prevents surprise cloud bills and OOM crashes, while over-optimizing early wastes engineering time that should go into shipping features.
+
+## Gotchas
+- **Sizing for average traffic instead of peak:** A site averaging 2 RPS can still hit 50 RPS for 10 minutes after a link goes viral.
+- **Forgetting egress bandwidth charges:** Some cloud providers charge steeply per GB of outbound transfer, while static assets on edge CDNs avoid per-GB origin egress surprises.
+- **Assuming Kubernetes saves money:** Without dozens of microservices packing bin-packed nodes, Kubernetes usually *increases* both cloud bill and engineering overhead.
+
+## Production checklist
+- [ ] Static assets and cacheable pages are served from a CDN/edge rather than origin compute.
+- [ ] Database RAM is sized to hold active indexes in memory.
+- [ ] Alerts fire on sustained CPU, memory pressure, and disk usage > 80% before outages hit.
+- [ ] Infrastructure choice matches team size—no Kubernetes unless multi-service / multi-team requirements justify it.
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "A static documentation site with no runtime database gets 2,000 daily visitors and occasional traffic spikes. Which hosting model gives the best cost-to-ops ratio?",
+    options: [
+      { label: "Global edge static hosting (e.g., Cloudflare Workers / CDN)", description: "Static files cache globally with near-zero ops overhead and no idle VM or cluster to patch.", correct: true },
+      { label: "A 3-node Kubernetes cluster with custom Ingress and cert-manager", description: "Running a Kubernetes control plane and nodes for static files adds huge cost and ops burden for no benefit." },
+      { label: "Two load-balanced VMs with a primary/replica PostgreSQL setup", description: "The site has no runtime database; running VMs and Postgres adds unnecessary cost and maintenance." }
+    ]
+  },
+  {
+    question: "What is usually the biggest hidden cost when choosing a cheap self-hosted VPS over a managed service?",
+    options: [
+      { label: "Your own engineering hours spent on patching, backups, hardening, and incident recovery", description: "Self-hosting trades cash bill savings for ongoing operational labor and on-call risk.", correct: true },
+      { label: "TCP handshake latency on Linux", description: "TCP overhead is negligible compared to operational maintenance time." },
+      { label: "Vertical scaling always requires rewriting the app in Go", description: "Vertical scaling simply runs the same app on larger hardware." }
+    ]
+  }
+]} />
+
+## Sources
+- [Cloudflare Workers Docs: Pricing](https://developers.cloudflare.com/workers/platform/pricing/)
+- [OpenNext Cloudflare Adapter Docs](https://opennext.js.org/cloudflare)
+- [Kubernetes Docs: Overview](https://kubernetes.io/docs/concepts/overview/what-is-kubernetes/)
