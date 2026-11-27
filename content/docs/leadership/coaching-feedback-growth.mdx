@@ -1,0 +1,112 @@
+---
+title: "Coaching, Feedback, and Growth"
+description: How engineering leads run effective 1:1s, deliver specific feedback with the SBI+Next Step framework, and turn daily reviews into skill growth.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: how-to
+level: beginner
+tags: [leadership, coaching, feedback, sbi, 1-on-1]
+tested_with:
+  ccl_sbi: "CCL SBI/SBII Feedback Model"
+  rework_guide: "Google re:Work (Manager Coaching)"
+cards:
+  - q: "What do the letters SBI stand for in the Center for Creative Leadership feedback model?"
+    a: "Situation (when/where it happened), Behavior (observable actions without mind-reading), and Impact (the concrete effect on team, user, or delivery)."
+  - q: "Why should 'Behavior' in SBI stick strictly to what a camera could record?"
+    a: "Describing observable actions instead of guessing motives avoids defensiveness and keeps the conversation grounded in facts."
+  - q: "What makes a 1:1 meeting valuable beyond a status check?"
+    a: "Using it to surface blockers, give timely feedback, align on one realistic growth goal, and ask how the lead can better support the engineer."
+  - q: "Why is delaying feedback on poor performance harmful?"
+    a: "Silence deprives the teammate of a fair chance to adjust early and lets small habits compound into delivery or trust problems."
+related:
+  - process/code-review
+  - leadership/becoming-a-team-lead
+  - leadership/delegation-and-ownership
+sources:
+  - title: "Center for Creative Leadership: SBI Feedback Model"
+    url: https://www.ccl.org/articles/leading-effectively-articles/closing-the-gap-between-intent-and-impact-sbii/
+  - title: "Google re:Work: Guide to Developing and Supporting Your Team"
+    url: https://rework.withgoogle.com/en/guides/managers-develop-and-support-your-team
+  - title: "key-learning: Coaching, Feedback, and Growth (author's notes)"
+    url: https://github.com/limme-learning/key-learning/blob/main/management-playbook/09-coaching-feedback-and-growth.md
+  - title: "key-learning: People Development (author's notes)"
+    url: https://github.com/limme-learning/team-lead-growth/blob/main/01-becoming-a-team-lead/04-people-development.md
+---
+
+## TL;DR
+A lead's job is not to hold every answer—it is to grow the team's **judgment, capability, and ownership**. Use **SBI + Next Step** (Situation, Behavior, Impact, Next Step) for specific, non-defensive feedback, and keep **1:1s** focused on blockers, coaching, and one clear growth goal rather than status updates.
+
+## Why it exists
+Vague praise (*"good job"*) and vague criticism (*"be more proactive"*) leave people guessing what to repeat or change. In Google's Project Oxygen findings, the top manager trait is being a **good coach**—someone who gives specific, timely feedback and creates regular opportunities to learn.
+
+## Mental model: SBI + Next Step
+
+| Step | What it covers | Rule of thumb |
+|---|---|---|
+| **Situation** | Exact meeting, PR, or day | Anchor to one concrete moment—never *"always"* or *"lately"*. |
+| **Behavior** | What they said or did | Stick to what a camera or transcript would record; zero mind-reading. |
+| **Impact** | Effect on users, team, or delivery | Explain *why* it mattered (faster review, blocked QA, lost trust). |
+| **Next Step** | Agreed action or inquiry | Ask for their perspective (`Intent` in SBII) and agree on one concrete change. |
+
+## Do it: Feedback and 1:1 rhythm
+
+### 1. Constructive SBI example
+
+```text
+Situation: In yesterday's API design review for the checkout service,
+Behavior:  you walked through the 400-line schema diff without summarizing the two breaking field renames first.
+Impact:    Frontend and QA spent 20 minutes debugging assumptions before noticing the renames, which delayed sign-off.
+Next step: What were you hoping to cover first? Next time, let's put breaking changes in a 3-line summary at the top of the PR.
+```
+
+### 2. High-signal 1:1 questions (biweekly or monthly)
+Skip *"What's the status of ticket #42?"*—read the board before the meeting and ask:
+- *"What slowed you down or caused unnecessary stress this week?"*
+- *"What skill or system area do you want to stretch into next?"*
+- *"Where did my review or feedback fall short in supporting you?"*
+- *"What recent win are you proud of?"*
+
+### 3. Everyday coaching moments
+Turn normal engineering work into growth without extra meetings:
+- **Code review:** Explain *why* a boundary or test matters, not just *"change this."*
+- **Pairing:** Let the teammate drive the keyboard while you ask guiding questions.
+- **Demos & rotations:** Rotate who presents sprint demos and who shadows on-call/release checklists.
+
+## Gotchas
+- **Turning 1:1s into status meetings:** If you spend 30 minutes reading Jira tickets aloud, neither growth nor trust happens.
+- **Waiting for annual reviews:** Feedback delivered three months late cannot change yesterday's behavior. Deliver it within 24–48 hours while context is fresh.
+- **Too many growth goals at once:** Agreeing on five goals guarantees none stick. Pick **one** realistic focus for the next 4–6 weeks.
+
+## Production checklist
+- [ ] Every teammate has a recurring, protected 1:1 (biweekly or monthly) that is never cancelled casually.
+- [ ] Constructive feedback is delivered privately, promptly, and using **SBI** facts—never personality labels.
+- [ ] Positive feedback is equally specific so teammates know what habits to repeat.
+- [ ] Each teammate has **one** active growth goal followed up in 1:1s.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "Which statement follows the 'Behavior' rule of the SBI feedback model?",
+    options: [
+      { label: "\"You merged the PR before the staging smoke test finished, and CI failed on main.\"", description: "It describes an observable action and event without assuming motive.", correct: true },
+      { label: "\"You don't care about production stability when you're in a hurry.\"", description: "This guesses internal intent and attacks character rather than describing observable behavior." },
+      { label: "\"You are always careless with deployments.\"", description: "Generalizations like 'always' trigger defensiveness instead of fixing a specific habit." }
+    ]
+  },
+  {
+    question: "What is the best use of a 30-minute 1:1 between a Team Lead and an engineer?",
+    options: [
+      { label: "Surfacing friction, giving timely SBI feedback, and checking progress on one growth goal", description: "Async boards handle ticket status; 1:1s are for coaching, blockers, and support.", correct: true },
+      { label: "Walking through every Jira ticket line by line", description: "Status readouts waste high-trust 1:1 time that should go to coaching and unblocking." },
+      { label: "Saving all constructive feedback for the year-end review", description: "Delayed feedback is unfair and ineffective." }
+    ]
+  }
+]} />
+
+## Sources
+- [Center for Creative Leadership: SBI Feedback Model](https://www.ccl.org/articles/leading-effectively-articles/closing-the-gap-between-intent-and-impact-sbii/)
+- [Google re:Work: Guide to Developing and Supporting Your Team](https://rework.withgoogle.com/en/guides/managers-develop-and-support-your-team)
+- [key-learning: Coaching, Feedback, and Growth (author's notes)](https://github.com/limme-learning/key-learning/blob/main/management-playbook/09-coaching-feedback-and-growth.md)
+- [key-learning: People Development (author's notes)](https://github.com/limme-learning/team-lead-growth/blob/main/01-becoming-a-team-lead/04-people-development.md)
