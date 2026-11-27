@@ -1,0 +1,164 @@
+---
+title: "Becoming a Team Lead"
+description: How an individual contributor transitions into a Team Lead—shifting from personal task output to team outcomes, technical alignment, and people growth.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: concept
+type: explanation
+level: beginner
+tags: [leadership, team-lead, career, ownership, transition]
+tested_with:
+  rework_guide: "Google re:Work (Team Effectiveness & Manager Guides)"
+  dora: "DORA Research (2024)"
+cards:
+  - q: "What is the core mindset shift when moving from Senior IC to Team Lead?"
+    a: "Shifting from 'my tasks and my code' to 'the team's outcome, reliability, and capability.'"
+  - q: "What are the five leadership areas of a Team Lead role?"
+    a: "Technical leadership, delivery leadership, people leadership, stakeholder leadership, and process leadership."
+  - q: "How can an IC practice Team Lead skills before holding the formal title?"
+    a: "Own a feature end to end, unblock teammates via reviews and pairing, write an ADR, and run a stakeholder status update with decision notes."
+  - q: "Why does Google's Project Aristotle matter to a new Team Lead?"
+    a: "It found that how a team interacts—especially psychological safety, dependability, and clarity—matters more than individual talent alone."
+related:
+  - process/adr
+  - process/raci
+  - process/idea-to-production
+sources:
+  - title: "Google re:Work: Guide to Understanding Team Effectiveness"
+    url: https://rework.withgoogle.com/en/guides/understanding-team-effectiveness
+  - title: "DORA: Software Delivery and Operational Performance"
+    url: https://dora.dev/research/
+  - title: "key-learning: Becoming a Team Lead (author's notes)"
+    url: https://github.com/limme-learning/key-learning/blob/main/team-lead-growth/01-becoming-a-team-lead/01-process-flow.md
+---
+
+## 1. Intent
+
+<Intent>
+Becoming a Team Lead is a **role change, not a promotion for writing faster code**. You move from optimizing your own pull requests to multiplying the team across technical direction, delivery, people growth, stakeholders, and process.
+</Intent>
+
+## 2. Problem
+
+Many new leads fail in their first months because they keep working like a Senior IC who also attends extra meetings. They grab the hardest tickets themselves, become a bottleneck in code review, and leave teammates without clear context or growth paths.
+
+## 3. Solution
+
+Treat the transition as a deliberate progression across four stages—**Feature Owner** → **Force Multiplier** → **Acting Lead** → **Team Lead**—while balancing five core areas:
+
+1. **Technical:** architecture, ADRs, review standards, and technical risk.
+2. **Delivery:** scope, dependencies, release readiness, and early risk flags.
+3. **People:** 1:1s, coaching, onboarding, and healthy conflict resolution.
+4. **Stakeholder:** clear written updates, options, and trade-offs for PM, PO, and ops.
+5. **Process:** CI/CD improvements, runbooks, and blameless retrospectives.
+
+## 4. Real-world analogy
+
+<Analogy>
+Think of moving from lead violinist to conductor. A great violinist plays their own part flawlessly; a conductor rarely plays an instrument on stage, yet ensures every section enters on time, hears each other, and delivers one coherent performance.
+</Analogy>
+
+## 5. Flow: watch it work
+
+<Flow
+  id="ic-to-lead-transition"
+  title="IC to Team Lead Transition"
+  nodes={[
+    { id: 'ic', label: 'Senior IC', subtitle: 'Own tasks & PRs', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'owner', label: 'Feature Owner', subtitle: 'End-to-end delivery', icon: 'service', category: 'service', rank: 1, order: 0 },
+    { id: 'unblock', label: 'Force Multiplier', subtitle: 'Reviews, ADRs, help', icon: 'interface', category: 'abstraction', rank: 2, order: 0 },
+    { id: 'acting', label: 'Acting Lead', subtitle: 'Risks & stakeholders', icon: 'gateway', category: 'edge', rank: 3, order: 0 },
+    { id: 'lead', label: 'Team Lead', subtitle: 'Team outcome & growth', icon: 'db', category: 'data', rank: 4, order: 0 },
+  ]}
+  steps={[
+    { edge: 'ic->owner', title: 'Own a feature end to end', text: 'Move from picking up isolated tickets to owning discovery, rollout, and production support.' },
+    { edge: 'owner->unblock', title: 'Multiply teammates', text: 'Unblock peers through thorough code reviews, pairing, and written ADRs.' },
+    { edge: 'unblock->acting', title: 'Coordinate delivery and risks', text: 'Facilitate planning, run stakeholder status updates, and surface risks early.' },
+    { edge: 'acting->lead', title: 'Step into formal leadership', text: 'Own team health, 1:1 coaching, process improvements, and hiring or career growth.' },
+  ]}
+/>
+
+## 6. Structure: IC vs Team Lead focus
+
+| Dimension | Individual Contributor | Team Lead |
+|---|---|---|
+| **Primary unit of work** | My ticket and my PR | Team's sprint goal and production health |
+| **Technical impact** | Writing clean modules | Setting standards, ADRs, and unblocking architecture |
+| **When blocked** | Escalate or ask for context | Clarify scope, align stakeholders, remove obstacles |
+| **Measure of a good week** | Features I shipped | Risks caught early, teammates unblocked, reliable release |
+
+## 7. When to use / when to avoid
+
+<Checklist
+  use={[
+    "You enjoy unblocking teammates, clarifying messy problems, and improving how a group works together.",
+    "You want to multiply impact through architecture, coaching, and delivery systems."
+  ]}
+  avoid={[
+    "You only want the role for a title or pay bump while disliking 1:1s, feedback, and stakeholder alignment.",
+    "You plan to keep 100% of your calendar for heads-down coding—consider a Staff/Principal IC track instead."
+  ]}
+/>
+
+## 8. How to implement
+
+<Steps>
+  <Step title="Own one vertical slice end to end">
+    Take one feature from requirements clarification through staging, release checklist, and production monitoring.
+  </Step>
+  <Step title="Lead one technical decision">
+    Write an Architecture Decision Record (`process/adr`) comparing at least two options and their trade-offs.
+  </Step>
+  <Step title="Run one stakeholder update">
+    Send a concise Status / Risk / Decision-needed update after planning or demo so expectations stay aligned.
+  </Step>
+  <Step title="Ship one team-wide improvement">
+    Fix a recurring friction point—flaky CI, missing runbook, or unclear PR checklist—so everyone moves faster.
+  </Step>
+</Steps>
+
+## 9. Pros / Cons
+
+<ProsCons
+  pros={[
+    "Greater leverage: a healthy 5-person team ships far more than one heroic coder.",
+    "Builds durable skills in systems thinking, communication, and people development."
+  ]}
+  cons={[
+    "Less uninterrupted coding time; context switching between tech, delivery, and people.",
+    "Feedback loops are slower—you measure success over quarters, not per commit."
+  ]}
+/>
+
+## 10. Relations
+
+- **Technical decisions:** Pair with [Architecture Decision Records](/docs/process/adr) to make design choices transparent.
+- **Role clarity:** Use [RACI Matrix](/docs/process/raci) to separate who executes (`R`) from who signs off (`A`).
+- **Delivery loop:** See [Idea to Production](/docs/process/idea-to-production) for the full lifecycle a lead stewards.
+
+## 11. Check yourself
+
+<Quiz questions={[
+  {
+    question: "A newly promoted Team Lead still takes the hardest coding tasks every sprint and works late to finish them. What is the main risk?",
+    options: [
+      { label: "The lead becomes a delivery bottleneck and deprives teammates of growth and ownership", description: "A Team Lead's job is to multiply the team's capability, not remain the sole hero coder.", correct: true },
+      { label: "The team will have too many Architecture Decision Records", description: "Hero coding usually reduces documentation and shared context rather than increasing it." },
+      { label: "Code review quality will automatically improve", description: "Overloaded leads rush reviews or skip mentoring." }
+    ]
+  },
+  {
+    question: "According to Google's Project Aristotle research, what factor mattered most for team effectiveness?",
+    options: [
+      { label: "Psychological safety—feeling safe to take risks, ask questions, and surface mistakes", description: "How teammates interact and structure clarity/dependability outweighed individual brilliance.", correct: true },
+      { label: "Having only senior engineers on the team", description: "Team dynamics mattered far more than individual seniority mix." },
+      { label: "Eliminating all meetings", description: "Clear structure and dependability require intentional alignment, not zero communication." }
+    ]
+  }
+]} />
+
+## 12. Sources
+
+- [Google re:Work: Guide to Understanding Team Effectiveness](https://rework.withgoogle.com/en/guides/understanding-team-effectiveness)
+- [DORA: Software Delivery and Operational Performance](https://dora.dev/research/)
+- [key-learning: Becoming a Team Lead (author's notes)](https://github.com/limme-learning/key-learning/blob/main/team-lead-growth/01-becoming-a-team-lead/01-process-flow.md)

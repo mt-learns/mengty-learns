@@ -21,3 +21,11 @@
 # Landing Motion (branch `landing-motion`)
 
 5. **Desktop `LR` direction on `<Flow>` (`components/flow/` & `components/diagram/`):** `FlowPropsSchema` (`components/diagram/types.ts`) only accepts `layout: 'flow' | 'tree'` and has no `direction` prop (`'LR' | 'TB'`). Additionally, `FlowServer` (`components/flow/FlowServer.tsx`) only precomputes layouts up to `720px` (`PRECOMPUTE_WIDTHS`), and `computeDiagramLayout` (`components/diagram/layout.ts`) selects `TB` for `K8S_REQUEST_FLOW` at `720px`, leaving empty horizontal space on the `1200px` desktop landing container. **Needed in `components/flow/` + `components/diagram/` (polish worker):** expose an optional `direction?: 'LR' | 'TB'` (or `desktopDirection`) prop on `FlowProps` / `FlowServer`, or include wider breakpoints (e.g. `960`, `1136`) in `PRECOMPUTE_WIDTHS` so 4-rank flows lay out left-to-right on desktop. Also consider an explicit `autoPlay?: boolean` prop on `Player` so `K8sFlowObserver` does not have to trigger `Start`/`Pause` via button clicks.
+
+# Content Wave 9 (Leadership) — Notes & Out-of-Scope Code Changes
+
+6. **Leadership section icon (`components/illustrations/`), landing-page grid (`lib/home-data.ts`), and `index.mdx` icon prop:**
+   - `lib/home-data.ts` and `components/illustrations/` are code outside Wave 9's allowed scope.
+   - **Needed in `components/illustrations/types.ts` & `SectionIcon.tsx`:** Add `'leadership'` to `SECTION_ICON_NAMES`, `DEFAULT_TITLES` (`'Leadership section icon'`), `SECTION_TINTS`, and render an original soft 3D clay icon.
+   - **Needed in `lib/home-data.ts`:** Add `leadership` to `SECTION_COPY` (`Title: 'Leadership'`, `Blurb: 'Transitioning to team lead, clarity, delegation, feedback, and engineering health.'`) and rebalance the home section grid (13 cards total with `leadership`, `frontend`, and `platform`).
+   - **Needed in `content/docs/index.mdx` and `content/docs/leadership/meta.json`:** Once `<SectionIcon name="leadership" />` exists, add `icon={<SectionIcon name="leadership" size={24} decorative />}` to the Leadership `<Card>` in `content/docs/index.mdx` and `"icon": "leadership"` to `content/docs/leadership/meta.json`.
