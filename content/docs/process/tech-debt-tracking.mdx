@@ -1,0 +1,103 @@
+---
+title: Quantifying & Tracking Technical Debt
+description: Turn "we need to refactor" into a business case—measure delivery drag, incident share, and rework rate, track debt in the same backlog, and pay it down via Strangler Fig.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: explanation
+level: intermediate
+tags: [process, tech-debt, metrics, refactoring, strangler-fig]
+tested_with:
+  workflow: "backlog + git metrics"
+cards:
+  - q: "What distinguishes deliberate technical debt from accidental mess?"
+    a: "Deliberate debt is a conscious, documented trade-off with a known cost and repayment trigger, whereas accidental mess is unmanaged risk from haste or missing boundaries."
+  - q: "Which four metrics translate technical debt into business impact?"
+    a: "Delivery drag (lead time per change), incident share (% of outages originating in the module), change failure / rework rate, and deadline risk exposure."
+  - q: "Why do promised 'refactoring sprints after the next release' almost always fail?"
+    a: "There is always a next release; debt only gets repaid via opportunistic cleanup on every touch plus a standing capacity allocation (e.g. 15-20%) prioritized by measured interest."
+  - q: "How do you safely replace a high-risk legacy module without a big-bang rewrite?"
+    a: "Write characterization tests to pin current behavior, then migrate one slice at a time behind a feature flag using the Strangler Fig pattern."
+related:
+  - design/anti-patterns
+  - process/estimation-and-prioritization
+  - process/dor-dod-quality-gates
+sources:
+  - title: "Martin Fowler: Technical Debt Quadrant"
+    url: https://martinfowler.com/bliki/TechnicalDebtQuadrant.html
+  - title: "Martin Fowler: Strangler Fig Application"
+    url: https://martinfowler.com/bliki/StranglerFigApplication.html
+  - title: "software-engineering: Technical Debt Is a Number, Not a Feeling (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/01-core-concepts/08-technical-debt-tracking.md
+---
+
+## TL;DR
+*"We need to refactor"* loses every planning meeting. Measure debt's **interest**—extra lead time, incident share, and rework rate—put quantified debt tickets in the **same backlog** as features, and repay high-interest modules incrementally using **characterization tests + Strangler Fig** instead of big-bang rewrites.
+
+## Why it exists
+When engineering describes debt with adjectives ("messy", "ugly"), product managers hear "engineering taste" and prioritize revenue features instead—until a critical change takes 14 weeks instead of 2 and misses a hard deadline.
+
+## Mental model
+Prioritize debt where **annual interest > repayment cost**:
+
+<Diagram
+  id="tech-debt-loop"
+  ariaLabel="Measure interest metrics on a module, compare interest against repayment cost, and repay via opportunistic or Strangler Fig steps"
+  caption="Quantify interest in lead time and incidents, then repay incrementally and re-measure."
+  nodes={[
+    { id: 'meas', label: 'Measure Interest', subtitle: 'Lead time, incidents', icon: 'ci', category: 'client', rank: 0, order: 0 },
+    { id: 'back', label: 'Backlog Ticket', subtitle: 'Same board as feat', icon: 'service', category: 'service', rank: 1, order: 0 },
+    { id: 'pay', label: 'Strangler / Fix', subtitle: '15-20% + on touch', icon: 'gateway', category: 'data', rank: 2, order: 0 },
+  ]}
+  edges={[
+    { from: 'meas', to: 'back', label: 'quantify' },
+    { from: 'back', to: 'pay', label: 'repay' },
+    { from: 'pay', to: 'meas', label: 're-measure', kind: 'response' },
+  ]}
+/>
+
+## Do it
+
+### Measure the interest before asking for capacity
+- **Delivery drag:** Median PR lead time in module X (e.g., 9 days) vs. rest of repo (2 days).
+- **Incident share:** Percentage of production incidents traced to module X over the last 2 quarters.
+- **Rework rate:** Percentage of tickets touching module X that needed a bugfix within 30 days.
+
+### Repay safely: characterization tests + Strangler Fig
+1. **Pin current behavior** with characterization tests around the legacy boundary.
+2. **Route new cases** to the clean implementation behind a feature flag.
+3. **Migrate one slice at a time** and delete the legacy path once traffic is 100% migrated.
+
+## Gotchas
+- **Tracking debt in a separate wiki page:** If it isn't in the same backlog as features, it doesn't exist during sprint planning.
+- **`TODO` comments without ticket IDs:** Orphaned `TODO`s rot forever—require `TODO(ENG-123)` in code review.
+- **Big-bang rewrites:** Rewriting a live system from scratch while features keep landing on the old one rarely catches up.
+
+## Production checklist
+- [ ] Attach measured lead-time, incident, or rework numbers to every structural debt ticket.
+- [ ] Keep debt tickets in the main product backlog alongside features.
+- [ ] Protect a standing capacity slice (e.g. 15–20%) or require opportunistic cleanup on every touch.
+- [ ] Write characterization tests before refactoring untested legacy modules.
+
+## Check yourself
+
+<Quiz
+  questions={[
+    {
+      question: "How do you make a technical debt item competitive in sprint prioritization?",
+      options: [
+        { label: "Keep a separate engineering-only spreadsheet", description: "Separate trackers stay invisible during product planning." },
+        { label: "Quantify its ongoing interest (extra lead time, incident share, rework rate) in the shared product backlog", description: "Expressing debt in delivery speed and incident risk lets product and engineering compare trade-offs objectively.", correct: true },
+        { label: "Schedule a big-bang rewrite after the next major release", description: "Big-bang rewrites and deferred 'refactoring sprints' rarely succeed." },
+      ],
+    },
+    {
+      question: "What is the first step before refactoring an untested legacy module?",
+      options: [
+        { label: "Write characterization tests that pin its current inputs and outputs", description: "Characterization tests detect unintended behavior changes during incremental extraction.", correct: true },
+        { label: "Delete all existing functions and start from an empty file", description: "Deleting working code without a safety net risks breaking undocumented edge cases." },
+        { label: "Rename every variable", description: "Renaming without tests risks breaking callers." },
+      ],
+    },
+  ]}
+/>
