@@ -1,0 +1,95 @@
+---
+title: "ELK Logging: Pipelines, ILM & Log Hygiene"
+description: Centralize structured JSON logs with Filebeat/Fluent Bit, Elasticsearch data streams, Index Lifecycle Management (ILM), KQL queries, and PII redaction.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: cheatsheet
+type: reference
+level: intermediate
+tags: [elk, elasticsearch, kibana, logging, observability, ilm]
+tested_with:
+  elasticsearch: "9.x (docs)"
+cards:
+  - q: "Why should applications write structured JSON to stdout instead of shipping raw unstructured text lines for Logstash grok parsing?"
+    a: "Structured JSON avoids fragile, CPU-heavy regex grok patterns and gives every log event consistent fields (timestamp, level, service, trace_id, request_id) immediately."
+  - q: "What is the role of Index Lifecycle Management (ILM) in Elasticsearch?"
+    a: "ILM automates rolling indices across hot, warm, cold, and delete phases based on size or age so logs do not fill disks or stay in expensive NVMe storage forever."
+  - q: "What is a mapping explosion in Elasticsearch, and how do you prevent it?"
+    a: "Creating unbounded dynamic fields (for example logging arbitrary request JSON keys at root level) exhausts cluster state memory; prevent it with strict field schemas or `flattened` field types."
+  - q: "Where must sensitive fields (passwords, tokens, PAN, national IDs) be masked in a logging pipeline?"
+    a: "In the application logger before writing to stdout, with a second redaction pass in the ingest pipeline—never rely solely on Kibana RBAC to hide leaked secrets."
+related:
+  - foundations/observability
+  - architecture/error-handling-logging
+  - platform/prometheus-grafana
+sources:
+  - title: "Elastic Docs: Index Lifecycle Management (ILM)"
+    url: https://www.elastic.co/guide/en/elasticsearch/reference/current/index-lifecycle-management.html
+  - title: "Elastic Docs: Kibana Query Language (KQL)"
+    url: https://www.elastic.co/guide/en/kibana/current/kuery-query.html
+  - title: "Elastic Docs: Data Streams"
+    url: https://www.elastic.co/guide/en/elasticsearch/reference/current/data-streams.html
+  - title: "learn-devops: ELK / Kibana Cheat Sheet (author's notes)"
+    url: https://github.com/limme-learning/learn-devops/blob/main/cheatsheets/08-elk-kibana/README.md
+---
+
+## TL;DR
+Emit **structured JSON to `stdout`**, ship with a lightweight collector (Filebeat or Fluent Bit), parse/redact in an ingest pipeline, and store in **Elasticsearch data streams** managed by **ILM** (`hot → warm → cold → delete`). Correlate every log with `trace_id` and `request_id`, and mask PII/tokens before they ever hit disk.
+
+## Pipeline & KQL quick reference
+
+```text
+app (JSON stdout) ─► Filebeat / Fluent Bit ─► Ingest Pipeline (enrich + redact) ─► Elasticsearch Data Stream (ILM) ─► Kibana
+```
+
+Useful KQL queries in Kibana Discover:
+
+```text
+service.name: "payment-service" and http.response.status_code >= 500
+trace_id: "4bf92f3577b34da6a3ce929d0e0e4736"
+log.level: "error" and not error.type: "ValidationError"
+http.response.status_code: 504 and event.duration > 5000000000
+```
+
+## ILM & retention tiers
+- **Hot:** Active writes on fast SSD/NVMe; rollover at size/age threshold (e.g. `50GB` or `1d`) so shards stay 20–50 GB.
+- **Warm / Cold:** Read-only, force-merged, moved to cheaper spinning/object-backed nodes for compliance retention.
+- **Delete:** Automatically purge indices after your retention policy expires (separate shorter retention for debug/access logs vs audit logs).
+
+## Gotchas
+- **Dynamic mapping explosions:** Logging arbitrary user payloads or dynamic map keys at the top level creates thousands of index fields, bloating cluster state across every node.
+- **Tiny shard sprawl:** Creating daily indices for low-volume services leaves thousands of 5 MB shards; use **data streams** with size-based rollover (`max_primary_shard_size: 30gb`).
+- **Logging secrets or PII:** Once a bearer token or PAN enters Elasticsearch, it is replicated across shards and snapshots; redact at the app logger *and* drop/mask in ingest pipelines.
+
+## Production checklist
+- [ ] Apps log single-line JSON to `stdout` with `timestamp`, `level`, `service`, `trace_id`, and `request_id`.
+- [ ] Ingest pipeline or collector redacts `Authorization`, cookies, passwords, and PII patterns.
+- [ ] Data streams use ILM policies with size-based rollover (avoiding per-day tiny shards).
+- [ ] Security/audit logs sit in a separate append-only index/stream with longer retention than noisy debug logs.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "Why should Elasticsearch data streams roll over based on shard size (e.g. 30–50 GB) rather than strictly creating a new index every hour or day for every service?",
+    options: [
+      { label: "Time-only rollovers on low-traffic services create thousands of tiny shards that waste JVM heap and cluster-state memory", description: "ILM size-based rollover keeps shard sizes balanced regardless of traffic volume.", correct: true },
+      { label: "Elasticsearch cannot query indices older than 24 hours", description: "Elasticsearch queries indices of any age; the issue is shard overhead." },
+      { label: "KQL only works on indices larger than 50 GB", description: "KQL works on indices of any size." }
+    ]
+  },
+  {
+    question: "What causes an Elasticsearch mapping explosion?",
+    options: [
+      { label: "Indexing unbounded dynamic JSON keys (such as user IDs or arbitrary payloads as field names)", description: "Each unique field name updates the cluster-wide mapping state; use strict schemas or flattened fields.", correct: true },
+      { label: "Using Kibana Query Language (KQL) with wildcards", description: "Wildcard queries affect search latency, not index field mappings." },
+      { label: "Enabling ILM delete phases", description: "ILM delete removes old indices and reduces cluster state." }
+    ]
+  }
+]} />
+
+## Sources
+- [Elastic Docs: Index Lifecycle Management](https://www.elastic.co/guide/en/elasticsearch/reference/current/index-lifecycle-management.html)
+- [Elastic Docs: Kibana Query Language (KQL)](https://www.elastic.co/guide/en/kibana/current/kuery-query.html)
+- [Elastic Docs: Data Streams](https://www.elastic.co/guide/en/elasticsearch/reference/current/data-streams.html)
+- [learn-devops: ELK / Kibana Cheat Sheet (author's notes)](https://github.com/limme-learning/learn-devops/blob/main/cheatsheets/08-elk-kibana/README.md)
