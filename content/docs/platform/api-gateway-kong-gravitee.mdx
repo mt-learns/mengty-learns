@@ -1,0 +1,98 @@
+---
+title: "API Gateway Choice: Kong vs Gravitee"
+description: Decide between Kong (programmable DB-less API gateway) and Gravitee (full API management with developer portal, plans, and subscriptions).
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: decision
+type: explanation
+level: intermediate
+tags: [api-gateway, kong, gravitee, architecture, decision]
+tested_with:
+  kong: "3.x (docs)"
+  gravitee: "4.x (docs)"
+cards:
+  - q: "Why should authentication (JWT/OIDC validation) live at the API gateway rather than at both the edge proxy and the API gateway?"
+    a: "Two separate JWT validators inevitably drift on clock skew, allowed algorithms, or key rotation, creating a security gap where one accepts tokens the other rejects."
+  - q: "Why must CORS plugins run at higher priority (earlier) than authentication plugins in Kong?"
+    a: "Browser CORS preflight OPTIONS requests carry no Authorization header by specification; running auth first returns 401 and blocks the browser from sending the real request."
+  - q: "When should you choose Gravitee APIM over Kong?"
+    a: "Choose Gravitee when your API is an external product needing a self-service developer portal, tiered plans/subscriptions, approval workflows, and consumption analytics."
+  - q: "Why is DB-less declarative config (`decK` or Kong Ingress Controller CRDs) preferred over using Kong's runtime Admin API?"
+    a: "DB-less removes the mutable database and Admin API write path, keeping gateway configuration in Git with peer review and identical stateless proxy nodes."
+related:
+  - platform/nginx-edge
+  - security/oauth21-oidc-pkce
+  - kubernetes/service-routing
+sources:
+  - title: "Kong Docs: DB-less and Declarative Configuration"
+    url: https://docs.konghq.com/gateway/latest/production/deployment-topologies/db-less-and-declarative-configuration/
+  - title: "Kong Docs: Plugin Priority & Execution Order"
+    url: https://docs.konghq.com/gateway/latest/plugin-development/custom-logic/#plugins-execution-order
+  - title: "Gravitee Docs: API Management Overview & Plans"
+    url: https://documentation.gravitee.io/apim/overview/introduction
+  - title: "learn-devops: Kong & Gravitee Cheat Sheets (author's notes)"
+    url: https://github.com/limme-learning/learn-devops/blob/main/cheatsheets/05-kong/README.md
+---
+
+## TL;DR
+Use **Nginx/Ingress** for TLS termination and volumetric IP limits, and put **one API gateway** behind it for auth, consumer quotas, and transformations. Pick **Kong** (DB-less + `decK`/KIC) for fast, GitOps-managed internal/partner APIs; pick **Gravitee APIM** when APIs are external products needing a developer portal, tiered plans, and subscription workflows.
+
+## Context
+An edge reverse proxy (Nginx) routes hosts and paths, but lacks consumer identity, per-client quotas, API key lifecycle, and developer onboarding. An API gateway fills that gap—provided authentication happens in **one** place only.
+
+## Comparison
+
+| Dimension | Kong Gateway (DB-less) | Gravitee APIM |
+|---|---|---|
+| **Sweet spot** | Programmable L7 proxy & GitOps CRDs | Full API Management (portal + plans + billing) |
+| **Config source of truth** | Git (`kong.yaml` via `decK` or KIC CRDs) | Management API + MongoDB/JDBC (or Gravitee K8s Operator) |
+| **Multi-tier partner plans** | Manual per-consumer plugins | Built-in **Plans** (`STAGING → PUBLISHED → DEPRECATED`) & subscriptions |
+| **Plugin execution** | Priority-ordered Lua/Go plugins (`cors` before `auth`) | Platform → API → Plan flows with Expression Language |
+| **Zone isolation** | Separate gateway deployments / namespaces | **Sharding tags** routing APIs to DMZ vs internal gateways |
+
+## Decision criteria
+1. **Internal/GitOps-first APIs → Kong:** DB-less Kong needs no database, syncs cleanly with Argo CD or `decK diff`/`sync`, and keeps every proxy pod stateless (using Redis only for distributed rate-limit counters with `fault_tolerant: true`).
+2. **External API product / partner portal → Gravitee:** If third-party partners browse docs, subscribe to Bronze/Gold plans, and await approval workflows, Gravitee's portal and OpenAPI `request-validation` policy avoid building a portal from scratch.
+
+<MyTake>
+Default to **DB-less Kong** for internal platform APIs—zero database to back up and clean GitOps via CRDs. Reach for **Gravitee** only when you genuinely operate an external developer portal with self-service plans.
+</MyTake>
+
+## Gotchas
+- **Default `retries: 5` in Kong:** On non-idempotent endpoints (payments, orders), set `retries: 0` so a slow upstream timeout never triggers a duplicate write.
+- **Exposing Kong's Admin API (`8001`/`8444`):** Keep the Admin API blocked by `NetworkPolicy` and unreachable off-cluster; use DB-less GitOps instead.
+- **Plugin order (`cors` vs `auth`):** Always verify CORS runs before JWT/key-auth so browser `OPTIONS` preflights are not rejected with `401`.
+- **Save vs Deploy in Gravitee:** Saving an API in Gravitee does not push it to gateways until it is deployed; automate both in CI via the Kubernetes Operator.
+
+## Production checklist
+- [ ] Authentication (JWT/OIDC/mTLS) is enforced at the API gateway only, never duplicated at the edge proxy.
+- [ ] Non-idempotent routes explicitly set `retries: 0`.
+- [ ] Distributed rate limiting uses Redis with `fault_tolerant: true` so a Redis blip does not take down APIs.
+- [ ] Gateway config lives in Git (KIC CRDs, `decK`, or Gravitee Operator), not manual UI/Admin API edits.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "A web app works with `curl` through Kong, but browser requests fail on `OPTIONS` preflight with HTTP 401. What is the usual cause?",
+    options: [
+      { label: "Authentication runs before the CORS plugin, rejecting unauthenticated preflight requests", description: "Browsers omit Authorization headers on CORS preflight; CORS must execute at a higher priority than auth.", correct: true },
+      { label: "Kong does not support HTTP OPTIONS requests", description: "Kong supports OPTIONS; the issue is plugin execution priority." },
+      { label: "DB-less mode disables CORS headers", description: "DB-less mode supports CORS plugins normally." }
+    ]
+  },
+  {
+    question: "Why should you set `retries: 0` on a payment creation route in Kong?",
+    options: [
+      { label: "A timeout does not prove the backend failed to process the request, so automatic retries risk double-charging", description: "Non-idempotent endpoints should rely on application idempotency keys rather than gateway retries.", correct: true },
+      { label: "Kong DB-less mode crashes if retries is non-zero", description: "Kong allows retries in DB-less mode; the risk is duplicate side effects." },
+      { label: "retries: 0 disables upstream health checks", description: "Upstream active/passive health checks are configured independently of request retries." }
+    ]
+  }
+]} />
+
+## Sources
+- [Kong Docs: DB-less and Declarative Configuration](https://docs.konghq.com/gateway/latest/production/deployment-topologies/db-less-and-declarative-configuration/)
+- [Kong Docs: Plugin Execution Order](https://docs.konghq.com/gateway/latest/plugin-development/custom-logic/#plugins-execution-order)
+- [Gravitee Docs: APIM Introduction](https://documentation.gravitee.io/apim/overview/introduction)
+- [learn-devops: Kong & Gravitee Cheat Sheets (author's notes)](https://github.com/limme-learning/learn-devops/blob/main/cheatsheets/05-kong/README.md)
