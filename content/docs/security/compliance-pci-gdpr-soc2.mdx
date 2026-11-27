@@ -1,0 +1,102 @@
+---
+title: Compliance Engineering (PCI DSS, GDPR, SOC 2)
+description: Engineering overview (not legal advice) of how PCI DSS, GDPR, and SOC 2 translate into concrete architecture—scope reduction, crypto-shredding, and automated pipeline evidence.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: explanation
+level: intermediate
+tags: [security, compliance, pci-dss, gdpr, soc2, architecture]
+tested_with:
+  pci_dss: "4.0.1 (overview)"
+cards:
+  - q: "What is the single highest-leverage architectural move for PCI DSS compliance?"
+    a: "Scope reduction via tokenization at the edge so raw card numbers (PANs) never enter your application services, databases, or logs."
+  - q: "How does crypto-shredding resolve the tension between GDPR right-to-erasure and immutable audit logs?"
+    a: "Encrypt personal data with a per-subject key and store only a subject reference + hash in immutable logs; erasing the subject's encryption key renders all copies unreadable without mutating append-only logs."
+  - q: "Why is 'anonymized' production data in UAT (with only names removed) still a GDPR risk?"
+    a: "If individuals remain identifiable via postcode, birth date, or salary, it is pseudonymized personal data—not truly anonymous—and stays in scope for GDPR."
+  - q: "How should teams produce SOC 2 Type II evidence without manual spreadsheet chases?"
+    a: "Emit signed, immutable artifacts (PR approvals, test reports, scan results, image digests) directly from CI/CD pipelines as a normal by-product of every deploy."
+related:
+  - security/secrets-management
+  - security/supply-chain
+  - architecture/schema-migrations
+sources:
+  - title: "PCI Security Standards Council: PCI DSS Overview"
+    url: https://www.pcisecuritystandards.org/standards/pci-dss/
+  - title: "EUR-Lex: General Data Protection Regulation (GDPR Art. 17)"
+    url: https://eur-lex.europa.eu/eli/reg/2016/679/oj
+  - title: "AICPA: SOC 2 Trust Services Criteria"
+    url: https://www.aicpa-cima.com/topic/audit-assurance/audit-and-assurance-greater-than-soc-2
+  - title: "software-engineering: PCI-DSS, GDPR and SOC 2 as Backlog Items (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/04-security-and-authentication/06-compliance-standards-pci-dss-gdpr-soc2.md
+---
+
+## TL;DR
+*Engineering overview, not legal advice.* Compliance obligations attach to **data** and **controls**. Shrink **PCI DSS** scope by tokenizing card data at the edge, satisfy **GDPR** erasure with **crypto-shredding** and synthetic test data, and automate **SOC 2** evidence directly in your CI/CD pipeline.
+
+## Why it exists
+Treating compliance as an annual spreadsheet exercise fails during audits: raw PII leaks into debug logs, immutable audit trails conflict with deletion requests, and 90-day CI logs expire before auditors ask for Q1 release approvals. Building controls into architecture makes compliance automatic.
+
+## Mental model
+Minimize where sensitive data can exist, and separate **event evidence** from **personal payloads**.
+
+<Diagram
+  id="compliance-scope-boundary"
+  ariaLabel="Edge payment vault tokenizes card data so core services and logs only handle opaque tokens"
+  caption="Tokenizing at the edge keeps core services, brokers, and log aggregators out of cardholder scope."
+  nodes={[
+    { id: 'client', label: 'Checkout UI', subtitle: 'Hosted fields', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'vault', label: 'PSP / Token Vault', subtitle: 'Isolated CDE', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+    { id: 'app', label: 'Core Services', subtitle: 'Token only', icon: 'service', category: 'service', rank: 2, order: 0 },
+    { id: 'logs', label: 'Audit & Logs', subtitle: 'No PAN / No PII', icon: 'db', category: 'data', rank: 3, order: 0 },
+  ]}
+  edges={[
+    { from: 'client', to: 'vault', label: 'PAN' },
+    { from: 'vault', to: 'app', label: 'tok_xxx' },
+    { from: 'app', to: 'logs', label: 'ref + hash' },
+  ]}
+/>
+
+## Do it
+
+| Standard | Core engineering demand | Architectural pattern |
+|---|---|---|
+| **PCI DSS 4.x** | Protect cardholder data (PAN); prevent log leaks & client-side script tampering | Tokenize at PSP/edge; never store or log PANs; inventory & SRI-check payment scripts |
+| **GDPR** | Data minimization, purpose limitation, and timely erasure (Art. 17) | Store PII in one place; use **synthetic data** in non-prod; use **crypto-shredding** for backups/logs |
+| **SOC 2** | Prove security & change controls operated continuously over time | Enforce branch protection + 1+ review; emit immutable CI evidence bundles keyed by digest |
+
+## Gotchas
+- **Debug logging full domain objects:** A single `JSON.stringify(paymentAttempt)` in an error handler can copy millions of sensitive fields into log aggregators and cold backups. Redact at the serializer level.
+- **Masking only names in UAT:** Copying production databases to staging with names replaced by `User_001` is still pseudonymized personal data if addresses, birth dates, or transaction histories remain.
+- **Relying on default 90-day CI log retention:** Export test, scan, and PR approval artifacts to immutable long-term storage if your audit window is 1–7 years.
+
+## Production checklist
+- [ ] Keep raw payment card numbers (PANs) out of application databases, queues, and logs via edge tokenization.
+- [ ] Never put raw PII into immutable audit log payloads—log a subject ID and payload hash instead.
+- [ ] Use generated synthetic datasets in dev/staging/CI instead of production database dumps.
+- [ ] Emit PR approval, test, and SBOM/scan evidence automatically in CI on every production release.
+
+## Check yourself
+
+<Quiz
+  questions={[
+    {
+      question: "What is the most effective way to reduce the number of services in PCI DSS scope?",
+      options: [
+        { label: "Encrypt PAN columns in every microservice database", description: "Services that decrypt, process, or log PANs still remain in scope." },
+        { label: "Tokenize card data at the edge/PSP so core services only handle opaque tokens", description: "If raw PANs never enter your backend services, those services stay out of cardholder data scope.", correct: true },
+        { label: "Store PANs only in Redis", description: "Any store holding PANs is in scope." },
+      ],
+    },
+    {
+      question: "Why should audit logs store a subject ID and action hash rather than full PII payloads?",
+      options: [
+        { label: "It keeps immutable audit logs intact when a user exercises a GDPR erasure request", description: "Deleting the user's PII record (or encryption key) does not require rewriting append-only audit logs.", correct: true },
+        { label: "JSON does not support strings", description: "JSON supports strings; the issue is immutability vs erasure." },
+        { label: "It disables SOC 2 logging", description: "Logging subject references and hashes still satisfies audit traceability." },
+      ],
+    },
+  ]}
+/>
