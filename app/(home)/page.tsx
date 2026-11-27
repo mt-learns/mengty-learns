@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
 import type { CSSProperties, ReactNode } from 'react';
-import { Illustration, SectionIcon } from '@/components/illustrations';
+import { Illustration, SectionIcon, TrackIcon } from '@/components/illustrations';
 import { Container } from '@/components/layout/container';
 import { CountUp } from '@/components/home/count-up';
 import { DemoDo } from '@/components/home/demo-do';
@@ -15,10 +15,11 @@ import { ReviewCta } from '@/components/home/review-cta';
 import { StaggerGrid } from '@/components/home/stagger-grid';
 import {
   getLatestNotes,
-  getLearningPaths,
   getRadarSnapshot,
   getSampleCard,
   getSiteStats,
+  getStartHereTour,
+  getTracks,
 } from '@/lib/home-data';
 
 const sectionY = 'py-16 md:py-24';
@@ -56,7 +57,8 @@ function TextLink({ href, children }: { href: string; children: ReactNode }) {
 
 export default function HomePage() {
   const stats = getSiteStats();
-  const paths = getLearningPaths();
+  const tracks = getTracks();
+  const startHere = getStartHereTour();
   const latest = getLatestNotes(6);
   const radar = getRadarSnapshot(2);
   const card = getSampleCard();
@@ -188,54 +190,90 @@ export default function HomePage() {
           <SectionHeading
             id="paths-title"
             title="Learning paths"
-            lede={`${paths.length} sections, from Git basics to architecture. Progress is saved in this browser.`}
+            lede="Four tracks from Git basics and production ops to craft, security, and communication. Progress is saved in this browser."
           />
-          {/* 10 sections: 1 column, then 2 (5 rows), then 5 (2 rows) once the
-              1200px container is full width, so no row ends on an orphan card. */}
-          <StaggerGrid className="grid gap-4 sm:grid-cols-2 min-[75rem]:grid-cols-5">
-            {paths.map((path, index) => {
-              const body = (
-                <>
-                  <span className="inline-flex w-fit transition-transform duration-200 ease-[var(--ease-ios)] group-hover:-rotate-3 group-hover:scale-105 group-focus-visible:-rotate-3 group-focus-visible:scale-105 motion-reduce:transition-none motion-reduce:transform-none">
-                    <SectionIcon name={path.id} size={48} decorative />
-                  </span>
-                  <h3 className="mt-4 text-headline font-semibold">{path.title}</h3>
-                  <p className="mt-1 text-subheadline leading-relaxed text-muted-foreground">{path.blurb}</p>
-                  <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-5 text-footnote">
-                    {path.urls.length > 0 ? (
-                      <>
-                        <span className="text-muted-foreground">
-                          {path.urls.length} {path.urls.length === 1 ? 'page' : 'pages'}
-                        </span>
-                        <PathProgress urls={path.urls} />
-                      </>
-                    ) : (
-                      <span className="text-muted-foreground">Coming soon</span>
-                    )}
+
+          {/* 4 track cards: 1 col mobile, 2x2 from md up so rows stay balanced at 360/768/1280/1920 */}
+          <StaggerGrid className="grid gap-5 md:grid-cols-2">
+            {tracks.map((track, index) => (
+              <li
+                key={track.id}
+                className="flex"
+                style={{ '--stagger-i': index } as CSSProperties}
+              >
+                <article className="flex w-full flex-col rounded-card border border-border bg-card p-6 transition-[border-color,box-shadow] duration-200 ease-[var(--ease-ios)] hover:border-primary/40 hover:shadow-[0_2px_4px_rgb(var(--shadow-color)/0.04),0_12px_24px_-12px_rgb(var(--shadow-color)/0.14)] motion-reduce:transition-none">
+                  <div className="flex items-start justify-between gap-4">
+                    <div className="flex items-center gap-3.5">
+                      <span className="inline-flex shrink-0">
+                        <TrackIcon name={track.id} size={48} decorative />
+                      </span>
+                      <div>
+                        <h3 className="text-title-3 font-semibold">{track.title}</h3>
+                        <p className="mt-0.5 text-subheadline text-muted-foreground">{track.promise}</p>
+                      </div>
+                    </div>
+                    {track.urls.length > 0 && <PathProgress urls={track.urls} />}
                   </div>
-                </>
-              );
-              return (
-                <li
-                  key={path.id}
-                  className="flex"
-                  style={{ '--stagger-i': index } as CSSProperties}
-                >
-                  {path.href ? (
-                    <Link
-                      href={path.href}
-                      prefetch={false}
-                      className="group flex w-full flex-col rounded-card border border-border bg-card p-6 transition-[transform,border-color,box-shadow] duration-200 ease-[var(--ease-ios)] min-[75rem]:p-5 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_2px_4px_rgb(var(--shadow-color)/0.04),0_12px_24px_-12px_rgb(var(--shadow-color)/0.18)] focus-visible:-translate-y-0.5 motion-reduce:transition-none motion-reduce:transform-none"
-                    >
-                      {body}
-                    </Link>
-                  ) : (
-                    <div className="flex w-full flex-col rounded-card border border-dashed border-border bg-transparent p-6 min-[75rem]:p-5">{body}</div>
-                  )}
-                </li>
-              );
-            })}
+
+                  <ul className="mt-5 flex flex-wrap gap-2">
+                    {track.sections.map((sec) => (
+                      <li key={sec.id}>
+                        <Link
+                          href={sec.href}
+                          prefetch={false}
+                          className="group inline-flex min-h-tap items-center gap-2 rounded-control border border-border bg-background px-3 py-1.5 text-footnote font-medium transition-colors hover:border-primary/50 hover:bg-primary-soft/50 motion-reduce:transition-none"
+                        >
+                          <SectionIcon name={sec.id} size={24} decorative />
+                          <span>{sec.title}</span>
+                          <span className="tabular-nums text-muted-foreground">
+                            {sec.count > 0 ? sec.count : 'Soon'}
+                          </span>
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </article>
+              </li>
+            ))}
           </StaggerGrid>
+
+          {startHere.length > 0 && (
+            <div className="mt-8 rounded-card border border-border bg-card p-6">
+              <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+                <div>
+                  <h3 className="text-headline font-semibold">Start here: a 30-minute tour</h3>
+                  <p className="mt-0.5 text-subheadline text-muted-foreground">
+                    Five pages across the tracks to see how the notes, flows, and flashcards fit together.
+                  </p>
+                </div>
+                <span className="text-footnote font-medium tabular-nums text-primary">
+                  {startHere.reduce((sum, s) => sum + s.minutes, 0)} min total
+                </span>
+              </div>
+              <ol className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                {startHere.map((stop, idx) => (
+                  <li key={stop.href} className="flex">
+                    <Link
+                      href={stop.href}
+                      prefetch={false}
+                      className="group flex w-full flex-col justify-between rounded-panel border border-border bg-background p-4 transition-[transform,border-color] duration-150 ease-[var(--ease-ios)] hover:-translate-y-0.5 hover:border-primary/50 motion-reduce:transition-none motion-reduce:transform-none"
+                    >
+                      <div>
+                        <div className="flex items-center justify-between gap-2 text-caption-1 text-muted-foreground">
+                          <span className="font-semibold tabular-nums text-primary">0{idx + 1}</span>
+                          <span className="tabular-nums">{stop.minutes} min</span>
+                        </div>
+                        <p className="mt-1.5 text-subheadline font-semibold leading-snug text-foreground group-hover:text-primary">
+                          {stop.title}
+                        </p>
+                      </div>
+                      <p className="mt-2 text-caption-1 text-muted-foreground">{stop.section}</p>
+                    </Link>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
         </Container>
       </section>
 
