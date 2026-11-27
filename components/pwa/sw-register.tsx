@@ -1,11 +1,14 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { RefreshCw, X } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+
+const LazyUpdateToast = lazy(() =>
+  import('./update-toast').then((mod) => ({ default: mod.UpdateToast })),
+);
 
 const CHUNK_RELOAD_KEY = 'mt-chunk-reload-v1';
 const CHUNK_RELOAD_COOLDOWN_MS = 30_000;
+const FIRST_VISIT_REGISTER_DELAY_MS = 4500;
 
 function isChunkLoadError(err: unknown): boolean {
   if (!err) return false;
@@ -33,6 +36,7 @@ export function SwRegister() {
     if (typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
 
     let refreshing = false;
+    let registered = false;
 
     const onControllerChange = () => {
       if (refreshing) return;
@@ -52,9 +56,11 @@ export function SwRegister() {
       });
     };
 
-    // Register only after `load` and an idle period: the install step precaches
-    // ~80 URLs, which must not compete with the page's own LCP/TBT work.
-    const register = () =>
+    // Register only after `load` and past the initial interactive/TBT window:
+    // the install step precaches ~80 URLs, which must not compete with LCP/TBT.
+    const register = () => {
+      if (registered) return;
+      registered = true;
       navigator.serviceWorker
         .register('/sw.js', { scope: '/', updateViaCache: 'none' })
         .then((reg) => {
@@ -72,17 +78,45 @@ export function SwRegister() {
         .catch(() => {
           // Registration can fail in private/in-app browsers; the site still works normally.
         });
+    };
 
     let idleHandle: number | undefined;
+    let delayTimer: ReturnType<typeof setTimeout> | undefined;
     let usedIdleCallback = false;
-    const scheduleRegister = () => {
+
+    const triggerIdleRegister = () => {
+      if (registered) return;
       if (typeof window.requestIdleCallback === 'function') {
         usedIdleCallback = true;
-        idleHandle = window.requestIdleCallback(() => void register(), { timeout: 5000 });
+        idleHandle = window.requestIdleCallback(() => register(), { timeout: 2000 });
       } else {
-        idleHandle = globalThis.setTimeout(() => void register(), 3000) as unknown as number;
+        register();
       }
     };
+
+    const scheduleRegister = () => {
+      if (navigator.serviceWorker.controller) {
+        // Already controlled by an active SW: only checking for updates, so idle is enough.
+        triggerIdleRegister();
+        return;
+      }
+      // First visit: wait for first user interaction or a quiet delay after load
+      // so the 80-URL precache never competes with initial hydration / TBT.
+      const onInteract = () => {
+        if (delayTimer !== undefined) clearTimeout(delayTimer);
+        window.removeEventListener('pointerdown', onInteract);
+        window.removeEventListener('keydown', onInteract);
+        triggerIdleRegister();
+      };
+      window.addEventListener('pointerdown', onInteract, { once: true, passive: true });
+      window.addEventListener('keydown', onInteract, { once: true, passive: true });
+      delayTimer = globalThis.setTimeout(() => {
+        window.removeEventListener('pointerdown', onInteract);
+        window.removeEventListener('keydown', onInteract);
+        triggerIdleRegister();
+      }, FIRST_VISIT_REGISTER_DELAY_MS);
+    };
+
     if (document.readyState === 'complete') {
       scheduleRegister();
     } else {
@@ -128,6 +162,7 @@ export function SwRegister() {
 
     return () => {
       window.removeEventListener('load', scheduleRegister);
+      if (delayTimer !== undefined) globalThis.clearTimeout(delayTimer);
       if (idleHandle !== undefined) {
         if (usedIdleCallback) window.cancelIdleCallback(idleHandle);
         else globalThis.clearTimeout(idleHandle);
@@ -141,42 +176,12 @@ export function SwRegister() {
 
   if (!waitingWorker || dismissed) return null;
 
-  const handleReload = () => {
-    waitingWorker.postMessage({ type: 'SKIP_WAITING' });
-  };
-
   return (
-    <div
-      role="status"
-      aria-live="polite"
-      className="fixed bottom-4 right-4 left-4 z-50 mx-auto flex max-w-md items-center justify-between gap-3 rounded-panel border bg-card p-3.5 shadow-lg sm:left-auto"
-      style={{ marginBottom: 'env(safe-area-inset-bottom, 0px)' }}
-    >
-      <div className="min-w-0">
-        <p className="text-subheadline font-semibold text-foreground">Update available</p>
-        <p className="text-caption-1 text-muted-foreground">
-          Reload to get the latest notes and fixes.
-        </p>
-      </div>
-      <div className="flex shrink-0 items-center gap-1.5">
-        <Button
-          type="button"
-          size="sm"
-          onClick={handleReload}
-          className="min-h-tap rounded-control px-3"
-        >
-          <RefreshCw className="size-3.5" strokeWidth={1.75} aria-hidden="true" />
-          <span>Reload</span>
-        </Button>
-        <button
-          type="button"
-          onClick={() => setDismissed(true)}
-          aria-label="Dismiss update notification"
-          className="inline-flex min-h-tap min-w-[44px] items-center justify-center rounded-control text-muted-foreground hover:bg-secondary hover:text-foreground"
-        >
-          <X className="size-4" strokeWidth={1.75} aria-hidden="true" />
-        </button>
-      </div>
-    </div>
+    <Suspense fallback={null}>
+      <LazyUpdateToast
+        onReload={() => waitingWorker.postMessage({ type: 'SKIP_WAITING' })}
+        onDismiss={() => setDismissed(true)}
+      />
+    </Suspense>
   );
 }
