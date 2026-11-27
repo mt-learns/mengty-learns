@@ -17,6 +17,7 @@ import {
   type SerializedLayout,
 } from '../../diagram/layout-types';
 import type {
+  FlowDirection,
   FlowGroup,
   FlowLayoutMode,
   FlowNode,
@@ -44,6 +45,7 @@ export interface FlowCanvasProps {
   steps: ParsedFlowStep[];
   groups?: FlowGroup[];
   layoutMode?: FlowLayoutMode;
+  direction?: FlowDirection;
   activeStepIndex: number;
   reducedMotion: boolean;
   precomputed?: SerializedLayout[];
@@ -103,6 +105,7 @@ function FlowCanvasInner({
   steps,
   groups,
   layoutMode = 'flow',
+  direction: preferredDirection,
   activeStepIndex,
   reducedMotion,
   precomputed,
@@ -124,6 +127,7 @@ function FlowCanvasInner({
         steps,
         groups,
         layoutMode,
+        direction: preferredDirection,
         containerWidth,
         activeStepIndex,
         reducedMotion,
@@ -147,6 +151,7 @@ function FlowCanvasInner({
     steps,
     groups,
     layoutMode,
+    preferredDirection,
     containerWidth,
     activeStepIndex,
     reducedMotion,

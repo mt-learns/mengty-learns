@@ -5,6 +5,7 @@ import {
   type LayoutEdgeInput,
 } from '../../diagram/layout';
 import type {
+  FlowDirection,
   FlowEdgeKind,
   FlowGroup,
   FlowLayoutMode,
@@ -37,6 +38,7 @@ export function computeFlowGraph({
   steps,
   groups = [],
   layoutMode = 'flow',
+  direction,
   containerWidth,
   activeStepIndex,
   reducedMotion,
@@ -45,6 +47,7 @@ export function computeFlowGraph({
   steps: ParsedFlowStep[];
   groups?: FlowGroup[];
   layoutMode?: FlowLayoutMode;
+  direction?: FlowDirection;
   containerWidth: number;
   activeStepIndex: number;
   reducedMotion: boolean;
@@ -95,6 +98,7 @@ export function computeFlowGraph({
     edges: edgeInputs,
     groups,
     layout: layoutMode,
+    direction,
     containerWidth,
   });
 

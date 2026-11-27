@@ -6,6 +6,7 @@ import type {
 import { FlowLazy } from './FlowLazy';
 import {
   parseFlowProps,
+  type FlowDirection,
   type FlowGroup,
   type FlowLayoutMode,
   type FlowNode,
@@ -14,13 +15,14 @@ import {
 } from './types';
 import { buildEdgeBuckets } from './v3/graph';
 
-const PRECOMPUTE_WIDTHS = [265, 288, 320, 360, 480, 640, 720] as const;
+const PRECOMPUTE_WIDTHS = [265, 288, 320, 360, 480, 640, 720, 960, 1024, 1136, 1280] as const;
 
 function precomputeVariantLayouts(
   nodes: FlowNode[],
   steps: ParsedFlowStep[],
   groups: FlowGroup[],
   layout: FlowLayoutMode,
+  direction?: FlowDirection,
 ): SerializedLayout[] {
   const edgeInputs = Array.from(buildEdgeBuckets(steps).values()).map((b) => ({
     from: b.from,
@@ -36,6 +38,7 @@ function precomputeVariantLayouts(
       edges: edgeInputs,
       groups,
       layout,
+      direction,
       containerWidth: w,
     });
     const prev = results[results.length - 1];
@@ -80,6 +83,7 @@ export function FlowServer(props: FlowProps) {
         v.steps,
         v.groups ?? [],
         v.layout ?? parsed.layout,
+        v.direction ?? parsed.direction,
       );
     }
   } else {
@@ -88,6 +92,7 @@ export function FlowServer(props: FlowProps) {
       parsed.steps ?? [],
       parsed.groups ?? [],
       parsed.layout,
+      parsed.direction,
     );
   }
 

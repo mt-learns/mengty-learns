@@ -894,6 +894,7 @@ export function computeDiagramLayout({
   edges,
   groups = [],
   layout = 'flow',
+  direction: preferredDirection,
   containerWidth,
   clampHeight = true,
   stepBadges = true,
@@ -902,6 +903,8 @@ export function computeDiagramLayout({
   edges: LayoutEdgeInput[];
   groups?: FlowGroup[];
   layout?: FlowLayoutMode;
+  /** Preferred direction on wide containers (>= 720px); narrow containers fall back through the fit-before-pan ladder. */
+  direction?: LayoutDirection;
   containerWidth: number;
   clampHeight?: boolean;
   /** <Flow> draws a step badge on the active edge; a static <Diagram> never does. */
@@ -987,16 +990,33 @@ export function computeDiagramLayout({
       dir === 'LR' ? labelRankGap : 0,
     );
 
+  const preferWideLR =
+    !isTree &&
+    preferredDirection === 'LR' &&
+    safeWidth >= LR_CONTAINER_BREAKPOINT;
+
   let direction: LayoutDirection = isTree
     ? 'TB'
     : safeWidth >= LR_CONTAINER_BREAKPOINT
-      ? 'LR'
+      ? (preferredDirection ?? 'LR')
       : 'TB';
 
   let pass = runDagre(direction, false, null, dims);
 
+  // If caller explicitly prefers LR on a wide container, try compact LR before falling back to TB.
+  if (preferWideLR && !fitsAtReadable(pass, 'LR', stacked, false)) {
+    const compactDims = computeNodeDimensions(nodes, true, COMPACT_NODE_MAX_WIDTH);
+    const compactLR = runDagre('LR', true, null, compactDims);
+    if (fitsAtReadable(compactLR, 'LR', stacked, true)) {
+      compact = true;
+      dims = compactDims;
+      direction = 'LR';
+      pass = compactLR;
+    }
+  }
+
   // (a) re-check the alternate direction; keep whichever fits best
-  if (!fitsAtReadable(pass, direction, stacked) && !isTree) {
+  if (!fitsAtReadable(pass, direction, stacked, compact) && !isTree) {
     const altDir: LayoutDirection = direction === 'LR' ? 'TB' : 'LR';
     const altPass = runDagre(altDir, false, null, dims);
     if (finalFitFor(altPass, altDir, stacked) > finalFitFor(pass, direction, stacked)) {
@@ -1006,7 +1026,7 @@ export function computeDiagramLayout({
   }
 
   // (b) compact node variant (128-160px, 28px icon, 14px label) if still < 0.87
-  if (!fitsAtReadable(pass, direction, stacked)) {
+  if (!fitsAtReadable(pass, direction, stacked, compact)) {
     compact = true;
     const maxCompactForTwo = safeWidth < 480 ? Math.floor((safeWidth - 64 - COMPACT_NODE_GAP) / 2) : COMPACT_NODE_MAX_WIDTH;
     dims = computeNodeDimensions(nodes, true, Math.max(COMPACT_NODE_MIN_WIDTH, maxCompactForTwo));
