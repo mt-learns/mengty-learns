@@ -1,7 +1,7 @@
 # Mengty Learns — Personal Learning Site Plan
 
 > Owner: Lim Mengty · Status: Draft v3 · Date: 2026-11-26
-> Domain: **mengtylearns.com** · Repo: `mengtylearns` · Tagline: *"Learning DevOps, architecture and security — one note at a time."*
+> Domain: **learn.limmengty.com** · Repo: `mengtylearns` · Tagline: *"Learning DevOps, architecture and security — one note at a time."*
 > Stack: **Next.js (static export) + Fumadocs + Tailwind v4 + shadcn/ui** · single app, no database, no backend
 > Design language: iOS-style, ported from the Chongdai design system (`chongdai/packages/ui/src/styles/globals.css`)
 > Build steps: see `IMPLEMENTATION.md`
@@ -85,7 +85,7 @@ Optional, without a backend: a newsletter through an external form (Buttondown o
 | D2 | Dark mode | `next-themes`, `.dark` class, system default |
 | D3 | Accent colour | **Superseded 2026-11-26 by `design/REDESIGN-PLAN.md`:** "Ink & Jade" (jade #0F766E / #2DD4BF, amber highlight, warm stone neutrals). Apple design principles, not Apple colours. |
 | D4 | Fonts | Inter via `next/font/google` (self-hosted at build time), falling back to the system stack. Mono: `ui-monospace, "SF Mono", "JetBrains Mono", monospace`. |
-| D5 | Hosting and domain | `mengtylearns.com` apex on Cloudflare Pages. `www` redirects to the apex. |
+| D5 | Hosting and domain | `learn.limmengty.com` (subdomain of `limmengty.com`) on Cloudflare Workers with OpenNext. Supersedes the original `mengtylearns.com` apex on Pages; see `docs/deploy/CLOUDFLARE-WORKERS-PLAN.md`. |
 | D6 | Package manager | pnpm, Node 22 LTS (`.nvmrc`) |
 | D7 | Illustration direction | "Friendly 3D objects + interactive explainers" (§6). All art is original. |
 
@@ -408,7 +408,7 @@ Home ─▶ Learning path (3/8) ─▶ Concept page
 
 ## 11. Open questions for the owner
 1. **D3:** iOS blue, or another accent colour?
-2. Domain: mengtylearns.com is decided. Check it's free before buying.
+2. Domain: decided as `learn.limmengty.com` (the `limmengty.com` zone is already on Cloudflare), replacing the earlier `mengtylearns.com` idea.
 3. Mascot: kouprey calf, gecko, or none?
 4. Who makes the illustrations: by hand, AI-assisted, or commissioned?
 5. English only, or Khmer later?

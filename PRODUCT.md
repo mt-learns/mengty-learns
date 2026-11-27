@@ -13,7 +13,7 @@ web
 
 ## Product Purpose
 
-**Mengty Learns** (`mengtylearns.com`) is a personal learning system and public engineering portfolio. It consolidates scattered notes on DevOps, cloud infrastructure, software architecture, design patterns, and security into one fast, static, searchable knowledge base built for long-term retention rather than ephemeral news.
+**Mengty Learns** (`learn.limmengty.com`) is a personal learning system and public engineering portfolio. It consolidates scattered notes on DevOps, cloud infrastructure, software architecture, design patterns, and security into one fast, static, searchable knowledge base built for long-term retention rather than ephemeral news.
 
 Success means:
 - Publishing evergreen, tested notes across 9 core sections (Foundations, Containers, Kubernetes, IaC, CI/CD, GitOps, Design, Architecture, Security).

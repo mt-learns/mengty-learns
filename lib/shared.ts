@@ -1,7 +1,7 @@
 import { createGetUrl } from 'fumadocs-core/source';
 
 export const appName = 'Mengty Learns';
-export const siteUrl = 'https://mengtylearns.com';
+export const siteUrl = 'https://learn.limmengty.com';
 export const docsRoute = '/docs';
 export const docsImageRoute = '/og/docs';
 
