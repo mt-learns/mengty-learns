@@ -69,7 +69,7 @@ ASVS 5.0 restructured the 4.x chapters into 17 focused domains:
 | **V17** | WebRTC | Signaling authentication, DTLS-SRTP media encryption, and ICE/TURN relay security. |
 
 ## Worked example: scoping ASVS 5.0 to this static site
-Using ASVS effectively means **scoping out chapters that do not exist in your architecture** instead of marking hundreds of rows "N/A" manually. Take **Mengty Learns** itself: a Next.js static export (`output: 'export'`) hosted on CDN/Pages with no backend, no database, no user accounts, and `localStorage` for flashcard/quiz progress.
+Using ASVS effectively means **scoping out chapters that do not exist in your architecture** instead of marking hundreds of rows "N/A" manually. Take **Mengty Learns** itself: a Next.js app (`output: 'standalone'` with every route pre-rendered at build time) deployed via OpenNext on Cloudflare Workers with no backend API, no database, no user accounts, and `localStorage` for flashcard/quiz progress.
 
 | Scope | ASVS 5.0 Chapters | Why |
 |---|---|---|
