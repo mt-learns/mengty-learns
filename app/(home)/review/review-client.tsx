@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { AlertTriangle, CheckCircle2, Flame, PartyPopper, WifiOff } from 'lucide-react';
 import { Illustration } from '@/components/illustrations';
+import { ReviewInstallBanner } from '@/components/pwa/install-prompt';
 import { useOnlineStatus } from '@/components/pwa/use-online';
 import { Button } from '@/components/ui/button';
 
@@ -193,6 +194,8 @@ export function ReviewClient({ initialCards }: { initialCards?: CardItem[] }) {
           </div>
         )}
       </div>
+
+      <ReviewInstallBanner />
 
       {loading && !initialCards?.[0] ? (
         <div
