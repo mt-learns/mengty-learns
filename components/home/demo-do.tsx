@@ -145,7 +145,7 @@ export function DemoDo() {
               'mt-2 inline-flex items-center gap-1 rounded-pill bg-success-soft px-2 py-0.5 font-sans text-caption-2 font-semibold text-success-text motion-reduce:transition-none',
               effectivePassed
                 ? 'opacity-100 scale-100 transition-[opacity,transform] duration-200 ease-[var(--ease-ios)]'
-                : 'opacity-0 scale-95',
+                : 'invisible opacity-0 scale-95 transition-none',
             )}
           >
             <Check className="size-3" strokeWidth={2.25} aria-hidden="true" />
