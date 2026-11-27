@@ -70,10 +70,10 @@ Think of a central commercial bakery (**CI**) that bakes, seals, and labels each
   nodes={[
     { id: 'git', label: 'Git & CI', subtitle: 'Build & scan once', icon: 'git', category: 'external', rank: 0, order: 0 },
     { id: 'registry', label: 'Signed Artifact', subtitle: 'Registry + Cosign', icon: 'ci', category: 'service', rank: 1, order: 0 },
-    { id: 'ansible', label: 'Ansible Push', subtitle: 'VM track (SSH)', icon: 'service', category: 'concrete', rank: 2, order: 0 },
-    { id: 'argocd', label: 'Argo CD Pull', subtitle: 'K8s track (GitOps)', icon: 'gateway', category: 'edge', rank: 2, order: 1 },
-    { id: 'vm', label: 'Hardened VM', subtitle: 'Systemd / Podman', icon: 'pod', category: 'data', rank: 3, order: 0 },
-    { id: 'k8s', label: 'K8s Cluster', subtitle: 'Kyverno + Pods', icon: 'pod', category: 'data', rank: 3, order: 1 },
+    { id: 'ansible', label: 'Ansible Push', subtitle: 'VM track', icon: 'service', category: 'concrete', rank: 2, order: 0 },
+    { id: 'argocd', label: 'Argo CD Pull', subtitle: 'K8s track', icon: 'gateway', category: 'edge', rank: 2, order: 1 },
+    { id: 'vm', label: 'VM host', subtitle: 'Hardened', icon: 'pod', category: 'data', rank: 3, order: 0 },
+    { id: 'k8s', label: 'K8s Cluster', subtitle: 'Kyverno', icon: 'pod', category: 'data', rank: 3, order: 1 },
   ]}
   steps={[
     { edge: 'git->registry', title: 'Build and sign once', text: 'CI runs security gates, builds an immutable artifact, and signs it with Cosign.' },
