@@ -1,0 +1,144 @@
+---
+title: Firewall Basics (UFW, nftables & Security Groups)
+description: How stateful firewalls work, default-deny inbound rules, ufw vs nftables, cloud security groups, and why database ports must never be public.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: explanation
+level: beginner
+tags: [foundations, firewall, ufw, nftables, networking, security]
+tested_with:
+  ubuntu: "24.04 LTS (docs)"
+  ufw: "0.36.2 (docs)"
+  nftables: "1.0.9 (docs)"
+cards:
+  - q: "What makes a firewall 'stateful'?"
+    a: "It tracks active connections in a state table (conntrack), so return packets for an allowed inbound or outbound connection are permitted automatically without opening ephemeral ports."
+  - q: "What is the relationship between ufw and nftables on Ubuntu 24.04?"
+    a: "ufw is a user-friendly CLI wrapper that writes rules into the Linux kernel's packet filter (using the nftables backend on modern Ubuntu), while nftables is the underlying native framework."
+  - q: "Why should a database port (5432, 3306, 6379) never be opened to 0.0.0.0/0 in a firewall?"
+    a: "Exposing the port lets automated scanners probe for weak passwords, unpatched CVEs, and credential-stuffing attacks; bind it to 127.0.0.1 or a private VPC/VPN subnet instead."
+  - q: "Why should you use cloud security groups even if ufw is enabled on the VM?"
+    a: "Cloud security groups filter traffic at the hypervisor/VPC layer outside the guest OS, so misconfigured Docker NAT rules or local firewall reloads inside the VM still cannot expose internal ports."
+related:
+  - foundations/linux-server-hardening
+  - foundations/reverse-proxy-tls
+  - containers/docker-networking
+sources:
+  - title: "Ubuntu Server Docs: Firewalls (UFW & nftables)"
+    url: https://documentation.ubuntu.com/server/how-to/security/firewalls/
+  - title: "nftables Wiki: Quick Reference"
+    url: https://wiki.nftables.org/wiki-nftables/index.php/Quick_reference-nftables_in_10_minutes
+---
+
+## TL;DR
+A **stateful firewall** tracks active connections and enforces **default-deny inbound**, allowing only explicit ports (`22`, `80`, `443`). Use **`ufw`** for simple single-host rules or **`nftables`** directly for complex routing, pair host rules with **cloud security groups**, and never expose **database ports** to the public internet.
+
+## Why it exists
+Any service listening on `0.0.0.0` (an admin dashboard, Redis, Postgres, or a debug port) is immediately reachable from the public internet unless a firewall drops unsolicited packets first.
+
+## Mental model
+Think of a stateful firewall as a building receptionist with a visitor log: strangers are turned away by default (`default deny incoming`), invited guests on the allowlist (`443/tcp`) are signed in (`conntrack`), and anyone you call from inside (`default allow outgoing`) is allowed to reply back on that same call.
+
+## ▶ Flow: watch it work
+<Flow
+  id="firewall-basics"
+  title="Stateful Firewall: Packet Filtering (Accept vs Drop)"
+  variants={[
+    {
+      id: 'allowed',
+      label: 'Allowed (HTTPS :443)',
+      nodes: [
+        { id: 'pkt', label: 'Inbound Packet', subtitle: 'TCP dst :443', icon: 'user', category: 'client', rank: 0, order: 0 },
+        { id: 'fw', label: 'Stateful Firewall', subtitle: 'Rules + conntrack', icon: 'gateway', category: 'network', rank: 1, order: 0 },
+        { id: 'app', label: 'Reverse Proxy', subtitle: 'Listens on :443', icon: 'service', category: 'service', rank: 2, order: 0 },
+      ],
+      steps: [
+        { edge: 'pkt->fw', title: 'Packet arrives at NIC', text: 'External client sends TCP SYN to port 443 on the server.', label: 'SYN :443' },
+        { edge: 'fw->app', title: 'Rule allows 443/tcp', text: 'Firewall matches allow 443/tcp, tracks the connection, and forwards to proxy.', label: 'ACCEPT' },
+        { edge: 'app->fw', title: 'Proxy sends response', text: 'Reverse proxy writes the TLS/HTTP response back toward the client.', kind: 'response', label: 'Response' },
+        { edge: 'fw->pkt', title: 'Stateful return passes', text: 'Firewall sees ESTABLISHED state in conntrack and lets the reply out.', kind: 'response', label: '200 OK' },
+      ],
+    },
+    {
+      id: 'blocked',
+      label: 'Blocked (Postgres :5432)',
+      nodes: [
+        { id: 'pkt', label: 'Scanner Packet', subtitle: 'TCP dst :5432', icon: 'user', category: 'client', rank: 0, order: 0 },
+        { id: 'fw', label: 'Stateful Firewall', subtitle: 'Default-deny inbound', icon: 'gateway', category: 'network', rank: 1, order: 0 },
+      ],
+      steps: [
+        { edge: 'pkt->fw', title: 'Scanner probes :5432', text: 'Automated internet scanner sends TCP SYN to Postgres port 5432.', label: 'SYN :5432' },
+        { edge: 'fw->pkt', title: 'Default-deny drops packet', text: 'No rule permits 5432/tcp; firewall silently drops the packet.', kind: 'error', label: 'DROP' },
+      ],
+    },
+  ]}
+/>
+
+## Do it
+
+### 1. Default-deny UFW baseline (Ubuntu 24.04)
+Always allow SSH **before** enabling `ufw` so you don't lock yourself out:
+
+```bash
+# Set default policies and allow SSH + HTTP/HTTPS (not run)
+sudo ufw default deny incoming
+sudo ufw default allow outgoing
+sudo ufw limit 22/tcp
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+
+# Enable and inspect active rules (not run)
+sudo ufw enable
+sudo ufw status verbose
+```
+
+### 2. `ufw` vs `nftables` vs cloud security groups
+| Layer | Where it runs | Best for |
+|---|---|---|
+| **Cloud Security Group** | Hypervisor / VPC outside your VM | Primary perimeter—blocks traffic before it ever reaches your VM or Docker NAT |
+| **`ufw`** | Guest OS (front-end to `nftables`) | Simple port allowlists on a single Ubuntu/Debian server |
+| **`nftables`** | Linux kernel netfilter hook | Custom NAT, multi-interface routers, or advanced rate-limiting sets |
+
+### 3. Never make the database port public
+Even with a strong password, Postgres (`5432`), MySQL (`3306`), and Redis (`6379`) should **never** be open to `0.0.0.0/0`. Bind them to `127.0.0.1` when running on the same host, or restrict them to your private VPC subnet / WireGuard interface (`ufw allow in on wg0 to any port 5432`).
+
+## When you DON'T need this
+- **Static sites / serverless platforms:** Hosting static files on Cloudflare Workers means there is no VM, kernel firewall, or open TCP port to manage.
+- **Behind a managed load balancer with no public VM IP:** If your app instances live in a private subnet with zero public IP and a cloud security group only permits traffic from the load balancer, duplicating complex `nftables` rules inside each ephemeral container host is unnecessary.
+- **Cost / complexity trade-off:** Adding both cloud security groups and host `ufw` takes 5 minutes to configure and costs $0, in exchange for defense-in-depth if either layer is misconfigured.
+
+## Gotchas
+- **Docker bypassing UFW:** Publishing a container with `-p 5432:5432` inserts `DOCKER` NAT rules that route traffic *around* UFW's `INPUT` chain. Always bind internal containers to `127.0.0.1:5432:5432` and keep your cloud security group closed.
+- **Enabling `ufw` before allowing SSH:** Running `ufw enable` before `ufw allow 22/tcp` drops your active SSH connection once the state or next connection resets.
+- **Testing with `REJECT` vs `DROP`:** `DROP` gives no response (slowing down port scans); `REJECT` returns ICMP unreachable immediately (helpful on internal LANs so clients fail fast instead of hanging).
+
+## Production checklist
+- [ ] Cloud security group allows inbound `80`/`443` (and `22` restricted to your IP or VPN if possible).
+- [ ] `ufw status verbose` shows `Default: deny (incoming), allow (outgoing)`.
+- [ ] Database and cache ports (`5432`, `6379`) are bound to `127.0.0.1` or private interfaces only.
+- [ ] External port scan (`nmap` or cloud check) confirms no unintended ports are reachable.
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "You set UFW to default-deny incoming and allow only ports 22, 80, and 443. Your app makes an outbound HTTPS request to an external API. Why does the API's reply packet get through?",
+    options: [
+      { label: "A stateful firewall tracks the outbound connection in conntrack and automatically permits matching return packets", description: "Established and related return traffic is allowed without opening inbound ephemeral ports.", correct: true },
+      { label: "UFW automatically opens port 443 inbound for every external API", description: "Inbound port 443 only affects connections initiated from outside to your server." },
+      { label: "HTTPS responses bypass the Linux network stack", description: "All packets traverse the kernel; conntrack state permits the reply." }
+    ]
+  },
+  {
+    question: "You run Postgres in Docker with -p 5432:5432 on an Ubuntu VPS with UFW enabled (5432 not allowed in UFW). Why might Postgres still be reachable from the internet?",
+    options: [
+      { label: "Docker's NAT/PREROUTING rules forward published 0.0.0.0 ports before UFW's INPUT chain", description: "Bind to 127.0.0.1:5432:5432 or don't publish the port, and enforce perimeter rules in a cloud security group.", correct: true },
+      { label: "UFW never blocks TCP ports above 1024", description: "UFW default-deny blocks all ports unless explicitly allowed." },
+      { label: "Postgres disables UFW automatically on startup", description: "Postgres has no control over UFW; Docker's netfilter rules cause the bypass." }
+    ]
+  }
+]} />
+
+## Sources
+- [Ubuntu Server Docs: Firewalls](https://documentation.ubuntu.com/server/how-to/security/firewalls/)
+- [nftables Wiki: Quick Reference](https://wiki.nftables.org/wiki-nftables/index.php/Quick_reference-nftables_in_10_minutes)
