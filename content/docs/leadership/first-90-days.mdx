@@ -1,0 +1,97 @@
+---
+title: "First 90 Days as a Technical Lead"
+description: A practical 30-60-90 day cheatsheet for new engineering leads—from building clarity and habits in month 1 to delegation in month 2 and system improvements in month 3.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: cheatsheet
+type: reference
+level: beginner
+tags: [leadership, 90-day-plan, onboarding, team-lead, checklist]
+tested_with:
+  rework_guide: "Google re:Work (Manager Onboarding & Effectiveness)"
+cards:
+  - q: "What is the primary focus of Days 1–30 for a new Team Lead?"
+    a: "Learn the delivery flow end to end, establish baseline clarity (DoR/DoD, feature brief, RAG updates), and build trust through listening and 1:1s."
+  - q: "What shifts in Days 31–60?"
+    a: "Visible ownership and delegation: write ADRs, publish a team RACI, delegate one end-to-end outcome, and start measuring flow/quality bottlenecks."
+  - q: "What should a new lead deliver in Days 61–90?"
+    a: "Lead a cross-functional initiative to production, run a blameless retro with owned actions, improve one CI/runbook/incident capability, and gather 360 feedback."
+  - q: "Why should a 30-60-90 plan anchor on real, funded team work rather than side exercises?"
+    a: "Real work produces verifiable artefacts (ADRs, briefs, delegated PRs) and proves impact to both engineers and stakeholders."
+related:
+  - leadership/becoming-a-team-lead
+  - leadership/operating-rhythm
+  - process/dor-dod-quality-gates
+sources:
+  - title: "Google re:Work: Guide to Developing and Supporting Your Team"
+    url: https://rework.withgoogle.com/en/guides/managers-develop-and-support-your-team
+  - title: "key-learning: 90-Day Development Plan (author's notes)"
+    url: https://github.com/limme-learning/key-learning/blob/main/management-playbook/15-90-day-development-plan.md
+  - title: "key-learning: 90-Day Adoption Plan (author's notes)"
+    url: https://github.com/limme-learning/key-learning/blob/main/technical-management-playbook/17-90-day-adoption-plan.md
+  - title: "software-engineering: The First Thirty Days (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/13-career-and-technical-leadership/10-the-first-thirty-days.md
+---
+
+## TL;DR
+Don't try to overhaul the entire engineering org in week one. Use **Days 1–30** to learn the system and build clarity habits, **Days 31–60** to formalize RACI, ADRs, and delegation, and **Days 61–90** to ship a measurable reliability or delivery improvement.
+
+## Days 1–30: Listen, learn, and establish clarity
+- [ ] Map the current idea-to-production flow end to end (where do tickets wait?).
+- [ ] Hold 1:1 listening sessions with every teammate, PM, PO, QA, and Ops partner.
+- [ ] Publish or clarify lightweight **DoR / DoD** (`process/dor-dod-quality-gates`) and PR checklists.
+- [ ] Write a 1-page **feature brief** (`leadership/clarity-and-alignment`) for one upcoming initiative.
+- [ ] Start consistent **async RAG status updates** (`leadership/communication-and-listening`).
+- [ ] Keep a short Friday reflection: *outcomes, risks, decisions, lessons, next week's top 3*.
+
+## Days 31–60: Build ownership and quality flow
+- [ ] Publish a role-based **RACI matrix** (`process/raci`) for feature delivery and releases.
+- [ ] Lead one technical design review and document the choice in an **ADR** (`process/adr`).
+- [ ] **Delegate one real outcome** end to end with clear constraints and check-in dates (`leadership/delegation-and-ownership`).
+- [ ] Time-box a technical spike before committing to an uncertain estimate.
+- [ ] Baseline key flow signals: PR review turnaround, WIP age, and escaped defects.
+- [ ] Start recurring 1:1s with one realistic growth goal per teammate.
+
+## Days 61–90: Lead sustainable improvements
+- [ ] Steward one cross-functional feature from discovery through production verification.
+- [ ] Run a **blameless retrospective** (`process/retrospectives`) and close at least one owned action item.
+- [ ] Improve one operational guardrail (CI check, rollback script, runbook, or alert).
+- [ ] Run a short incident tabletop rehearsal (`leadership/incident-leadership`).
+- [ ] Audit recurring meetings and protect uninterrupted deep-work blocks.
+- [ ] Gather concrete feedback from your manager, engineers, and PM/PO peers.
+
+## Gotchas
+- **Changing everything in week one:** Introducing five new templates before understanding why current habits exist triggers resistance. Fix one visible pain point first.
+- **Staying in "observer mode" too long:** By Day 45, the team needs visible decisions, an ADR, and unblocked PRs—not just listening notes.
+
+## Production checklist
+- [ ] Your 90-day goals are tied to **real team deliverables**, not abstract reading lists.
+- [ ] You have a recurring Friday 15-minute review with yourself and monthly check-in with your manager.
+- [ ] Every new process habit (brief, RACI, retro action) has a clear owner and low overhead.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "Why should a new Team Lead focus Days 1–30 on listening, mapping the delivery flow, and small clarity habits rather than rewriting every team process?",
+    options: [
+      { label: "Understanding existing constraints and building trust first prevents wasted process changes", description: "Listening and fixing one real bottleneck earns buy-in for bigger improvements in Days 31–90.", correct: true },
+      { label: "Because Team Leads are not allowed to write ADRs in the first month", description: "You can write an ADR anytime it's needed; the focus is avoiding premature org overhauls." },
+      { label: "Because stakeholders don't want status updates in the first 30 days", description: "Consistent RAG updates are one of the highest-trust habits to start in month one." }
+    ]
+  },
+  {
+    question: "Which milestone signals healthy progress in Days 31–60?",
+    options: [
+      { label: "Delegating a meaningful outcome with clear boundaries and documenting a key architecture choice in an ADR", description: "Month two shifts from observation to visible ownership, delegation, and decision records.", correct: true },
+      { label: "Personally coding every high-priority ticket to prove technical speed", description: "Hero coding undermines delegation and team growth." },
+      { label: "Adding three new weekly status meetings", description: "More synchronous meetings usually hurt engineering focus." }
+    ]
+  }
+]} />
+
+## Sources
+- [Google re:Work: Guide to Developing and Supporting Your Team](https://rework.withgoogle.com/en/guides/managers-develop-and-support-your-team)
+- [key-learning: 90-Day Development Plan (author's notes)](https://github.com/limme-learning/key-learning/blob/main/management-playbook/15-90-day-development-plan.md)
+- [key-learning: 90-Day Adoption Plan (author's notes)](https://github.com/limme-learning/key-learning/blob/main/technical-management-playbook/17-90-day-adoption-plan.md)
+- [software-engineering: The First Thirty Days (author's notes)](https://github.com/limme-learning/software-engineering/blob/main/13-career-and-technical-leadership/10-the-first-thirty-days.md)
