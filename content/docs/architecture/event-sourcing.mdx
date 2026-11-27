@@ -1,0 +1,124 @@
+---
+title: "Event Sourcing: Overview, Projections, and Traps"
+description: Store every state change as an append-only sequence of events, rebuild state with projections and snapshots, and recognize when Event Sourcing is a trap.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: explanation
+level: advanced
+tags: [architecture, event-sourcing, projections, snapshots, cqrs]
+tested_with:
+  typescript: "7.0.2"
+cards:
+  - q: "What is the single source of truth in an Event-Sourced system?"
+    a: "An append-only Event Store of immutable domain events (OrderCreated, ItemAdded, OrderPaid)—current state is derived by replaying them."
+  - q: "What is a Projection in Event Sourcing?"
+    a: "A read-only view (e.g., a Postgres table or search index) built by folding/subscribing to the event stream so queries don't have to replay events."
+  - q: "What problem do Snapshots solve?"
+    a: "They periodically save an Aggregate's state at version N so replaying a long stream only reads from version N onward instead of event 1."
+  - q: "Why is Event Sourcing often a trap for ordinary CRUD apps?"
+    a: "Schema evolution (upcasting old events), GDPR 'right to be forgotten' deletes on immutable logs, and debugging make simple apps far harder to maintain."
+related:
+  - architecture/cqrs
+  - architecture/event-driven-outbox
+  - architecture/ddd-tactical
+sources:
+  - title: "Martin Fowler: Event Sourcing"
+    url: https://martinfowler.com/eaaDev/EventSourcing.html
+---
+
+## TL;DR
+**Event Sourcing** stores **every state change as an append-only event** (`OrderCreated`, `ItemAdded`, `OrderPaid`) instead of overwriting rows in place. **Projections** build queryable read tables from the stream, **snapshots** speed up long replays—and for 90% of apps, it's overkill compared to a normal DB + audit log.
+
+## Why it exists
+Traditional `UPDATE orders SET status = 'cancelled'` erases *how* and *why* state changed. In domains where the full history *is* the business (banking ledgers, accounting, git, collaborative editing, strict compliance), an immutable event log gives you a built-in audit trail, time-travel debugging, and the ability to build new read projections retroactively.
+
+## Mental model
+Instead of storing `balance = 150`, you store `[Deposited(200), Withdrawn(50)]` and fold them (`reduce`) to compute `150`:
+- **Event Store:** append-only log keyed by `(stream_id, version)` with optimistic concurrency (`expected_version`).
+- **Projection:** background worker that turns events into normal SQL tables for fast `SELECT` queries (pairs with CQRS).
+- **Snapshot:** checkpoint of folded state at event `#1000` so replaying `#1001..#1020` stays fast.
+
+<Diagram
+  id="event-sourcing-overview"
+  ariaLabel="Append-only Event Store feeds both Aggregate Replay with Snapshots and Read Projections"
+  caption="Writes append events; Aggregates replay from snapshots while Projections build query tables."
+  nodes={[
+    { id: 'cmd', label: 'Command', subtitle: 'PlaceOrder', icon: 'gateway', category: 'edge', rank: 0, order: 0 },
+    { id: 'store', label: 'Event Store', subtitle: 'Append-only log', icon: 'db', category: 'data', rank: 1, order: 0 },
+    { id: 'snap', label: 'Snapshot + Fold', subtitle: 'Rebuild state', icon: 'service', category: 'service', rank: 2, order: 0 },
+    { id: 'proj', label: 'Read Projection', subtitle: 'SQL query table', icon: 'interface', category: 'abstraction', rank: 2, order: 1 },
+  ]}
+  edges={[
+    { from: 'cmd', to: 'store', kind: 'request', label: 'Append' },
+    { from: 'store', to: 'snap', kind: 'request', label: 'Replay' },
+    { from: 'store', to: 'proj', kind: 'request', label: 'Project' },
+  ]}
+/>
+
+## Do it
+Folding an Order's current state from its event stream in TypeScript:
+
+```ts
+// TypeScript 7.0.2
+type OrderEvent =
+  | { type: 'OrderCreated'; orderId: string }
+  | { type: 'ItemAdded'; priceCents: number; qty: number }
+  | { type: 'OrderPlaced' };
+
+interface OrderState {
+  id: string;
+  totalCents: number;
+  status: 'draft' | 'placed';
+}
+
+export function foldOrder(events: OrderEvent[]): OrderState {
+  return events.reduce<OrderState>(
+    (state, evt) => {
+      switch (evt.type) {
+        case 'OrderCreated':
+          return { ...state, id: evt.orderId };
+        case 'ItemAdded':
+          return { ...state, totalCents: state.totalCents + evt.priceCents * evt.qty };
+        case 'OrderPlaced':
+          return { ...state, status: 'placed' };
+      }
+    },
+    { id: '', totalCents: 0, status: 'draft' },
+  );
+}
+```
+
+## Gotchas (when it's a trap)
+- **Eventual consistency everywhere:** you cannot run `SELECT * FROM orders WHERE email = ?` against an event stream without maintaining a separate projection.
+- **Event schema evolution:** old events live forever—renaming or splitting fields requires **upcasters** that translate v1 events to v2 on every read.
+- **GDPR / PII deletion:** deleting a user's personal data conflicts with an "immutable" append-only log (requires **crypto-shredding**—encrypting PII per user and deleting the key).
+- **Confusing Event Sourcing with Event-Driven:** you can publish domain events (via Transactional Outbox) **without** Event Sourcing your database!
+
+## Production checklist
+- [ ] Confirm you actually need full historical state reconstruction (not just a standard `audit_logs` table)
+- [ ] Enforce optimistic concurrency (`expected_version`) on every stream append
+- [ ] Version every event schema and write unit-tested upcasters before changing event shapes
+- [ ] Keep PII out of events—or encrypt it per subject key (crypto-shredding) for deletion compliance
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "In Event Sourcing, what is the purpose of a Snapshot?",
+    options: [
+      { label: "To cache an Aggregate's folded state at version N so future loads don't have to replay thousands of historical events from version 1", description: "Snapshots are a pure performance optimization; the Event Store remains the source of truth.", correct: true },
+      { label: "To replace the Event Store and delete old events", description: "Snapshots optimize reads; the event stream stays intact." },
+      { label: "To serve SQL JOIN queries for the UI", description: "UI queries are served by Read Projections, not Aggregate Snapshots." }
+    ]
+  },
+  {
+    question: "Your team wants to publish OrderPlaced to Kafka when orders are placed. Do you need Event Sourcing?",
+    options: [
+      { label: "No—use a normal relational database with the Transactional Outbox pattern", description: "Event-Driven Architecture (publishing events) does not require Event Sourcing (storing state as events).", correct: true },
+      { label: "Yes—Kafka requires Event Sourcing in Postgres", description: "Kafka works with any producer, including a standard Outbox relay." }
+    ]
+  }
+]} />
+
+## Sources
+- [Martin Fowler: Event Sourcing](https://martinfowler.com/eaaDev/EventSourcing.html)

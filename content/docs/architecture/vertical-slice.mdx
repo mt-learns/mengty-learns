@@ -1,0 +1,182 @@
+---
+title: Vertical Slice Architecture
+description: Organize code by feature slice (request → handler → data) instead of horizontal technical layers, minimizing cross-feature coupling.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: concept
+type: explanation
+level: intermediate
+tags: [architecture, vertical-slice, features, modularity]
+tested_with:
+  typescript: "7.0.2"
+cards:
+  - q: "How does Vertical Slice Architecture organize files compared to Layered Architecture?"
+    a: "Instead of horizontal folders (controllers/, services/, repositories/), each feature/use-case lives in its own slice folder containing its handler, validation, and data access."
+  - q: "What is the main advantage of Vertical Slice Architecture?"
+    a: "High cohesion per feature and minimal coupling between features: adding or changing one endpoint rarely touches shared abstractions or breaks other features."
+  - q: "Can different slices use different patterns (e.g., plain SQL in one slice, rich DDD aggregate in another)?"
+    a: "Yes. Each slice chooses the simplest implementation that fits its complexity instead of forcing every endpoint through identical layers."
+  - q: "What is the main risk if a team uses Vertical Slice Architecture without discipline?"
+    a: "Duplicating non-trivial business rules across slices instead of extracting shared domain concepts when genuine overlap emerges."
+related:
+  - architecture/layered
+  - architecture/clean
+  - architecture/compare-styles
+sources:
+  - title: "Jimmy Bogard: Vertical Slice Architecture"
+    url: https://www.jimmybogard.com/vertical-slice-architecture/
+  - title: "Martin Fowler: PresentationDomainDataLayering"
+    url: https://martinfowler.com/bliki/PresentationDomainDataLayering.html
+---
+
+## TL;DR
+**Vertical Slice Architecture** organizes code **by feature** (`features/place-order/`, `features/cancel-order/`) rather than horizontal layers (`controllers/`, `services/`, `repos/`). Each slice owns its request, logic, and query end-to-end, so changing one feature doesn't ripple through shared layers.
+
+## Intent
+<Intent>
+Maximize cohesion along the axis of change—when a product feature changes, you open one folder and edit one slice instead of touching five horizontal layers.
+</Intent>
+
+## Problem
+In a traditional Layered Architecture, adding one field to `PlaceOrder` forces edits across `OrderController`, `OrderService`, `OrderMapper`, `OrderRepository`, and shared `OrderDto`s used by 12 other endpoints. Shared "Service" classes grow to thousands of lines, and every feature pays the abstraction tax of the most complex feature.
+
+<Diagram
+  id="vertical-slice-vs-layers"
+  ariaLabel="Vertical slices group handler, logic, and data per feature rather than horizontal shared layers"
+  caption="Each vertical slice owns one use case end-to-end; shared code is extracted only when genuinely needed."
+  nodes={[
+    { id: 's1', label: 'PlaceOrder Slice', subtitle: 'Validate + Save', icon: 'service', category: 'service', rank: 0, order: 0 },
+    { id: 's2', label: 'GetOrder Slice', subtitle: 'Direct SQL read', icon: 'service', category: 'concrete', rank: 0, order: 1 },
+    { id: 'db', label: 'Orders DB', subtitle: 'Shared store', icon: 'db', category: 'data', rank: 1, order: 0 },
+  ]}
+  edges={[
+    { from: 's1', to: 'db', kind: 'request' },
+    { from: 's2', to: 'db', kind: 'request' },
+  ]}
+/>
+
+## Solution
+Flip the axis from **horizontal layers** to **vertical slices**:
+
+- Each use case (`PlaceOrder`, `GetOrderHistory`, `CancelOrder`) is a self-contained slice with its own input schema, handler, and persistence call.
+- **Simple slices stay simple:** `GetOrderHistory` can run a direct SQL query and return a flat DTO—no repository interface or domain entity needed.
+- **Complex slices stay rich:** `PlaceOrder` can invoke a tactical DDD `Order` aggregate if it has complex pricing/inventory invariants.
+
+## Real-world analogy
+<Analogy>
+Think of a **food court** vs a **single giant assembly line**. In a food court, the taco stall (`PlaceOrder`) and the coffee stall (`GetOrder`) each have their own counter, prep area, and register—changing the taco menu never slows down coffee orders.
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="vertical-slice-flow"
+  title="Vertical Slice: Request → Feature Slice → DB"
+  nodes={[
+    { id: 'http', label: 'HTTP Router', subtitle: 'POST /orders', icon: 'gateway', category: 'edge', rank: 0, order: 0 },
+    { id: 'slice', label: 'PlaceOrder Slice', subtitle: 'Schema + Logic', icon: 'service', category: 'service', rank: 1, order: 0 },
+    { id: 'db', label: 'Postgres', subtitle: 'Slice query', icon: 'db', category: 'data', rank: 2, order: 0 },
+  ]}
+  steps={[
+    { edge: 'http->slice', title: 'Route to feature slice', text: 'Thin router dispatches POST /orders directly to the PlaceOrder slice.' },
+    { edge: 'slice->db', title: 'Validate and persist', text: 'Slice validates input, runs domain rules, and executes its own INSERT.' },
+    { edge: 'db->slice', title: 'Return inserted row', text: 'Postgres returns the new order ID and timestamp.', kind: 'response' },
+    { edge: 'slice->http', title: 'Respond 201 Created', text: 'Slice formats its own response DTO and returns 201 Created.', kind: 'response' },
+  ]}
+/>
+
+## Code
+A self-contained `place-order` slice in TypeScript:
+
+```ts
+// src/features/place-order/handler.ts
+export interface PlaceOrderInput {
+  customerId: string;
+  items: Array<{ sku: string; priceCents: number; qty: number }>;
+}
+
+export async function handlePlaceOrder(
+  input: PlaceOrderInput,
+  saveOrder: (row: { id: string; totalCents: number }) => Promise<void>,
+) {
+  if (input.items.length === 0) throw new Error('Empty order');
+  const totalCents = input.items.reduce((s, i) => s + i.priceCents * i.qty, 0);
+  const id = crypto.randomUUID();
+  await saveOrder({ id, totalCents });
+  return { orderId: id, totalCents };
+}
+```
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'Feature-heavy APIs and web backends where most endpoints are independent use cases.',
+    'Teams tired of 5-file boilerplate for a simple read endpoint.',
+  ]}
+  avoid={[
+    'Core domain logic shared across 10+ endpoints—extract shared Aggregates/Value Objects rather than copy-pasting rules.',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Group by feature folder
+    Create `src/features/<use-case>/` containing `handler.ts`, `schema.ts`, and `handler.test.ts`.
+  </Step>
+  <Step>
+    ### Keep slices independent
+    Never import `features/a/handler` from `features/b/handler`; extract shared domain rules to `src/domain/` only when truly shared.
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'Minimal merge conflicts and fast onboarding—each feature fits in one folder.',
+    'Each slice can pick the right level of abstraction (raw SQL vs DDD aggregate).',
+  ]}
+  cons={[
+    'Can lead to duplicated business rules if developers copy-paste complex logic instead of extracting domain helpers.',
+    'Requires discipline to keep cross-cutting concerns (auth, logging) in middleware rather than repeated in every slice.',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'Layered Architecture',
+      href: '/docs/architecture/layered',
+      summary: 'The horizontal layer alternative that Vertical Slice Architecture replaces.',
+    },
+    {
+      name: 'CQRS',
+      href: '/docs/architecture/cqrs',
+      summary: 'Vertical slices pair naturally with CQRS because reads and writes are already separate slices.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "How does Vertical Slice Architecture decide whether to use raw SQL or a rich Domain Aggregate for an endpoint?",
+    options: [
+      { label: "Per slice—simple read slices can use direct SQL while complex write slices use a Domain Aggregate", description: "Each slice is independent and chooses the complexity it actually needs.", correct: true },
+      { label: "Every slice must go through identical Repository and Service interfaces", description: "Forcing identical layers across all endpoints is what Vertical Slice avoids." },
+      { label: "Slices are forbidden from accessing a database", description: "Each slice owns its data access directly." }
+    ]
+  },
+  {
+    question: "What is the main risk to watch for as a Vertical Slice codebase grows?",
+    options: [
+      { label: "Duplicating non-trivial business invariants across multiple write slices", description: "When two slices share the same invariant, extract it into a shared domain model/helper.", correct: true },
+      { label: "Too few folders in src/", description: "Slices organize code into feature folders, which is intentional." },
+      { label: "Inability to write unit tests", description: "Self-contained slices are easy to unit and integration test." }
+    ]
+  }
+]} />
+
+## Sources
+- [Jimmy Bogard: Vertical Slice Architecture](https://www.jimmybogard.com/vertical-slice-architecture/)
+- [Martin Fowler: PresentationDomainDataLayering](https://martinfowler.com/bliki/PresentationDomainDataLayering.html)

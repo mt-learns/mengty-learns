@@ -1,0 +1,195 @@
+---
+title: Modular Monolith
+description: Organize a single deployable application into isolated business modules that communicate only through public APIs—with zero shared database tables.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: concept
+type: explanation
+level: intermediate
+tags: [architecture, modular-monolith, boundaries, modules]
+tested_with:
+  typescript: "7.0.2"
+cards:
+  - q: "What defines a Modular Monolith compared to a traditional big-ball-of-mud monolith?"
+    a: "Code is partitioned into independent business modules with strict encapsulation, public module APIs, and no cross-module database table joins."
+  - q: "How should Module A read data owned by Module B in a Modular Monolith?"
+    a: "By calling Module B's public in-process API (interface/facade) or subscribing to Module B's domain events—never by querying Module B's tables directly."
+  - q: "What is the biggest advantage of a Modular Monolith over microservices for a small team?"
+    a: "You get clear team/domain boundaries and fast refactoring with a single deployment, in-process calls, and zero distributed-systems overhead."
+  - q: "How do you enforce module boundaries so developers don't accidentally import internal files from another module?"
+    a: "Use TypeScript project references, ESLint boundary rules (e.g., eslint-plugin-boundaries), or package exports (index.ts) that block deep imports."
+related:
+  - architecture/hexagonal
+  - architecture/compare-styles
+  - architecture/dependency-inversion
+sources:
+  - title: "Martin Fowler: MonolithFirst"
+    url: https://martinfowler.com/bliki/MonolithFirst.html
+  - title: "Martin Fowler: BoundedContext"
+    url: https://martinfowler.com/bliki/BoundedContext.html
+---
+
+## TL;DR
+A **Modular Monolith** runs as **one deployable process** but enforces **strict module boundaries**: each business module (`orders`, `inventory`, `billing`) owns its own internal code and database tables, and modules talk **only through explicit public APIs** or in-process events.
+
+## Intent
+<Intent>
+Get the clean domain boundaries of microservices without paying the operational tax of network calls, distributed tracing, and multi-repo deployments.
+</Intent>
+
+## Problem
+In an unmodularized monolith, `BillingService` imports `orders/internal/order-model` and joins directly against `orders_items` in SQL. Over time, every module depends on every other module's internals—turning simple schema changes into risky whole-app rewrites.
+
+<Diagram
+  id="modular-monolith-problem"
+  ariaLabel="Unmodularized monolith with tangled cross-module imports and shared database tables"
+  caption="Direct imports and cross-module SQL joins turn a monolith into a tangled ball of mud."
+  nodes={[
+    { id: 'orders', label: 'Orders Module', subtitle: 'Reaches into billing', icon: 'service', category: 'service', rank: 0, order: 0, variant: 'problem' },
+    { id: 'billing', label: 'Billing Module', subtitle: 'Joins orders table', icon: 'service', category: 'service', rank: 1, order: 0, variant: 'problem' },
+    { id: 'db', label: 'Shared Tables', subtitle: 'Coupled schemas', icon: 'db', category: 'data', rank: 2, order: 0 },
+  ]}
+  edges={[
+    { from: 'orders', to: 'billing', kind: 'error' },
+    { from: 'billing', to: 'db', kind: 'error' },
+    { from: 'orders', to: 'db', kind: 'error' },
+  ]}
+/>
+
+## Solution
+A Modular Monolith applies two hard rules inside a single repository and deployment:
+
+1. **Private internals, public `index.ts` API:** `src/modules/inventory/index.ts` exports `InventoryApi` (`reserveStock()`). No other module may import from `src/modules/inventory/internal/*`.
+2. **No shared tables:** `orders` owns `orders.*` tables (separate PostgreSQL schema or prefixed tables with no foreign keys across modules). If `orders` needs stock availability, it calls `InventoryApi`—never `SELECT * FROM inventory_items`.
+
+Because everything runs in one process, `InventoryApi` is a fast TypeScript method call today—and if `inventory` ever needs to scale independently later, extracting it to a network service only requires swapping the `InventoryApi` adapter.
+
+## Real-world analogy
+<Analogy>
+Think of **watertight compartments** inside a ship hull. All compartments sail together as one vessel (one deployment), but each compartment has sealed bulkheads and communicates through designated hatches (public APIs), so a leak in one doesn't flood the rest.
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="modular-monolith-flow"
+  title="Module A → Public API → Module B (No Shared DB)"
+  nodes={[
+    { id: 'modA', label: 'Orders Module', subtitle: 'PlaceOrderUC', icon: 'service', category: 'service', rank: 0, order: 0 },
+    { id: 'api', label: 'InventoryApi', subtitle: 'Public contract', icon: 'interface', category: 'abstraction', rank: 1, order: 0 },
+    { id: 'modB', label: 'Inventory Mod', subtitle: 'Private internals', icon: 'service', category: 'concrete', rank: 2, order: 0 },
+    { id: 'dbB', label: 'Inventory DB', subtitle: 'Owned schema', icon: 'db', category: 'data', rank: 3, order: 0 },
+  ]}
+  steps={[
+    { edge: 'modA->api', title: 'Call public module API', text: 'Orders calls InventoryApi.reserve(sku, qty) via its exported interface.' },
+    { edge: 'api->modB', title: 'Route to Inventory internal', text: 'Inventory module handles reservation inside its private domain layer.' },
+    { edge: 'modB->dbB', title: 'Update Inventory schema', text: 'Inventory writes only to its own inventory_stock table.' },
+    { edge: 'dbB->modB', title: 'Return updated stock', text: 'Database confirms stock row updated.', kind: 'response' },
+    { edge: 'modB->api', title: 'Map to public DTO', text: 'Inventory maps internal entity to a public ReservationResult DTO.', kind: 'response' },
+    { edge: 'api->modA', title: 'Return result to Orders', text: 'Orders receives ReservationResult without ever touching Inventory tables.', kind: 'response' },
+  ]}
+/>
+
+## Code
+Enforcing module boundaries with explicit `index.ts` exports and DTO contracts:
+
+```ts
+// src/modules/inventory/index.ts (Public API — the ONLY file other modules may import)
+export interface ReserveStockResult {
+  reserved: boolean;
+  remaining: number;
+}
+
+export interface InventoryApi {
+  reserveStock(sku: string, qty: number): Promise<ReserveStockResult>;
+}
+
+// src/modules/orders/place-order.ts (Consumes InventoryApi, never inventory/internal/*)
+export class PlaceOrder {
+  constructor(private readonly inventory: InventoryApi) {}
+
+  async execute(sku: string, qty: number): Promise<void> {
+    const res = await this.inventory.reserveStock(sku, qty);
+    if (!res.reserved) throw new Error('Out of stock');
+  }
+}
+```
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'You are building a product with multiple business domains (Orders, Billing, Auth, Notifications) and a small-to-medium team.',
+    'You want clean boundaries now while keeping the option to extract a microservice later.',
+  ]}
+  avoid={[
+    'Different modules have radically different scaling or runtime needs (e.g., Python ML inference vs Node.js web API).',
+    'A tiny single-purpose CRUD app with 2–3 endpoints where module folders add needless boilerplate.',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Split `src/modules/<domain>/`
+    Group code by business capability (`orders/`, `inventory/`), not technical layer (`controllers/`, `services/`).
+  </Step>
+  <Step>
+    ### Add lint/compiler boundary checks
+    Configure ESLint `no-restricted-imports` or `eslint-plugin-boundaries` so deep imports into `modules/*/internal/**` fail CI.
+  </Step>
+  <Step>
+    ### Separate database schemas
+    Use separate Postgres schemas (`orders.*`, `inventory.*`) or distinct DB users in CI to catch accidental cross-module SQL joins.
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'Single deployment, single CI pipeline, and sub-millisecond in-process module calls.',
+    'Easy to refactor across module boundaries while the domain is still evolving.',
+  ]}
+  cons={[
+    'Requires discipline and lint rules—nothing at the OS level stops a hurried developer from bypassing a boundary.',
+    'All modules share the same process fate and scaling unit.',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'Hexagonal Architecture',
+      href: '/docs/architecture/hexagonal',
+      summary: 'Each module inside a Modular Monolith can internally use Ports & Adapters.',
+    },
+    {
+      name: 'Monolith vs Microservices',
+      href: '/docs/architecture/monolith-vs-microservices',
+      summary: 'Why "start with a modular monolith" beats premature microservices.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "In a Modular Monolith, the Billing module needs a customer's shipping country from the Orders module. What is the right way to get it?",
+    options: [
+      { label: "Call OrdersApi.getOrderSummary(orderId) or read a cached projection updated by OrderPlaced events", description: "Modules only communicate via public APIs or events, never by querying another module's private tables.", correct: true },
+      { label: "Run a SQL JOIN directly against the orders table from Billing", description: "Cross-module SQL joins couple database schemas and break module encapsulation." },
+      { label: "Import OrdersRepository directly from src/modules/orders/internal/", description: "Importing internal repositories bypasses the module's public boundary." }
+    ]
+  },
+  {
+    question: "How can a TypeScript team enforce module boundaries automatically in CI?",
+    options: [
+      { label: "Lint rules (no-restricted-imports / eslint-plugin-boundaries) blocking imports outside each module's index.ts", description: "Automated lint/compiler checks prevent accidental boundary erosion under deadline pressure.", correct: true },
+      { label: "Relying on code review memory alone", description: "Manual review misses deep imports over time." },
+      { label: "Splitting every module into its own Kubernetes cluster", description: "That turns the modular monolith into distributed microservices." }
+    ]
+  }
+]} />
+
+## Sources
+- [Martin Fowler: MonolithFirst](https://martinfowler.com/bliki/MonolithFirst.html)
+- [Martin Fowler: BoundedContext](https://martinfowler.com/bliki/BoundedContext.html)

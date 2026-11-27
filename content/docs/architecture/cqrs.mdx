@@ -1,0 +1,197 @@
+---
+title: "CQRS: Command Query Responsibility Segregation"
+description: Separate write (command) models from read (query) models when read and write shapes diverge—and know when plain CRUD is better.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: concept
+type: explanation
+level: intermediate
+tags: [architecture, cqrs, commands, queries, projections]
+tested_with:
+  typescript: "7.0.2"
+cards:
+  - q: "What is the core idea of CQRS?"
+    a: "Use separate models (and optionally separate schemas or stores) for mutating state (Commands) and reading data (Queries)."
+  - q: "Does CQRS require Event Sourcing or two separate databases?"
+    a: "No. Basic CQRS can use one Postgres database where writes go through domain Aggregates and reads run flat SQL/view queries."
+  - q: "What trade-off is introduced when CQRS uses an asynchronous read replica or projection?"
+    a: "Eventual consistency: a user who writes a Command may briefly read stale data from the Query store until the projection catches up."
+  - q: "When should you NOT use CQRS?"
+    a: "For simple CRUD screens where the read shape and write shape are nearly identical, because maintaining two models adds unnecessary complexity."
+related:
+  - architecture/ddd-tactical
+  - architecture/vertical-slice
+  - architecture/event-driven-outbox
+sources:
+  - title: "Martin Fowler: CQRS"
+    url: https://martinfowler.com/bliki/CQRS.html
+---
+
+## TL;DR
+**CQRS** splits **Commands** (writes that enforce invariants and change state) from **Queries** (reads tailored for UI/API shapes). You don't need Event Sourcing or two databases to start—often just bypassing heavy domain Aggregates on reads is enough—and you should skip CQRS for simple CRUD.
+
+## Intent
+<Intent>
+Optimize writes for **data integrity** and reads for **query speed and UI shape**, instead of forcing one bloated ORM entity to serve both.
+</Intent>
+
+## Problem
+In a growing `Order` service, `PlaceOrder` needs a rich `Order` Aggregate with line items and pricing rules, while the "Admin Orders Dashboard" needs a paginated table joining `orders`, `customers`, and `shipments`—something that causes N+1 queries or ugly lazy-loading hacks if forced through the same domain model.
+
+<Diagram
+  id="cqrs-split"
+  ariaLabel="Command side writes via Domain Aggregate while Query side reads via flat SQL projection"
+  caption="Commands validate invariants via the domain model; Queries read flat DTOs directly."
+  nodes={[
+    { id: 'client', label: 'API Client', subtitle: 'POST vs GET', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'cmd', label: 'Command Side', subtitle: 'Order Aggregate', icon: 'service', category: 'service', rank: 1, order: 0 },
+    { id: 'qry', label: 'Query Side', subtitle: 'Flat Read DTO', icon: 'interface', category: 'abstraction', rank: 1, order: 1 },
+    { id: 'db', label: 'Database', subtitle: 'Tables / Views', icon: 'db', category: 'data', rank: 2, order: 0 },
+  ]}
+  edges={[
+    { from: 'client', to: 'cmd', kind: 'request', label: 'Write' },
+    { from: 'client', to: 'qry', kind: 'request', label: 'Read' },
+    { from: 'cmd', to: 'db', kind: 'request' },
+    { from: 'qry', to: 'db', kind: 'request' },
+  ]}
+/>
+
+## Solution
+CQRS separates the codebase into two distinct paths:
+
+- **Command path (writes):** accepts an intent (`PlaceOrderCommand`), loads the Aggregate, enforces invariants, persists state, and returns an ID or void (not a giant view model).
+- **Query path (reads):** runs a read-only query (plain SQL, Postgres view, or denormalized read table) directly into a flat `OrderSummaryDto`—zero domain entities, zero setters.
+
+At **Level 1**, both paths share the same relational database. At **Level 2** (high read scale), writes emit domain events that asynchronously update a separate read store (Elasticsearch, Redis, or denormalized tables).
+
+## Real-world analogy
+<Analogy>
+Think of a **bank vault vs a balance display**. Depositing cash (Command) goes through strict teller verification, counterfeit checks, and ledger locking. Checking your balance (Query) just reads a fast, precomputed summary screen.
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="cqrs-flow"
+  title="CQRS: Command Write vs Query Read"
+  nodes={[
+    { id: 'api', label: 'HTTP API', subtitle: 'POST / GET', icon: 'gateway', category: 'edge', rank: 0, order: 0 },
+    { id: 'cmd', label: 'CommandHandler', subtitle: 'Enforces rules', icon: 'service', category: 'service', rank: 1, order: 0 },
+    { id: 'qry', label: 'QueryHandler', subtitle: 'Direct projection', icon: 'interface', category: 'abstraction', rank: 1, order: 1 },
+    { id: 'wdb', label: 'Write DB', subtitle: 'Normalized', icon: 'db', category: 'data', rank: 2, order: 0 },
+    { id: 'rdb', label: 'Read View', subtitle: 'Denormalized', icon: 'db', category: 'concrete', rank: 2, order: 1 },
+  ]}
+  steps={[
+    { edge: 'api->cmd', title: 'Send PlaceOrder command', text: 'POST /orders routes to CommandHandler with validated input.' },
+    { edge: 'cmd->wdb', title: 'Write normalized order', text: 'Order aggregate validates invariants and inserts into Write DB.' },
+    { edge: 'cmd->rdb', title: 'Sync read projection', text: 'Async handler or DB trigger updates the denormalized Read View.' },
+    { edge: 'cmd->api', title: 'Return 201 OrderId', text: 'Command returns only the new OrderId—not the full dashboard DTO.', kind: 'response' },
+    { edge: 'api->qry', title: 'Send GetOrderSummary query', text: 'GET /orders/summary routes to QueryHandler, bypassing aggregates.' },
+    { edge: 'qry->rdb', title: 'Fetch flat read model', text: 'QueryHandler runs a single indexed SELECT on Read View.' },
+    { edge: 'rdb->qry', title: 'Return flat rows', text: 'Read View returns pre-joined summary rows.', kind: 'response' },
+    { edge: 'qry->api', title: 'Return 200 JSON', text: 'QueryHandler returns the summary DTO directly to the client.', kind: 'response' },
+  ]}
+/>
+
+## Code
+Same-database CQRS in TypeScript—no second database required:
+
+```ts
+// Command side: mutates state and enforces invariants
+export async function placeOrderCommand(
+  cmd: { customerId: string; totalCents: number },
+  insertOrder: (row: { id: string; customerId: string; totalCents: number }) => Promise<void>,
+): Promise<{ orderId: string }> {
+  if (cmd.totalCents <= 0) throw new Error('Total must be positive');
+  const orderId = crypto.randomUUID();
+  await insertOrder({ id: orderId, customerId: cmd.customerId, totalCents: cmd.totalCents });
+  return { orderId };
+}
+
+// Query side: read-only flat DTO directly from SQL/view
+export interface OrderDashboardRow {
+  orderId: string;
+  customerName: string;
+  totalCents: number;
+}
+
+export async function getOrderDashboardQuery(
+  queryDb: () => Promise<OrderDashboardRow[]>,
+): Promise<OrderDashboardRow[]> {
+  return queryDb();
+}
+```
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'Read traffic and write traffic have very different shapes, complexity, or scale (e.g., complex writes vs heavy search/dashboards).',
+    'You use DDD Aggregates on writes and want fast, join-friendly SQL queries on reads without polluting the domain model.',
+  ]}
+  avoid={[
+    'Simple CRUD apps where the form fields match the table columns—CQRS doubles boilerplate for zero gain.',
+    'If your team cannot tolerate eventual consistency on UI reads after a write (stick to single-DB CQRS or plain CRUD).',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Start with single-DB CQRS
+    Keep one database; separate `commands/` (domain-validated writes) from `queries/` (read-only SQL/views).
+  </Step>
+  <Step>
+    ### Split stores only when measured
+    Introduce an async read replica or search index only when query load or joins actually bottleneck the primary DB.
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'Keeps write invariants clean while letting read queries use optimal SQL, indexes, or projections.',
+    'Scales read and write workloads independently if stores are separated.',
+  ]}
+  cons={[
+    'More code paths and DTOs than standard CRUD.',
+    'Async read stores introduce eventual consistency ("read-your-own-writes" UX bugs if unhandled).',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'DDD Tactical Patterns',
+      href: '/docs/architecture/ddd-tactical',
+      summary: 'CQRS frees DDD Aggregates from serving complex read queries.',
+    },
+    {
+      name: 'Event Sourcing',
+      href: '/docs/architecture/event-sourcing',
+      summary: 'Event Sourcing almost always pairs with CQRS to build queryable read projections.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "Do you need Event Sourcing or two separate databases to practice CQRS?",
+    options: [
+      { label: "No—CQRS only separates the write model from the read model; both can share one PostgreSQL database", description: "Single-database CQRS gives most of the architectural clarity with zero eventual consistency.", correct: true },
+      { label: "Yes—CQRS requires Kafka and two separate databases", description: "Separate stores are an optional scaling step, not a requirement of CQRS." },
+      { label: "Yes—CQRS is just another name for Event Sourcing", description: "CQRS and Event Sourcing are distinct patterns that can be used independently." }
+    ]
+  },
+  {
+    question: "What UX bug commonly appears when a team adopts async read projections in CQRS?",
+    options: [
+      { label: "A user creates an order and refreshes the list page immediately, but doesn't see it yet due to eventual consistency", description: "Read projections lag behind the write database by milliseconds to seconds.", correct: true },
+      { label: "The database refuses all SELECT queries", description: "Queries still run; they just read slightly older projected data." },
+      { label: "TypeScript fails to compile", description: "Eventual consistency is a runtime distributed-data behavior." }
+    ]
+  }
+]} />
+
+## Sources
+- [Martin Fowler: CQRS](https://martinfowler.com/bliki/CQRS.html)

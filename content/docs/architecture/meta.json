@@ -7,8 +7,17 @@
     "clean",
     "compare-styles",
     "dependency-inversion",
+    "vertical-slice",
+    "modular-monolith",
+    "monolith-vs-microservices",
+    "ddd-essentials",
+    "ddd-tactical",
+    "cqrs",
+    "event-driven-outbox",
+    "event-sourcing",
     "caching-redis",
-    "queues-async"
+    "queues-async",
+    "c4-model"
   ],
   "icon": "architecture"
 }

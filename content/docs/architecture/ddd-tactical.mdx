@@ -1,0 +1,232 @@
+---
+title: "DDD Tactical Patterns: Entities, Value Objects, Aggregates"
+description: Model rich domain rules using Entities, Value Objects, Aggregates, Repositories, and Domain Events on the shared Order service.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: concept
+type: explanation
+level: intermediate
+tags: [architecture, ddd, aggregate, entity, value-object, typescript]
+tested_with:
+  typescript: "7.0.2"
+cards:
+  - q: "What is the difference between an Entity and a Value Object?"
+    a: "An Entity has a persistent identity (OrderId) across state changes; a Value Object (Money, Address) has no identity, is immutable, and is equal by its attributes."
+  - q: "What is an Aggregate Root's primary job?"
+    a: "It acts as the single consistency boundary that enforces business invariants across itself and its child entities, and is the only object external code may reference or load via a Repository."
+  - q: "How should two different Aggregates communicate?"
+    a: "By referencing each other's ID (not object graph) and reacting asynchronously to Domain Events, rather than mutating both in one giant transaction."
+  - q: "Why does a Repository exist only for Aggregate Roots?"
+    a: "Loading or saving child entities (like OrderLine) directly would bypass the Aggregate Root's invariant checks."
+related:
+  - architecture/hexagonal
+  - architecture/clean
+  - architecture/compare-styles
+sources:
+  - title: "Martin Fowler: EvansClassification (Entity, Value Object, Service)"
+    url: https://martinfowler.com/bliki/EvansClassification.html
+  - title: "Martin Fowler: DDD_Aggregate"
+    url: https://martinfowler.com/bliki/DDD_Aggregate.html
+---
+
+## TL;DR
+Tactical DDD puts business invariants inside the domain model instead of anemic service scripts: **Value Objects** (`Money`) are immutable, **Entities** (`Order`) have identity, **Aggregates** guard consistency boundaries, **Repositories** persist whole aggregates, and **Domain Events** (`OrderPlaced`) announce state changes.
+
+## Intent
+<Intent>
+Enforce business invariants in one place inside an **Aggregate Root** (like `Order`) so invalid state—such as an empty order or a negative total—cannot be constructed anywhere in the codebase.
+</Intent>
+
+## Problem
+In an "anemic domain model", `Order` is just a plain data bag (`interface Order { status: string; items: any[] }`) and validation rules scatter across controllers, cron jobs, and services. One endpoint forgets to check `items.length > 0` or recalculates `totalCents` differently, corrupting data in production.
+
+<Diagram
+  id="ddd-tactical-aggregate"
+  ariaLabel="Order Aggregate Root encapsulating OrderLine entities and Money value objects"
+  caption="External callers only talk to the Order Aggregate Root; OrderLines and Money live inside its boundary."
+  layout="tree"
+  groups={[
+    { id: 'agg', label: 'Order Aggregate', nodeIds: ['root', 'line', 'money'] },
+  ]}
+  nodes={[
+    { id: 'repo', label: 'OrderRepository', subtitle: 'Loads/saves root', icon: 'db', category: 'data', rank: 0, order: 0 },
+    { id: 'root', label: 'Order (Root)', subtitle: 'Enforces invariants', icon: 'service', category: 'service', rank: 1, order: 0 },
+    { id: 'line', label: 'OrderLine', subtitle: 'Child entity', icon: 'class', category: 'concrete', rank: 2, order: 0 },
+    { id: 'money', label: 'Money', subtitle: 'Value object', icon: 'interface', category: 'abstraction', rank: 2, order: 1 },
+  ]}
+  edges={[
+    { from: 'repo', to: 'root', kind: 'request' },
+    { from: 'root', to: 'line', kind: 'request' },
+    { from: 'root', to: 'money', kind: 'request' },
+  ]}
+/>
+
+## Solution
+Tactical DDD gives you five building blocks that fit naturally inside Hexagonal or Clean Architecture:
+
+1. **Value Object (`Money`):** immutable, validated on creation (`amountCents >= 0`), compared by value.
+2. **Entity (`Order`, `OrderLine`):** has a unique `id` and mutable lifecycle (`draft` → `placed` → `cancelled`).
+3. **Aggregate Root (`Order`):** owns `OrderLine[]` and exposes intent-revealing methods (`order.place()`). No outside code mutates `order.lines` directly.
+4. **Repository (`OrderRepository`):** saves and loads the entire `Order` aggregate as one atomic unit.
+5. **Domain Event (`OrderPlaced`):** immutable record emitted by the aggregate when a meaningful business fact occurs.
+
+## Real-world analogy
+<Analogy>
+Think of a **locked shipping container** (Aggregate) with a **manifest clerk** (Aggregate Root). You cannot reach through the wall to swap one box (`OrderLine`); you hand a request to the clerk, who checks weight limits (invariants), updates the manifest, seals the container, and stamps a dispatch slip (Domain Event).
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="ddd-tactical-flow"
+  title="Command → Aggregate Invariant → Domain Event"
+  nodes={[
+    { id: 'cmd', label: 'PlaceOrderCmd', subtitle: 'Application input', icon: 'gateway', category: 'edge', rank: 0, order: 0 },
+    { id: 'uc', label: 'PlaceOrderUC', subtitle: 'Loads aggregate', icon: 'service', category: 'service', rank: 1, order: 0 },
+    { id: 'agg', label: 'Order Aggregate', subtitle: 'Checks invariants', icon: 'class', category: 'abstraction', rank: 2, order: 0 },
+    { id: 'repo', label: 'OrderRepo', subtitle: 'Persists unit', icon: 'db', category: 'data', rank: 3, order: 0 },
+    { id: 'evt', label: 'OrderPlaced', subtitle: 'Domain event', icon: 'queue', category: 'external', rank: 3, order: 1 },
+  ]}
+  steps={[
+    { edge: 'cmd->uc', title: 'Dispatch PlaceOrder command', text: 'Controller sends PlaceOrderCommand with customerId and line items.' },
+    { edge: 'uc->agg', title: 'Create & validate Order', text: 'Order aggregate checks Money >= 0 and at least one OrderLine exists.' },
+    { edge: 'agg->repo', title: 'Save aggregate atomically', text: 'OrderRepository persists Order and its OrderLines in one transaction.' },
+    { edge: 'repo->agg', title: 'Confirm persistence', text: 'Repository returns the saved Order aggregate.', kind: 'response' },
+    { edge: 'agg->evt', title: 'Emit OrderPlaced event', text: 'Order emits OrderPlaced so Billing/Shipping react without tight coupling.' },
+    { edge: 'uc->cmd', title: 'Return OrderId', text: 'Use case returns the created OrderId to the caller.', kind: 'response' },
+  ]}
+/>
+
+## Code
+The shared `Order` example modeled as a Value Object (`Money`), Aggregate Root (`Order`), and Domain Event (`OrderPlaced`):
+
+```ts
+// TypeScript 7.0.2
+export class Money {
+  private constructor(
+    public readonly cents: number,
+    public readonly currency: 'USD' | 'EUR',
+  ) {}
+
+  static of(cents: number, currency: 'USD' | 'EUR' = 'USD'): Money {
+    if (!Number.isInteger(cents) || cents < 0) throw new Error('Invalid Money');
+    return new Money(cents, currency);
+  }
+
+  add(other: Money): Money {
+    if (other.currency !== this.currency) throw new Error('Currency mismatch');
+    return Money.of(this.cents + other.cents, this.currency);
+  }
+}
+
+export interface OrderPlaced {
+  readonly type: 'OrderPlaced';
+  readonly orderId: string;
+  readonly totalCents: number;
+}
+
+export class Order {
+  private events: OrderPlaced[] = [];
+
+  private constructor(
+    public readonly id: string,
+    private readonly items: ReadonlyArray<{ sku: string; price: Money; qty: number }>,
+    private status: 'draft' | 'placed',
+  ) {}
+
+  static create(id: string, items: Array<{ sku: string; price: Money; qty: number }>): Order {
+    if (items.length === 0) throw new Error('Order must have at least one item');
+    return new Order(id, items, 'draft');
+  }
+
+  place(): OrderPlaced[] {
+    if (this.status !== 'draft') throw new Error('Order already placed');
+    this.status = 'placed';
+    const total = this.items.reduce(
+      (sum, item) => sum.add(Money.of(item.price.cents * item.qty, item.price.currency)),
+      Money.of(0),
+    );
+    this.events.push({ type: 'OrderPlaced', orderId: this.id, totalCents: total.cents });
+    return [...this.events];
+  }
+}
+```
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'Your domain has real state-transition rules and invariants (orders, payments, inventory reservations, bookings).',
+    'You already use Hexagonal or Clean Architecture and want a rich domain core instead of anemic DTOs.',
+  ]}
+  avoid={[
+    'Simple CRUD forms or admin tables with no invariants—tactical DDD adds ceremony for zero payoff.',
+    'Reporting/analytics queries—bypass Aggregates and read directly with SQL.',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Extract Value Objects first
+    Replace raw `number` or `string` primitives (`cents`, `email`, `currency`) with self-validating Value Objects.
+  </Step>
+  <Step>
+    ### Keep Aggregates small
+    Include only the child entities needed to enforce an immediate invariant; reference other Aggregates by ID only.
+  </Step>
+  <Step>
+    ### Emit Domain Events on state transitions
+    Record events inside the Aggregate Root and publish them after the repository commits.
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'Invariants are impossible to bypass because constructors and methods guard every state transition.',
+    'Pure TypeScript domain classes test in microseconds with zero mocks.',
+  ]}
+  cons={[
+    'Requires mapping between rich Aggregates and relational/SQL tables in the Repository.',
+    'Oversized Aggregates cause lock contention when multiple users edit unrelated child entities.',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'Hexagonal Architecture',
+      href: '/docs/architecture/hexagonal',
+      summary: 'Where tactical DDD Aggregates live (inside the core) and how Repositories act as driven adapters.',
+    },
+    {
+      name: 'Clean Architecture',
+      href: '/docs/architecture/clean',
+      summary: 'Entities and Use Cases mirror DDD Aggregates and Application Services.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "Why should an Order Aggregate hold customerId: string instead of a full Customer object reference?",
+    options: [
+      { label: "Keeping Aggregates small and referencing others by ID avoids huge object graphs and transaction lock contention", description: "Each Aggregate is its own consistency boundary loaded and saved independently.", correct: true },
+      { label: "TypeScript interfaces cannot reference other classes", description: "TypeScript supports object references, but DDD discourages cross-aggregate object graphs." },
+      { label: "Customer has no identity", description: "Customer is an Entity with its own identity and lifecycle." }
+    ]
+  },
+  {
+    question: "Which DDD building block is immutable, has no ID, and is compared by its property values?",
+    options: [
+      { label: "Value Object (e.g., Money)", description: "Two Money(1000, 'USD') instances are interchangeable and immutable.", correct: true },
+      { label: "Entity", description: "Entities are defined by a persistent identity even when attributes change." },
+      { label: "Repository", description: "Repositories persist and retrieve Aggregate Roots." }
+    ]
+  }
+]} />
+
+## Sources
+- [Martin Fowler: EvansClassification](https://martinfowler.com/bliki/EvansClassification.html)
+- [Martin Fowler: DDD_Aggregate](https://martinfowler.com/bliki/DDD_Aggregate.html)

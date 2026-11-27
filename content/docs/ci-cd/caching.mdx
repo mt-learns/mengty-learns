@@ -1,0 +1,118 @@
+---
+title: Caching That Actually Works in CI/CD
+description: Speed up GitHub Actions with pnpm store caching and Docker layer caching (cache-from/to gha), design stable cache keys, and know when caching hurts.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: how-to
+level: intermediate
+tags: [ci-cd, github-actions, caching, pnpm, docker]
+tested_with:
+  pnpm: "11.6.0"
+  github_actions: "2026-11 (docs)"
+cards:
+  - q: "Why should you cache the pnpm store rather than node_modules in GitHub Actions?"
+    a: "The pnpm content-addressable store is OS/node-clean and safe to share across runs, whereas node_modules contains symlinks/native binaries that break on Node or runner updates."
+  - q: "How do you enable BuildKit layer caching in GitHub Actions without a separate registry?"
+    a: "Use docker/build-push-action with cache-from: type=gha and cache-to: type=gha,mode=max."
+  - q: "What happens if a GitHub Actions cache key is too broad (missing lockfile hash)?"
+    a: "CI restores stale dependencies or stale layers even after pnpm-lock.yaml changes, causing phantom passes or hard-to-debug build errors."
+  - q: "When does caching in CI actually make builds slower?"
+    a: "When downloading and extracting a huge cache archive over the network takes longer than running the step fresh (e.g., tiny installs or unlayered build outputs)."
+related:
+  - ci-cd/pipeline-anatomy
+  - ci-cd/this-site-pipeline
+  - containers/image-layers-cache
+sources:
+  - title: "GitHub Docs: Caching dependencies to speed up workflows"
+    url: https://docs.github.com/en/actions/writing-workflows/choosing-what-to-cache/caching-dependencies-to-speed-up-workflows
+  - title: "pnpm Docs: Continuous Integration (GitHub Actions)"
+    url: https://pnpm.io/continuous-integration#github-actions
+  - title: "Docker Docs: GitHub Actions cache backend (gha)"
+    url: https://docs.docker.com/build/cache/backends/gha/
+---
+
+## TL;DR
+Cache **inputs that are slow to fetch and deterministic to key**: the **pnpm store** (via `actions/setup-node` with `cache: 'pnpm'`) and **Docker BuildKit layers** (`type=gha,mode=max`). Never cache `node_modules` directly, always hash your lockfile in the key, and skip caching if restore/save takes longer than recomputing.
+
+## Why it exists
+Fresh GitHub Actions runners start with an empty disk on every job. Re-downloading 750+ npm packages or rebuilding a multi-stage Docker image from `apt-get` on every pull request wastes minutes of runner time and feedback loops.
+
+## Mental model
+A CI cache is a **key-value archive** (`tar.zst`) stored next to your repo:
+- **Exact key hit:** restores the exact artifact for that lockfile/Dockerfile hash.
+- **Prefix `restore-keys`:** falls back to the newest partial match (useful for Docker/Apt, **dangerous** if your install step doesn't prune stale files).
+- **Eviction:** GitHub Actions caps total cache size per repository (10 GB) and evicts unused entries after 7 days.
+
+## Do it
+
+### 1. pnpm store cache in GitHub Actions
+Pin actions to full commit SHAs (supply-chain best practice) and let `setup-node` handle the pnpm store key automatically:
+
+```yaml
+# .github/workflows/ci.yml (example; not run directly)
+steps:
+  - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+  - uses: pnpm/action-setup@a7487c7e89a18df2991f7f222e4898a00d66ddda # v4.1.0
+  - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+    with:
+      node-version: "22"
+      cache: "pnpm"
+  - run: pnpm install --frozen-lockfile
+```
+
+### 2. Docker BuildKit layer cache (`type=gha`)
+Use `docker/setup-buildx-action` and `docker/build-push-action` with `mode=max` so intermediate multi-stage layers (`deps`, `builder`) are cached too—not just the final `runner` stage:
+
+```yaml
+# Docker BuildKit GHA cache (not run directly)
+- uses: docker/setup-buildx-action@b5ca514318bd6ebac0fb2aedd5d36ec1b5c232a2e # v3.10.0
+- uses: docker/build-push-action@14487ce63c7a62a4a324672d2e86b94230dd13d3 # v6.15.0
+  with:
+    context: .
+    push: false
+    tags: web:ci
+    cache-from: type=gha
+    cache-to: type=gha,mode=max
+```
+
+<Tip>
+Notice `mode=max`: the default `mode=min` only exports layers from the final image stage, which means a multi-stage `builder` stage misses the cache on every run.
+</Tip>
+
+## Gotchas
+- **Caching `node_modules`:** breaks native addons across Node versions and leaves orphan packages when dependencies are removed. Cache the pnpm store instead.
+- **Forgetting `mode=max` in Docker:** multi-stage builds will rebuild `deps` and `builder` every time unless `mode=max` is set.
+- **When caching hurts:** if your cache archive is 1.5 GB and takes 45 seconds to download/upload while `pnpm install` from registry takes 20 seconds, caching makes CI **slower** and burns your 10 GB repo quota.
+- **Cross-PR cache isolation:** pull requests from forks cannot write to the base branch cache, and feature branches cannot read caches created by other feature branches (only `main` and their own branch).
+
+## Production checklist
+- [ ] Key dependency caches on `hashFiles('**/pnpm-lock.yaml')` (automatic with `setup-node` `cache: 'pnpm'`)
+- [ ] Use `--frozen-lockfile` so CI never silently mutates the lockfile
+- [ ] Set `cache-to: type=gha,mode=max` for multi-stage Dockerfiles
+- [ ] Measure job duration with and without cache—remove caches that don't save at least 20–30 seconds
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "Why should multi-stage Docker builds in GitHub Actions use cache-to: type=gha,mode=max instead of the default mode=min?",
+    options: [
+      { label: "mode=max caches intermediate builder/deps stages, whereas mode=min only caches layers in the final stage", description: "Without mode=max, earlier stages like npm/pnpm install in a multi-stage Dockerfile miss the cache.", correct: true },
+      { label: "mode=max compresses the image smaller for production", description: "Cache export mode only affects what build cache layers are saved, not the runtime image size." },
+      { label: "mode=min disables BuildKit", description: "BuildKit is required for both modes." }
+    ]
+  },
+  {
+    question: "You cache ~/.pnpm-store with a static key 'pnpm-store' and no lockfile hash. What goes wrong?",
+    options: [
+      { label: "The cache key never invalidates when pnpm-lock.yaml changes, serving an outdated store", description: "Without a lockfile hash in the key, GitHub Actions keeps restoring the first cached archive until eviction.", correct: true },
+      { label: "GitHub Actions refuses to run without a hash", description: "Static keys are valid syntax, just bad practice." },
+      { label: "pnpm deletes the lockfile on cache hit", description: "pnpm never deletes pnpm-lock.yaml on a cache hit." }
+    ]
+  }
+]} />
+
+## Sources
+- [GitHub Docs: Caching dependencies to speed up workflows](https://docs.github.com/en/actions/writing-workflows/choosing-what-to-cache/caching-dependencies-to-speed-up-workflows)
+- [pnpm Docs: Continuous Integration (GitHub Actions)](https://pnpm.io/continuous-integration#github-actions)
+- [Docker Docs: GitHub Actions cache backend (gha)](https://docs.docker.com/build/cache/backends/gha/)

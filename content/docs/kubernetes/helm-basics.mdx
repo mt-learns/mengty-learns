@@ -1,0 +1,117 @@
+---
+title: "Helm Basics: Charts, Values, Releases, and Kustomize"
+description: Package parameterized Kubernetes manifests with Helm charts, manage releases and rollbacks, and know when Kustomize is simpler.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: tutorial
+level: beginner
+tags: [kubernetes, helm, kustomize, packaging, releases]
+tested_with:
+  helm: "4.3 (docs)"
+  kubernetes: "1.36 (docs)"
+cards:
+  - q: "In Helm, what is the difference between a Chart and a Release?"
+    a: "A Chart is the reusable template package (Chart.yaml, templates/, values.yaml); a Release is one installed instance of that chart in a cluster."
+  - q: "How do you preview the exact Kubernetes YAML Helm will apply without touching a cluster?"
+    a: "Run helm template <release> <chart> -f values.yaml (or helm upgrade --install --dry-run)."
+  - q: "What does helm rollback <release> <revision> do?"
+    a: "It creates a new revision whose rendered manifests match the specified earlier revision, without deleting release history."
+  - q: "When should you prefer Kustomize over Helm?"
+    a: "When you manage your own plain Kubernetes YAML across a few environments (dev/staging/prod) and don't need Go-template logic or third-party chart distribution."
+related:
+  - kubernetes/kubectl-apply
+  - kubernetes/pods-deployments
+  - gitops/what-is-gitops
+sources:
+  - title: "Helm Docs: Charts"
+    url: https://helm.sh/docs/topics/charts/
+  - title: "Helm Docs: Using Helm"
+    url: https://helm.sh/docs/intro/using_helm/
+  - title: "Kubernetes Docs: Declarative Management using Kustomize"
+    url: https://kubernetes.io/docs/tasks/manage-kubernetes-objects/kustomization/
+---
+
+## TL;DR
+**Helm** packages Kubernetes YAML into reusable **charts** (`Chart.yaml`, `templates/`, `values.yaml`), tracks each deployment as a versioned **release**, and supports `helm upgrade` and `helm rollback`. If you only patch your own manifests per environment, **Kustomize** (built into `kubectl -k`) is simpler and template-free.
+
+## Why it exists
+Copy-pasting `Deployment` and `Service` YAML across 10 microservices or 3 environments drifts fast. Helm solves two problems: **distributing third-party software** (like `ingress-nginx` or `cert-manager`) as versioned packages, and **parameterizing** manifests with typed/merged `values.yaml` overrides.
+
+## Mental model
+Think of Helm as a **template renderer + release tracker**:
+- **Chart:** the package directory (`Chart.yaml` metadata, `values.yaml` defaults, `templates/*.yaml` Go templates).
+- **Values (`-f prod-values.yaml`, `--set`):** inputs merged over `values.yaml` at render time.
+- **Release:** one live installation in a namespace, stored as revision secrets (`sh.helm.release.v1.<name>.v<rev>`) so `upgrade` and `rollback` work.
+
+## Do it
+
+A minimal chart layout:
+
+```text
+my-app/
+├── Chart.yaml          # name, version, appVersion
+├── values.yaml         # default values
+└── templates/
+    ├── deployment.yaml # Go template using {{ .Values.image.tag }}
+    └── service.yaml
+```
+
+Common lifecycle commands (marked `# not run` because `helm` is not installed in this local environment):
+
+```bash
+# Render manifests locally before touching any cluster (not run)
+helm template web ./my-app -f values-prod.yaml
+
+# Install or upgrade idempotently in one command (not run)
+helm upgrade --install web ./my-app \
+  --namespace prod --create-namespace \
+  -f values-prod.yaml \
+  --wait --timeout 5m
+
+# Inspect release history and roll back to revision 2 (not run)
+helm history web -n prod
+helm rollback web 2 -n prod
+```
+
+### When Kustomize is enough
+Kustomize is built directly into `kubectl apply -k` and avoids Go templates (`{{ include ... }}`) completely:
+- **Use Helm** when consuming third-party charts, publishing reusable app packages, or managing complex conditional resources.
+- **Use Kustomize** when you own the YAML and only need environment overlays (`base/` + `overlays/prod/` for replicas, image tags, or ConfigMap patches).
+
+## Gotchas
+- **Helm hooks & CRDs:** CRDs placed in `crds/` are installed on `helm install` but **never upgraded or deleted** by Helm to protect cluster data.
+- **`--set` vs `-f`:** `--set` silently breaks on commas, dots, and types (e.g., `123456` parsed as float); always prefer `-f values.yaml` files.
+- **Blindly upgrading:** always run `helm template` or the `helm diff` plugin in CI before `helm upgrade` in production.
+- **Release secrets bloat:** set `--history-max 10` on `helm upgrade` so old revision Secrets don't pile up in `etcd`.
+
+## Production checklist
+- [ ] Pin chart versions (`--version 1.2.3`) in CI and GitOps manifests
+- [ ] Store environment overrides in Git-tracked `values-<env>.yaml` files, not ad-hoc `--set` flags
+- [ ] Run `helm lint` and `helm template ... | kubeconform -strict` in CI
+- [ ] Set `--history-max 10` and `--atomic` (or GitOps reconciliation) for safe failed-upgrade recovery
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "What happens to a Helm chart's crds/ directory when you run helm upgrade?",
+    options: [
+      { label: "Helm skips crds/ during upgrade and uninstall", description: "Helm intentionally does not upgrade or delete CRDs in crds/ to prevent accidental data loss.", correct: true },
+      { label: "Helm automatically deletes old CRDs and recreates them", description: "Deleting a CRD deletes all custom resources of that kind in the cluster." },
+      { label: "Helm merges crds/ into values.yaml", description: "CRDs are API extensions, not template values." }
+    ]
+  },
+  {
+    question: "Your team deploys 4 internal services using your own Kubernetes YAML, differing only in replica count and image tag per environment. Which tool is the simpler fit?",
+    options: [
+      { label: "Kustomize (kubectl apply -k)", description: "Kustomize patches plain YAML via base + overlays without maintaining Go templates.", correct: true },
+      { label: "A custom Helm chart with nested Go templates", description: "Go templates add complexity when you don't distribute packages to external users." },
+      { label: "Manually editing YAML before each kubectl apply", description: "Manual edits drift and break repeatability." }
+    ]
+  }
+]} />
+
+## Sources
+- [Helm Docs: Charts](https://helm.sh/docs/topics/charts/)
+- [Helm Docs: Using Helm](https://helm.sh/docs/intro/using_helm/)
+- [Kubernetes Docs: Declarative Management using Kustomize](https://kubernetes.io/docs/tasks/manage-kubernetes-objects/kustomization/)

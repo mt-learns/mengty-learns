@@ -1,0 +1,94 @@
+---
+title: "Argo CD vs Flux: Picking a GitOps Controller"
+description: Compare Argo CD and Flux CD across architecture, web UI, multi-tenancy, Helm/Kustomize support, and team fit.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: decision
+type: explanation
+level: intermediate
+tags: [gitops, argocd, flux, kubernetes, decision]
+tested_with:
+  argocd: "3.6 (docs)"
+  flux: "2.10 (docs)"
+cards:
+  - q: "What is the main architectural difference between Argo CD and Flux?"
+    a: "Argo CD is a centralized application controller with a built-in API server and web UI; Flux is a composable set of Kubernetes-native toolkit controllers (source, kustomize, helm) with no built-in UI."
+  - q: "How do Argo CD and Flux handle Helm charts differently?"
+    a: "Argo CD renders Helm charts via helm template and applies the manifests itself; Flux's helm-controller runs native Helm releases with Helm's upgrade/rollback lifecycle."
+  - q: "Which tool fits teams that want a visual resource tree and SSO dashboard out of the box?"
+    a: "Argo CD, because it ships with a rich web UI, RBAC, and SSO/OIDC integration built in."
+  - q: "When is Flux a better fit than Argo CD?"
+    a: "When you want lightweight, modular Kubernetes-native CRDs, native Helm release management, or GitOps-per-namespace without running a central web UI."
+related:
+  - gitops/what-is-gitops
+  - gitops/drift-reconciliation
+  - kubernetes/helm-basics
+sources:
+  - title: "Argo CD Docs: Architecture"
+    url: https://argo-cd.readthedocs.io/en/latest/operator-manual/architecture/
+  - title: "Flux Docs: Core Concepts & Architecture"
+    url: https://fluxcd.io/flux/concepts/
+  - title: "Flux Docs: Helm Controller"
+    url: https://fluxcd.io/flux/components/helm/
+---
+
+## TL;DR
+Both **Argo CD** and **Flux** are graduated CNCF GitOps pull controllers. Pick **Argo CD** if you want a **built-in web UI, SSO, and visual resource diffing** for app teams; pick **Flux** if you prefer **lightweight modular CRDs, native Helm release lifecycle, and Kubernetes-native RBAC** with no UI overhead.
+
+## Context
+Once you adopt pull-based GitOps (`gitops/what-is-gitops`), you need an in-cluster controller to watch Git and reconcile Kubernetes manifests. Argo CD and Flux are the two standard choices, and migrating later is non-trivial because their CRDs (`Application`/`ApplicationSet` vs `GitRepository`/`Kustomization`/`HelmRelease`) differ.
+
+## Comparison
+
+| Dimension | Argo CD (v3.6) | Flux CD (v2.10) |
+|---|---|---|
+| **Architecture** | Monolithic control plane (API server, repo-server, application-controller) | Composable GitOps Toolkit controllers (`source`, `kustomize`, `helm`, `notification`) |
+| **Web UI** | Rich built-in UI (resource tree, live diff, sync buttons, logs) | None built-in (CLI `flux`, or optional third-party/Headlamp plugins) |
+| **Multi-tenancy** | `AppProject` + built-in RBAC + OIDC/SSO | Native Kubernetes `ServiceAccount` + `Namespace` RBAC |
+| **Helm support** | Renders via `helm template` and tracks manifests directly | `helm-controller` executes real Helm releases (`HelmRelease` CRD) |
+| **Kustomize support** | Built-in via repo-server | Dedicated `kustomize-controller` with health checks & dependencies |
+| **Footprint** | Heavier (Redis + API server + repo-server + controller) | Lighter; install only the controllers you need |
+
+## Decision criteria
+1. **Do developers need a self-service UI?** If non-k8s-expert developers debug deploys via a browser, Argo CD's UI saves hours of `kubectl` support.
+2. **Do you rely heavily on Helm hooks, tests, and native Helm releases?** Flux's `helm-controller` runs real Helm SDK upgrades/rollbacks rather than `helm template` + `kubectl apply`.
+3. **How do you model multi-tenancy?** Argo CD manages its own `AppProject` RBAC layer; Flux delegates directly to Kubernetes `ServiceAccount` impersonation per namespace.
+
+<MyTake>
+For most product teams starting with GitOps, I pick **Argo CD** because the visual resource tree and live diff immediately answer "why is my deploy stuck?" without giving everyone `kubectl` access. For platform-heavy clusters running dozens of Helm operators, **Flux** is cleaner and lighter.
+</MyTake>
+
+## Gotchas
+- **Argo CD Helm hooks:** because Argo CD uses `helm template`, Helm lifecycle hooks are mapped to Argo CD sync waves/hooks—some complex third-party charts behave slightly differently than `helm upgrade`.
+- **Flux `Kustomization` vs Kustomize:** Flux's `Kustomization` CRD wraps Kustomize *and* plain YAML directories, which confuses newcomers expecting a `kustomization.yaml` requirement.
+- **Secret decryption:** neither tool decrypts secrets magically—both require a plugin or controller (ESO, SOPS, or SealedSecrets).
+
+## Production checklist
+- [ ] Pin controller versions in your bootstrap repo
+- [ ] Enable automated drift detection and alerts (Slack/webhook) for failed syncs
+- [ ] Scope tenant permissions (`AppProject` in Argo CD; `spec.serviceAccountName` in Flux) so one team cannot deploy into another team's namespace
+- [ ] Store Git credentials with read-only deploy keys or GitHub App tokens
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "Which statement accurately describes how Argo CD and Flux handle Helm charts?",
+    options: [
+      { label: "Argo CD renders charts with helm template; Flux runs native Helm releases via helm-controller", description: "This is a core difference when dealing with Helm hooks, rollbacks, and release Secrets.", correct: true },
+      { label: "Neither tool supports Helm without converting charts to Kustomize first", description: "Both Argo CD and Flux have first-class Helm support." },
+      { label: "Flux only supports Helm v2, while Argo CD supports Helm v4", description: "Both support modern Helm." }
+    ]
+  },
+  {
+    question: "A platform team wants minimal cluster overhead, no web UI, and strict enforcement via Kubernetes ServiceAccount impersonation per namespace. Which is the stronger fit?",
+    options: [
+      { label: "Flux CD", description: "Flux is modular, has no built-in UI, and uses native Kubernetes ServiceAccount impersonation for multi-tenancy.", correct: true },
+      { label: "Argo CD", description: "Argo CD includes a full API server, Redis, and web UI by default." }
+    ]
+  }
+]} />
+
+## Sources
+- [Argo CD Docs: Architecture](https://argo-cd.readthedocs.io/en/latest/operator-manual/architecture/)
+- [Flux Docs: Core Concepts](https://fluxcd.io/flux/concepts/)
+- [Flux Docs: Helm Controller](https://fluxcd.io/flux/components/helm/)

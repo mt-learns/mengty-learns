@@ -1,0 +1,194 @@
+---
+title: "Git Internals: Objects, Branches, and Rebase vs Merge"
+description: Understand Git's content-addressable object store (blobs, trees, commits), lightweight refs, and how rebase replays commits onto a new base.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: concept
+type: explanation
+level: intermediate
+tags: [git, internals, rebase, merge, branches]
+tested_with:
+  git: "2.54.0"
+cards:
+  - q: "What are the four object types in Git's object database?"
+    a: "Blob (file contents), Tree (directory listing), Commit (snapshot pointer + metadata + parent), and Annotated Tag."
+  - q: "What is a Git branch under the hood?"
+    a: "A 41-byte file (40-char SHA-1 hash plus newline, or 64-char for SHA-256) in .git/refs/heads/ pointing to a single commit."
+  - q: "What does git rebase actually do to your feature commits?"
+    a: "It creates brand-new commit objects with new hashes by replaying each commit's diff onto the target base commit."
+  - q: "Why should you never rebase commits that have already been pushed to a shared branch?"
+    a: "Rebase rewrites commit hashes; collaborators holding the old hashes will get diverged histories and duplicate commits."
+related:
+  - foundations/git-cheatsheet
+  - ci-cd/this-site-pipeline
+sources:
+  - title: "Pro Git: Git Objects"
+    url: https://git-scm.com/book/en/v2/Git-Internals-Git-Objects
+  - title: "Pro Git: Git References"
+    url: https://git-scm.com/book/en/v2/Git-Internals-Git-References
+  - title: "Pro Git: Rebasing"
+    url: https://git-scm.com/book/en/v2/Git-Branching-Rebasing
+---
+
+## TL;DR
+Git is a **content-addressable filesystem**: files are **blobs**, directories are **trees**, snapshots are **commits**, and branches are just **41-byte pointer files** (`refs`). **Merge** joins two histories with a new merge commit; **rebase** replays your commits onto a new base, producing brand-new commit hashes.
+
+## Intent
+<Intent>
+Understand what Git actually stores in `.git/objects` and `.git/refs`, so branches, `HEAD`, `merge`, and `rebase` stop feeling like magic when history diverges or a rebase conflicts.
+</Intent>
+
+## Problem
+Treating Git as a sequence of diffs or folders makes `detached HEAD`, `fast-forward`, and `rebase` force-pushes terrifying. Without knowing that branches are mutable pointers to immutable commits, developers accidentally rewrite shared history or lose track of dangling commits.
+
+<Diagram
+  id="git-object-graph"
+  ariaLabel="Git commit points to a root tree, which points to blobs and subtrees, while a branch ref points to the commit"
+  caption="A branch ref points to a commit; the commit points to a root tree snapshot and parent commit."
+  layout="tree"
+  nodes={[
+    { id: 'branch', label: 'refs/heads/main', subtitle: '41-byte pointer', icon: 'git', category: 'edge', rank: 0, order: 0 },
+    { id: 'commit', label: 'Commit c2a1', subtitle: 'Author + parent', icon: 'git', category: 'service', rank: 1, order: 0 },
+    { id: 'tree', label: 'Root Tree', subtitle: 'Directory map', icon: 'class', category: 'abstraction', rank: 2, order: 0 },
+    { id: 'blob', label: 'Blob README.md', subtitle: 'File bytes', icon: 'db', category: 'data', rank: 3, order: 0 },
+  ]}
+  edges={[
+    { from: 'branch', to: 'commit', kind: 'request' },
+    { from: 'commit', to: 'tree', kind: 'request' },
+    { from: 'tree', to: 'blob', kind: 'request' },
+  ]}
+/>
+
+## Solution
+Every object in `.git/objects` is hashed (SHA-1 by default) and immutable:
+
+- **Blob:** raw compressed file content (no filename or permissions). Identical files across commits share one blob.
+- **Tree:** maps filenames and modes to blobs and subtrees.
+- **Commit:** points to one root **tree**, zero or more **parent** commits, plus author, committer, and message.
+- **Branch (`refs/heads/<name>`):** a plain file containing a commit hash. `HEAD` is usually a symbolic ref pointing to the current branch.
+
+Because commits are immutable, **merging** `feature` into `main` creates a new commit with two parents (`main` tip and `feature` tip). **Rebasing** `feature` onto `main` computes the diff of each commit on `feature` and applies them one by one on top of `main`, generating **new commit hashes** (`f1'` and `f2'`) and moving the `feature` branch pointer.
+
+## Real-world analogy
+<Analogy>
+Think of commits as **immutable ledger pages** and branches as **sticky notes** placed on the latest page. Merging staples two branches together on a new summary page. Rebasing copies your draft pages onto fresh paper after someone else's pages, giving your copies new page numbers.
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="git-rebase"
+  title="Git Rebase: Replaying Commits onto New Base"
+  nodes={[
+    { id: 'base', label: 'Base C1', subtitle: 'Common ancestor', icon: 'git', category: 'client', rank: 0, order: 0 },
+    { id: 'main', label: 'main C2', subtitle: 'Upstream commit', icon: 'git', category: 'edge', rank: 1, order: 0 },
+    { id: 'oldf', label: 'Old F1', subtitle: 'Original feature', icon: 'git', category: 'external', rank: 1, order: 1 },
+    { id: 'newf', label: "New F1'", subtitle: 'Replayed commit', icon: 'git', category: 'service', rank: 2, order: 0 },
+    { id: 'ref', label: 'Branch feat', subtitle: 'Pointer updated', icon: 'interface', category: 'data', rank: 3, order: 0 },
+  ]}
+  steps={[
+    { edge: 'base->main', title: 'main advances to C2', text: 'Upstream merges a new commit C2 while your feature branch still rests on C1.' },
+    { edge: 'base->oldf', title: 'Feature has commit F1', text: 'Your feature branch currently points to F1, whose parent is C1.' },
+    { edge: 'oldf->newf', title: 'Extract diff from F1', text: 'git rebase main computes the patch between C1 and F1 to replay it.' },
+    { edge: 'main->newf', title: "Apply onto C2 as F1'", text: "Git creates a brand-new commit F1' with parent C2 and a new SHA hash." },
+    { edge: 'newf->ref', title: 'Move branch pointer', text: "refs/heads/feat now points to F1'; Old F1 becomes unreachable (kept in reflog).", kind: 'response' },
+  ]}
+/>
+
+## Code
+Inspect real Git objects directly in a repository with plumbing commands (`git cat-file`, `git rev-parse`):
+
+```bash
+# Verified with git 2.54.0.windows.1 in this repo
+git rev-parse HEAD
+# Inspect the commit object (tree, parent, author, message)
+git cat-file -p HEAD
+# Inspect the root tree pointed to by HEAD
+git cat-file -p HEAD^{tree}
+```
+
+```bash
+# Rebase feature onto updated main (not run)
+git switch feature
+git rebase main
+```
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'Rebase your local, unpushed feature branch onto main to keep a clean linear history before opening a PR.',
+    'Use merge (or squash-merge) when integrating a PR into a shared main branch so shared history is never rewritten.',
+  ]}
+  avoid={[
+    'Never rebase commits already pushed to a shared branch that teammates have pulled.',
+    'Avoid rebase when you want to preserve the exact historical topology of a long-lived integration branch.',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Check your branch state
+    Run `git status` and `git log --oneline --graph -n 10` before rewriting anything.
+  </Step>
+  <Step>
+    ### Rebase local commits cleanly
+    Run `git fetch origin && git rebase origin/main`. Resolve any conflict per commit, then `git rebase --continue`.
+  </Step>
+  <Step>
+    ### Recover safely if needed
+    If a rebase goes wrong, run `git rebase --abort` during the rebase, or `git reflog` afterward to reset to the old hash.
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'Rebase produces a linear, bisectable commit history without noisy merge commits.',
+    'Content-addressable storage deduplicates identical blobs automatically.',
+  ]}
+  cons={[
+    'Rebasing a long-diverged branch forces you to resolve conflicts commit by commit instead of once.',
+    'Rewriting published commits breaks teammates unless everyone resets or uses --force-with-lease.',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'Git Cheatsheet',
+      href: '/docs/foundations/git-cheatsheet',
+      summary: 'Daily commands for status, branching, rebasing, and recovering with reflog.',
+    },
+    {
+      name: 'This Site Pipeline',
+      href: '/docs/ci-cd/this-site-pipeline',
+      summary: 'See how Git commits and pull requests trigger automated checks in CI.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "If two commits contain an identical 10 MB asset file, how many blob objects does Git store in .git/objects?",
+    options: [
+      { label: "One blob object", description: "Git hashes file contents; identical content produces the same hash and is stored once.", correct: true },
+      { label: "Two blob objects, one per commit", description: "Commits point to trees, and trees point to the shared content-addressed blob." },
+      { label: "Zero blobs; Git only stores line diffs", description: "Git stores snapshots (blobs and trees), not delta chains per commit." }
+    ]
+  },
+  {
+    question: "After running git rebase main on a 3-commit feature branch, what happens to the original 3 commits?",
+    options: [
+      { label: "Three new commits with new hashes are created on top of main; the old ones remain in reflog until GC", description: "Commits are immutable, so rebase creates new commits and moves the branch ref.", correct: true },
+      { label: "The original 3 commits have their parent pointer edited in place", description: "Changing a parent changes the commit's hash; Git never mutates existing objects." },
+      { label: "Git creates a single merge commit combining main and feature", description: "That describes git merge, not git rebase." }
+    ]
+  }
+]} />
+
+## Sources
+- [Pro Git: Git Objects](https://git-scm.com/book/en/v2/Git-Internals-Git-Objects)
+- [Pro Git: Git References](https://git-scm.com/book/en/v2/Git-Internals-Git-References)
+- [Pro Git: Rebasing](https://git-scm.com/book/en/v2/Git-Branching-Rebasing)
