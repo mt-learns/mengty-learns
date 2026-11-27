@@ -212,3 +212,5 @@ Rules for the worker in every wave:
 - **Monthly:** open the "May be outdated" list (pages where `verified` is more than 12 months old), re-run them, and bump `verified`.
 - **Quarterly:** review the radar rings, and retire or merge thin notes.
 - **On every tool major release** (from the inbox): check the pages with that tool in `tested_with`.
+
+> **More sources:** the owner's own repos (key-learning, learn-devops, software-engineering) are mapped to Waves 9–13 in `docs/content/KNOWLEDGE-IMPORT-PLAN.md`.
