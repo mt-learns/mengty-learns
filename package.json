@@ -1,6 +1,6 @@
 {
   "name": "mt",
-  "version": "0.0.69",
+  "version": "0.0.1",
   "private": true,
   "packageManager": "pnpm@11.6.0",
   "scripts": {
@@ -14,7 +14,7 @@
     "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --exclude labs/**",
+    "test": "vitest run",
     "qa:diagrams": "node scripts/qa-diagrams.mjs",
     "new": "node scripts/new.mjs"
   },
