@@ -1,0 +1,134 @@
+---
+title: Zero-Downtime Schema Migrations
+description: Run versioned database migrations safely with expand/contract, batched backfills, immutable migration history, and realistic rollback plans.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: how-to
+level: intermediate
+tags: [architecture, database, migrations, postgresql, zero-downtime, ci-cd]
+tested_with:
+  postgresql: "19.x (docs)"
+cards:
+  - q: "Why does renaming or dropping a column in one deploy cause errors during a rolling deployment?"
+    a: "Old and new application instances run simultaneously during the rollout; old instances still query the old column name while new instances expect the new one."
+  - q: "What are the phases of the expand/contract migration pattern?"
+    a: "Expand (add the new nullable column/table), dual-write + backfill existing rows in batches, switch reads to the new column, and Contract (drop the old column only after old code is gone)."
+  - q: "Why should you never edit a migration file after it has been applied to staging or production?"
+    a: "Migration tools track applied files by version/checksum; editing an applied file causes checksum mismatches or silently skips your change on environments that already ran it."
+  - q: "Why are database rollbacks harder than application code rollbacks?"
+    a: "Rolling back code is stateless, whereas a destructive DDL rollback (like dropping a newly populated column or restoring dropped data) loses writes made after the deploy."
+related:
+  - ci-cd/deploy-and-rollback
+  - architecture/database-indexing
+sources:
+  - title: "PostgreSQL Docs: Modifying Tables (ALTER TABLE)"
+    url: https://www.postgresql.org/docs/current/ddl-alter.html
+  - title: "PostgreSQL Docs: CREATE INDEX (CONCURRENTLY)"
+    url: https://www.postgresql.org/docs/current/sql-createindex.html
+  - title: "Prisma Docs: Prisma Migrate"
+    url: https://www.prisma.io/docs/orm/prisma-migrate
+---
+
+## TL;DR
+Treat database schema changes as **backward-compatible steps**, never single-deploy swaps. Use **versioned migrations**, apply **expand/contract** so old and new app code coexist during rollouts, **backfill in small batches**, **never edit an applied migration**, and plan for **forward-only fixes** instead of destructive rollbacks.
+
+## Why it exists
+During a rolling deploy, old pods and new pods share the same database for seconds or minutes. If a migration renames or drops a column before old pods drain, live requests crash with `column does not exist`—and rolling back the app code won't restore dropped data.
+
+## Mental model
+Always keep the database compatible with **both** the previous release (`N-1`) and the next release (`N`) until `N-1` is completely gone.
+
+<Diagram
+  id="schema-expand-contract"
+  ariaLabel="Expand, dual-write and backfill, switch reads, then contract in a later deploy"
+  caption="Separate additive expand steps from destructive contract steps across deploys."
+  nodes={[
+    { id: 'expand', label: '1. Expand', subtitle: 'Add nullable col', icon: 'db', category: 'data', rank: 0, order: 0 },
+    { id: 'backfill', label: '2. Backfill', subtitle: 'Dual-write + batch', icon: 'service', category: 'service', rank: 1, order: 0 },
+    { id: 'switch', label: '3. Switch Reads', subtitle: 'Deploy new code', icon: 'pod', category: 'edge', rank: 2, order: 0 },
+    { id: 'contract', label: '4. Contract', subtitle: 'Drop old col later', icon: 'db', category: 'concrete', rank: 3, order: 0 },
+  ]}
+  edges={[
+    { from: 'expand', to: 'backfill', kind: 'request', label: 'Compatible' },
+    { from: 'backfill', to: 'switch', kind: 'request', label: '100% filled' },
+    { from: 'switch', to: 'contract', kind: 'request', label: 'Safe to drop' },
+  ]}
+/>
+
+## Do it
+
+### 1. Versioned migrations (immutable history)
+Store every DDL change as a timestamped or sequential file (`0001_init.sql`, `0002_add_user_handle.sql`) tracked in a `_migrations` table. Once a migration is merged and applied to any shared environment, **never edit it**—create a new forward migration (`0003_...`) to fix mistakes.
+
+### 2. Expand / contract for zero downtime
+Suppose you want to rename `users.full_name` to `users.display_name`:
+
+```sql
+-- Deploy 1 (Expand): safe alongside old app code (not run)
+ALTER TABLE users ADD COLUMN display_name TEXT;
+
+-- Deploy 2 (Backfill in small batches, e.g., 1,000 rows per tx, not run)
+UPDATE users
+SET display_name = full_name
+WHERE id IN (
+  SELECT id FROM users
+  WHERE display_name IS NULL AND full_name IS NOT NULL
+  LIMIT 1000
+);
+
+-- Deploy 3 (Enforce without long table lock, Postgres 12+, not run)
+ALTER TABLE users ADD CONSTRAINT chk_display_name_nn
+  CHECK (display_name IS NOT NULL) NOT VALID;
+ALTER TABLE users VALIDATE CONSTRAINT chk_display_name_nn;
+
+-- Deploy 4 (Contract, only after old app instances are gone, not run)
+ALTER TABLE users DROP COLUMN full_name;
+```
+
+### 3. Rollback reality
+As covered in [Deployment & Rollback Strategies](/docs/ci-cd/deploy-and-rollback), rolling back application containers is fast, but **rolling back a database migration is often unsafe**:
+- If Deploy 1 only **added** a nullable column or `CONCURRENTLY` index, you can roll back the app code without touching the DB at all.
+- Never run `down.sql` scripts that `DROP TABLE` or `DROP COLUMN` in production—you will destroy data written after the deploy. Fix forward with a new migration instead.
+
+## When you DON'T need this
+- **Pre-launch prototypes with zero real users:** When you can afford a 5-second maintenance window or `db push`, multi-deploy expand/contract is unnecessary ceremony.
+- **Static sites with no database:** This site has no runtime database and ships only static assets.
+- **Cost / complexity trade-off:** Expand/contract splits one conceptual rename into 2–4 smaller PRs and deploys. In return, you get zero-downtime rollouts and painless code rollbacks.
+
+## Gotchas
+- **`lock_timeout` omitted on `ALTER TABLE`:** Even fast metadata-only `ALTER TABLE` commands queue behind a long-running `SELECT` and block every subsequent query until you set `SET lock_timeout = '2s';`.
+- **`CREATE INDEX` without `CONCURRENTLY`:** Standard `CREATE INDEX` blocks all writes on the table for the entire build duration.
+- **Single-transaction backfills:** Updating 5 million rows in one `UPDATE` holds row locks, bloats WAL, and can stall replicas.
+
+## Production checklist
+- [ ] Migrations run with a dedicated `lock_timeout` (e.g., `2s`) and `statement_timeout`.
+- [ ] New indexes use `CREATE INDEX CONCURRENTLY` (outside a transaction block).
+- [ ] Backfills run in bounded batches (500–5,000 rows) with short pauses between batches.
+- [ ] Destructive drops (`DROP COLUMN`, `DROP TABLE`) happen only in a separate follow-up deploy after old code is retired.
+- [ ] Applied migration files are treated as append-only and never edited.
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "You want to rename column total to total_cents on a live production table with zero downtime. What is the safest first migration?",
+    options: [
+      { label: "Add nullable total_cents, dual-write from app code, and backfill in batches before dropping total later", description: "Expand/contract keeps both old and new app instances working during the rolling deploy.", correct: true },
+      { label: "Run ALTER TABLE orders RENAME COLUMN total TO total_cents in the same PR as the code change", description: "Old app instances still running during the rollout will immediately fail with missing-column errors." },
+      { label: "Edit the initial 0001_create_orders.sql migration file", description: "Editing an applied migration breaks checksums and will not re-run on production." }
+    ]
+  },
+  {
+    question: "Why should a PostgreSQL migration set lock_timeout before running ALTER TABLE?",
+    options: [
+      { label: "So the DDL fails fast instead of queuing behind a slow query and blocking all new reads/writes", description: "An AccessExclusiveLock wait queue blocks every incoming query on that table until it acquires the lock.", correct: true },
+      { label: "So PostgreSQL skips acquiring any metadata lock", description: "ALTER TABLE still needs a brief metadata lock; lock_timeout just bounds how long it waits." },
+      { label: "So backfills run automatically in parallel", description: "lock_timeout only controls lock wait duration." }
+    ]
+  }
+]} />
+
+## Sources
+- [PostgreSQL Docs: Modifying Tables (ALTER TABLE)](https://www.postgresql.org/docs/current/ddl-alter.html)
+- [PostgreSQL Docs: CREATE INDEX](https://www.postgresql.org/docs/current/sql-createindex.html)
+- [Prisma Docs: Prisma Migrate](https://www.prisma.io/docs/orm/prisma-migrate)

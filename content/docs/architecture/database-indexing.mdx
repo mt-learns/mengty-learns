@@ -1,0 +1,225 @@
+---
+title: Database Indexing & EXPLAIN ANALYZE
+description: Understand B-tree indexes, composite column order, covering indexes with INCLUDE, write amplification trade-offs, and how to read PostgreSQL EXPLAIN ANALYZE.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: concept
+type: explanation
+level: intermediate
+tags: [architecture, database, postgresql, indexing, performance, sql]
+tested_with:
+  postgresql: "19.x (docs)"
+cards:
+  - q: "In a composite B-tree index on (a, b), which queries can use the index efficiently?"
+    a: "Queries filtering on (a) alone or (a, b) together; a query filtering only on (b) generally cannot use the leftmost prefix of (a, b)."
+  - q: "In what order should columns appear in a composite index for a query with both equality (=) and range (<, >) filters?"
+    a: "Put equality columns first and the range column after them, so the index narrows to a single contiguous range."
+  - q: "What is a covering index (INCLUDE) in PostgreSQL and why does it help?"
+    a: "It stores extra non-key payload columns in the index leaf pages so PostgreSQL can satisfy SELECT queries with an Index Only Scan, skipping heap table fetches when pages are all-visible."
+  - q: "Why can adding too many indexes hurt write performance?"
+    a: "Every INSERT, UPDATE, and DELETE must update every affected index, increasing write I/O, WAL volume, and blocking PostgreSQL HOT (Heap-Only Tuple) updates."
+  - q: "What is the key difference between EXPLAIN and EXPLAIN ANALYZE in PostgreSQL?"
+    a: "EXPLAIN only estimates the plan and cost without running the query; EXPLAIN ANALYZE actually executes the query and reports real row counts, loops, and execution times."
+related:
+  - architecture/caching-redis
+  - architecture/api-design
+sources:
+  - title: "PostgreSQL Docs: Index Types (B-Tree)"
+    url: https://www.postgresql.org/docs/current/indexes-types.html
+  - title: "PostgreSQL Docs: Multicolumn Indexes"
+    url: https://www.postgresql.org/docs/current/indexes-multicolumn.html
+  - title: "PostgreSQL Docs: Index-Only Scans and Covering Indexes"
+    url: https://www.postgresql.org/docs/current/indexes-index-only-scans.html
+  - title: "PostgreSQL Docs: Using EXPLAIN"
+    url: https://www.postgresql.org/docs/current/using-explain.html
+---
+
+## TL;DR
+A **B-tree index** turns `O(N)` full-table scans into `O(log N)` lookups and sorted range scans. Order composite index columns with **equality filters first, range filters last**, use **`INCLUDE`** for covering Index-Only Scans, and verify every query with **`EXPLAIN (ANALYZE, BUFFERS)`**—because every unused index slows down writes.
+
+## Intent
+<Intent>
+Design B-tree and covering indexes that match your real query predicates, understand when the planner still chooses a sequential scan, and measure index impact with `EXPLAIN (ANALYZE, BUFFERS)`.
+</Intent>
+
+## Problem
+Without indexes, PostgreSQL must read every 8 KB heap page in a table (`Seq Scan`) to find matching rows. Developers often react by indexing every column individually—only to discover that write throughput drops, disk usage balloons, and multi-column `WHERE` + `ORDER BY` queries still run slowly because column order didn't match the query.
+
+## Solution
+
+### 1. B-tree basics
+PostgreSQL's default index (`CREATE INDEX ...`) is a **B-tree** (balanced search tree). Keys are stored in sorted order across internal branch pages and leaf pages, which hold pointers (TIDs) to the table's heap tuples. Because keys are sorted, B-trees accelerate `=`, `<`, `<=`, `>`, `>=`, `BETWEEN`, `IS NULL`, and `ORDER BY` without an extra sort step.
+
+### 2. Composite index column order
+A multicolumn B-tree index on `(org_id, status, created_at)` is sorted first by `org_id`, then `status`, then `created_at`:
+- **Leftmost prefix rule:** Queries filtering on `(org_id)` or `(org_id, status)` can seek directly into the tree. A query filtering only on `created_at` cannot use the tree's top-level ordering.
+- **Equality before range:** Put `=` predicates first (`org_id`, `status`) and range predicates (`created_at >= ...`) or `ORDER BY` columns last. Once a range condition is hit, subsequent columns in the index are no longer contiguous.
+
+### 3. Covering indexes (`INCLUDE`)
+If a hot query runs `SELECT total_cents FROM orders WHERE org_id = $1 AND status = 'paid'`, a standard index on `(org_id, status)` still visits the heap table to read `total_cents`. Adding `INCLUDE (total_cents)` stores `total_cents` in the index leaf pages, enabling an **Index Only Scan** (provided the visibility map marks those pages all-visible).
+
+### 4. When an index HURTS writes
+Every index is a separate data structure on disk and in shared buffers:
+- Every `INSERT` and `DELETE` must update **all** indexes on the table.
+- An `UPDATE` that modifies an indexed column prevents PostgreSQL **HOT (Heap-Only Tuple)** updates, forcing new index entries and extra `VACUUM` work.
+- More indexes mean more **WAL (Write-Ahead Log)** bytes and higher replication/checkpoint load.
+
+### 5. Reading `EXPLAIN (ANALYZE, BUFFERS)`
+Always pass `ANALYZE` and `BUFFERS` on a non-prod or safe `SELECT` (wrap mutations in `BEGIN; EXPLAIN ANALYZE ...; ROLLBACK;`):
+- **`actual time=0.04..0.12 rows=12 loops=1`**: Real startup time, total time in ms, actual row count, and loop multiplier.
+- **Estimated vs actual rows**: Huge mismatches (e.g., `rows=1` estimated vs `rows=50000` actual) indicate stale statistics (`ANALYZE table;`).
+- **`Buffers: shared hit=... read=...`**: `hit` means served from PostgreSQL's shared buffer cache; `read` means fetched from OS cache or disk.
+
+## Real-world analogy
+<Analogy>
+A table without an index is a 1,000-page textbook with no index at the back—to find every mention of "B-tree", you flip through all 1,000 pages (`Seq Scan`). A composite index `(chapter, topic)` is a sorted back-of-book index, and a covering index (`INCLUDE`) puts the one-line definition right next to the page number so you don't even have to flip to the chapter.
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="database-indexing"
+  title="Query Planner: Index Scan vs Sequential Scan"
+  variants={[
+    {
+      id: 'index-scan',
+      label: 'Index Scan (selective)',
+      nodes: [
+        { id: 'app', label: 'API Query', subtitle: 'WHERE org_id = $1', icon: 'pod', category: 'service', rank: 0, order: 0 },
+        { id: 'planner', label: 'Query Planner', subtitle: 'Checks stats & cost', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+        { id: 'btree', label: 'B-Tree Index', subtitle: 'O(log N) key lookup', icon: 'interface', category: 'abstraction', rank: 2, order: 0 },
+        { id: 'heap', label: 'Heap Table', subtitle: 'Fetches matching rows', icon: 'db', category: 'data', rank: 3, order: 0 },
+      ],
+      steps: [
+        { edge: 'app->planner', title: 'Send parameterized query', text: 'Postgres receives SELECT ... WHERE org_id = $1 AND status = $2.', label: 'SQL' },
+        { edge: 'planner->btree', title: 'Planner picks Index Scan', text: 'Statistics show few rows match; B-tree is cheaper than scanning the table.', label: 'Index Scan' },
+        { edge: 'btree->heap', title: 'Follow matching TIDs', text: 'B-tree returns tuple pointers (TIDs) to fetch full columns from heap pages.', label: 'TIDs' },
+        { edge: 'heap->btree', title: 'Return heap tuples', text: 'Heap pages return only the matching row versions for those TIDs.', kind: 'response', label: 'Rows' },
+        { edge: 'btree->planner', title: 'Pass filtered rows up', text: 'Executor receives matching rows without reading unrelated table pages.', kind: 'response', label: 'Filtered' },
+        { edge: 'planner->app', title: 'Return fast result', text: 'Caller receives matching rows with minimal buffer reads.', kind: 'response', label: 'Result' },
+      ],
+    },
+    {
+      id: 'seq-scan',
+      label: 'Seq Scan (no/bad index)',
+      nodes: [
+        { id: 'app', label: 'API Query', subtitle: 'Unindexed predicate', icon: 'pod', category: 'service', rank: 0, order: 0 },
+        { id: 'planner', label: 'Query Planner', subtitle: 'Estimates high row %', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+        { id: 'heap', label: 'Heap Table', subtitle: 'Reads every 8 KB page', icon: 'db', category: 'data', rank: 2, order: 0, variant: 'problem' },
+      ],
+      steps: [
+        { edge: 'app->planner', title: 'Send unindexed filter', text: 'Query filters on a column with no usable index or very low selectivity.', label: 'SQL' },
+        { edge: 'planner->heap', title: 'Planner picks Seq Scan', text: 'Postgres reads every 8 KB heap page sequentially from start to finish.', label: 'Seq Scan' },
+        { edge: 'heap->planner', title: 'Filter rows in memory', text: 'Executor discards non-matching rows after paying full table I/O.', kind: 'response', label: 'Scanned' },
+        { edge: 'planner->app', title: 'Return slow result', text: 'Latency and buffer reads scale linearly with total table size.', kind: 'response', label: 'Result' },
+      ],
+    },
+  ]}
+/>
+
+## Code
+Example composite covering index and `EXPLAIN (ANALYZE, BUFFERS)` check in PostgreSQL:
+
+```sql
+-- Composite index: equality columns (org_id, status) first, range/sort (created_at) last.
+-- INCLUDE stores total_cents in leaf pages for Index-Only Scans (not run).
+CREATE INDEX CONCURRENTLY idx_orders_org_status_created
+  ON orders (org_id, status, created_at DESC)
+  INCLUDE (total_cents);
+
+-- Inspect real execution time and buffer hits (not run)
+EXPLAIN (ANALYZE, BUFFERS)
+SELECT id, total_cents, created_at
+FROM orders
+WHERE org_id = 42
+  AND status = 'paid'
+  AND created_at >= NOW() - INTERVAL '7 days'
+ORDER BY created_at DESC
+LIMIT 20;
+```
+
+## When you DON'T need this
+- **Tiny lookup tables (< ~1,000 rows):** A `Seq Scan` of one or two 8 KB pages in memory is already faster than traversing a B-tree and jumping to the heap—the planner will ignore your index anyway.
+- **Write-heavy append logs rarely queried by filter:** Indexing every column on a high-throughput event table can double write I/O for queries nobody runs.
+- **Cost / complexity trade-off:** Indexes speed up reads dramatically at the cost of extra disk space, RAM buffer pressure, and slower `INSERT`/`UPDATE`/`DELETE` operations.
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'Foreign keys, high-cardinality WHERE filters, and hot ORDER BY / cursor pagination columns.',
+    'Partial indexes (WHERE deleted_at IS NULL) when queries only ever read active rows.',
+  ]}
+  avoid={[
+    'Low-cardinality boolean columns on their own (e.g., is_active where 90% of rows are true).',
+    'Creating overlapping indexes like (a) when you already have (a, b).',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Capture the slow query
+    Find top time-consuming queries using `pg_stat_statements` or slow-query logs.
+  </Step>
+  <Step>
+    ### Run `EXPLAIN (ANALYZE, BUFFERS)`
+    Check whether the planner is doing a `Seq Scan` or reading thousands of buffers for a handful of rows.
+  </Step>
+  <Step>
+    ### Add the smallest matching index concurrently
+    Use `CREATE INDEX CONCURRENTLY` in production so writes are not blocked while the index builds, then re-run `EXPLAIN (ANALYZE, BUFFERS)`.
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'Turns full-table scans into sub-millisecond O(log N) lookups and avoids expensive in-memory sorts.',
+    'Covering indexes (INCLUDE) satisfy hot queries from index leaf pages alone.',
+  ]}
+  cons={[
+    'Every extra index slows down writes, increases WAL volume, and consumes disk and shared buffers.',
+    'Stale table statistics can still cause the planner to pick a suboptimal plan.',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'Caching Strategies & Redis',
+      href: '/docs/architecture/caching-redis',
+      summary: 'Fix missing SQL indexes before adding a Redis cache in front of Postgres.',
+    },
+    {
+      name: 'HTTP API Design Reference',
+      href: '/docs/architecture/api-design',
+      summary: 'Cursor pagination relies on a composite index matching the sort key.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "You have an index on (org_id, created_at). Which query can use this index for an efficient Index Scan?",
+    options: [
+      { label: "WHERE org_id = 42 AND created_at > '2026-01-01'", description: "It matches the leftmost column (org_id) with equality and then ranges on created_at.", correct: true },
+      { label: "WHERE created_at > '2026-01-01'", description: "Without org_id, the query skips the leftmost prefix of the composite B-tree." },
+      { label: "WHERE LOWER(org_id::text) = '42'", description: "Wrapping an indexed column in a function prevents using a plain B-tree index unless an expression index exists." }
+    ]
+  },
+  {
+    question: "What does INCLUDE (total_cents) add to a PostgreSQL B-tree index?",
+    options: [
+      { label: "It stores total_cents in leaf pages so matching SELECT queries can use an Index Only Scan", description: "Non-key included columns avoid heap fetches without bloating internal B-tree branch pages.", correct: true },
+      { label: "It enforces a UNIQUE constraint on total_cents", description: "INCLUDE columns are payload only and are not part of uniqueness or sort keys." },
+      { label: "It disables write amplification on UPDATEs", description: "Updating total_cents still requires updating the index leaf entry." }
+    ]
+  }
+]} />
+
+## Sources
+- [PostgreSQL Docs: Index Types](https://www.postgresql.org/docs/current/indexes-types.html)
+- [PostgreSQL Docs: Multicolumn Indexes](https://www.postgresql.org/docs/current/indexes-multicolumn.html)
+- [PostgreSQL Docs: Index-Only Scans and Covering Indexes](https://www.postgresql.org/docs/current/indexes-index-only-scans.html)
+- [PostgreSQL Docs: Using EXPLAIN](https://www.postgresql.org/docs/current/using-explain.html)

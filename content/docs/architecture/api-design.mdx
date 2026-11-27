@@ -1,0 +1,175 @@
+---
+title: HTTP API Design Reference
+description: Practical REST conventions, RFC 9110 methods and status codes, idempotency keys, cursor pagination, RFC 9457 problem+json errors, OpenAPI, and REST vs gRPC vs GraphQL.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: reference
+level: intermediate
+tags: [architecture, api, rest, http, openapi, rfc9457, graphql, grpc]
+tested_with:
+  rfc_9110: "2022-06 (spec)"
+  rfc_9457: "2023-07 (spec)"
+  openapi: "3.2.1 (spec)"
+cards:
+  - q: "In RFC 9110, what is the difference between a safe HTTP method and an idempotent HTTP method?"
+    a: "Safe methods (GET, HEAD, OPTIONS) are read-only with no server state change; idempotent methods (GET, HEAD, PUT, DELETE, OPTIONS) produce the same server state when repeated, even if they mutate state on the first call."
+  - q: "Why does cursor (keyset) pagination outperform OFFSET pagination on large, active tables?"
+    a: "OFFSET scans and discards N skipped rows and drifts when rows are inserted or deleted; cursor pagination seeks directly from the last seen indexed key in O(log N) time without duplicates."
+  - q: "What media type and core fields does RFC 9457 define for HTTP API error responses?"
+    a: "Media type application/problem+json with standard fields type (URI), title, status (HTTP code), detail, and instance, plus optional extension fields."
+  - q: "Why should POST endpoints that create charges or orders accept an Idempotency-Key header?"
+    a: "POST is not idempotent by default, so network retries can create duplicate records; storing the first response keyed by Idempotency-Key lets retries replay the original result safely."
+  - q: "When is gRPC a better fit than JSON over REST?"
+    a: "Internal service-to-service calls with strict Protobuf contracts, high throughput, low-latency requirements, or bidirectional streaming—where browser clients are not calling the endpoint directly."
+related:
+  - architecture/caching-redis
+  - security/rate-limiting
+  - architecture/layered
+sources:
+  - title: "RFC 9110: HTTP Semantics (Methods & Status Codes)"
+    url: https://www.rfc-editor.org/rfc/rfc9110.html
+  - title: "RFC 9457: Problem Details for HTTP APIs"
+    url: https://www.rfc-editor.org/rfc/rfc9457.html
+  - title: "OpenAPI Specification v3.2.1"
+    url: https://spec.openapis.org/oas/latest.html
+---
+
+## TL;DR
+Design HTTP APIs around **nouns for resources**, **RFC 9110** method/status semantics, **cursor pagination**, and **`Idempotency-Key`** headers on `POST` mutations. Return consistent **`application/problem+json`** (RFC 9457) errors, publish an **OpenAPI** contract, and only reach for **gRPC** or **GraphQL** when REST's request/response model genuinely hurts.
+
+## Why it exists
+Inconsistent APIs force every client to guess URL shapes, parse ad-hoc error JSON (`{ error }`, `{ message }`, `{ errors: [...] }`), and break silently when fields change or retries fire twice. Standardizing on HTTP semantics and a machine-readable contract removes guesswork for both frontend callers and backend services.
+
+## Mental model
+Treat HTTP as the protocol, not a tunnel for RPC verbs. Resources are nouns (`/orders`, `/orders/{id}`), HTTP methods express intent, status codes tell intermediaries and clients how to react (cache, retry, or fix input), and OpenAPI is the shared source of truth between producer and consumer.
+
+<Diagram
+  id="api-contract-boundary"
+  ariaLabel="Clients and servers validate requests and problem+json responses against an OpenAPI contract"
+  caption="OpenAPI anchors both request validation and RFC 9457 error shapes at the API boundary."
+  nodes={[
+    { id: 'client', label: 'API Client', subtitle: 'Sends Idempotency-Key', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'contract', label: 'OpenAPI Contract', subtitle: 'Schema + problem+json', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+    { id: 'handler', label: 'Route Handler', subtitle: 'Auth, cursor, mutate', icon: 'service', category: 'service', rank: 2, order: 0 },
+  ]}
+  edges={[
+    { from: 'client', to: 'contract', kind: 'request', label: 'HTTP JSON' },
+    { from: 'contract', to: 'handler', kind: 'request', label: 'Validated' },
+    { from: 'handler', to: 'contract', kind: 'response', label: '2xx / 4xx' },
+    { from: 'contract', to: 'client', kind: 'response', label: 'Response' },
+  ]}
+/>
+
+## Core conventions
+
+### 1. Resource naming
+- Use **plural nouns** and kebab-case or snake_case consistently: `/orders`, `/orders/{orderId}/items`.
+- Keep nesting shallow (at most 2 levels: `/users/{id}/tokens`; beyond that, promote `/tokens?user_id=...`).
+- Avoid verbs in paths (`/getOrder`, `/createUser`). For non-CRUD state transitions, use a sub-resource noun or action resource (`/orders/{id}/cancellations` with `POST`).
+
+### 2. HTTP methods and status codes (RFC 9110)
+Per RFC 9110 §9.2, **safe** methods do not alter server state; **idempotent** methods leave the server in the same state whether called once or N times.
+
+| Method | Safe | Idempotent | Typical use | Common status codes |
+|---|---|---|---|---|
+| `GET` | Yes | Yes | Read resource or collection | `200 OK`, `304 Not Modified`, `404 Not Found` |
+| `POST` | No | No | Create resource or trigger action | `201 Created` (`Location` header), `202 Accepted`, `400`, `409`, `422` |
+| `PUT` | No | Yes | Full replacement of a known URI | `200 OK`, `204 No Content`, `409 Conflict` |
+| `PATCH` | No | No* | Partial update (`merge-patch+json`) | `200 OK`, `204 No Content`, `422 Unprocessable Content` |
+| `DELETE` | No | Yes | Remove resource | `204 No Content`, `404 Not Found` |
+
+*\*`PATCH` can be made idempotent in specific designs (e.g., setting `status = "cancelled"`), but is not guaranteed idempotent by RFC 9110.*
+
+Use `401 Unauthorized` when credentials are missing/invalid, `403 Forbidden` when the authenticated caller lacks permission, `429 Too Many Requests` (with `Retry-After`) for rate limits, and `503 Service Unavailable` for temporary overload.
+
+### 3. Idempotency keys
+Mobile networks and webhooks retry timed-out `POST` requests. Require an `Idempotency-Key: <uuid>` header on payment, order, or side-effecting `POST` endpoints:
+1. Store `(idempotency_key, request_hash, status_code, response_body)` in Redis or Postgres with a TTL (e.g., 24 hours).
+2. If the same key arrives with the **same** payload hash, replay the stored response without re-running the mutation.
+3. If the same key arrives with a **different** payload hash, return `422` or `409` so bugs surface immediately.
+
+### 4. Pagination and filtering
+| Strategy | Query shape | Pros | Cons |
+|---|---|---|---|
+| **Offset** | `?limit=20&offset=40` | Easy "jump to page 5" UI | Slow `O(offset + limit)` DB scans; rows shift on concurrent inserts (duplicates/skips) |
+| **Cursor (keyset)** | `?limit=20&cursor=eyJpZCI6MTAwfQ` | Constant `O(log N)` index seek; stable under writes | Cannot jump to arbitrary page numbers |
+
+Default to **cursor pagination** for feeds, logs, and growing tables. For filtering and sorting, accept explicit query parameters (`?status=paid&sort=-created_at`) and validate sort keys against a strict server-side allowlist.
+
+### 5. Consistent error format (RFC 9457)
+Return `Content-Type: application/problem+json` with a stable schema so clients never scrape human error strings:
+
+```json
+{
+  "type": "https://api.example.com/problems/insufficient-balance",
+  "title": "Insufficient account balance",
+  "status": 422,
+  "detail": "Account acct_42 has $12.00 available, which is less than the $25.00 transfer.",
+  "instance": "/transfers/tr_981",
+  "available_cents": 1200,
+  "required_cents": 2500
+}
+```
+
+### 6. Versioning and OpenAPI
+- **Prefer additive changes** (optional fields, new endpoints) before bumping a version.
+- When breaking changes are unavoidable, **URI prefixing (`/v1/orders`)** is the simplest to route, cache, and debug; header/media-type versioning (`Accept: application/vnd.api.v2+json`) keeps URLs clean at the cost of harder browser/CDN debugging.
+- **OpenAPI (v3.2.1)** acts as the machine-readable contract: validate requests at the gateway, generate TypeScript clients, and catch breaking diffs in CI.
+
+### 7. REST vs gRPC vs GraphQL
+| Style | Best fit | Trade-off |
+|---|---|---|
+| **REST (HTTP + JSON)** | Public APIs, CRUD services, browser/mobile backends | Over-fetching/under-fetching on deeply nested graphs |
+| **gRPC (HTTP/2 + Protobuf)** | High-throughput internal microservices, streaming | Needs proxy (gRPC-Web/Envoy) for browsers; binary payloads harder to inspect with `curl` |
+| **GraphQL** | Complex UIs aggregating many entities with varied client needs | N+1 resolver traps, caching complexity, query-depth/cost DoS surface |
+
+## When you DON'T need this
+- **Internal single-app forms or tiny prototypes:** If one Next.js frontend talks to two private route handlers you own, skip API versioning, hypermedia, and GraphQL—just use typed JSON endpoints with Zod validation and RFC 9457 errors.
+- **Static sites:** This site exports static files and `public/cards.json` with zero runtime API.
+- **Cost / complexity trade-off:** Adding OpenAPI codegen, idempotency stores, and cursor tokens takes upfront engineering time. In exchange, you avoid silent breaking changes, duplicate financial writes, and slow `OFFSET` queries at 1M+ rows.
+
+## Gotchas
+- **Leaking stack traces in `problem+json`:** Never put SQL errors, file paths, or internal hostnames into `detail` in production—log them server-side with a `trace_id` extension field instead.
+- **Returning `200 OK` with `{ "ok": false }`:** Proxies, CDNs, and client SDKs rely on HTTP status codes (`4xx`/`5xx`) for retries and error handling.
+- **Unbounded `limit` parameter:** Always clamp `limit` (e.g., default `20`, max `100`) so `?limit=1000000` cannot OOM your API or database.
+
+## Production checklist
+- [ ] Every `4xx`/`5xx` response uses `application/problem+json` (RFC 9457) with no internal stack traces.
+- [ ] List endpoints enforce a maximum `limit` and use cursor pagination for large tables.
+- [ ] Money, order, and webhook-driven `POST` endpoints require and deduplicate `Idempotency-Key`.
+- [ ] OpenAPI spec is checked in CI for breaking changes before merge.
+- [ ] `429` responses include `Retry-After` and `5xx` responses are safe for clients to retry only on idempotent methods or with an idempotency key.
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "A client times out after sending POST /payments and retries the exact same request. How do you prevent a double charge?",
+    options: [
+      { label: "Require an Idempotency-Key header and replay the stored response for matching payloads", description: "POST is not idempotent in HTTP, so the server must deduplicate retries by Idempotency-Key.", correct: true },
+      { label: "Switch the endpoint from POST to GET", description: "GET must be safe (read-only) per RFC 9110 and can be cached or prefetched by intermediaries." },
+      { label: "Return 404 on the second request", description: "Returning 404 hides whether the first payment succeeded and breaks client retry logic." }
+    ]
+  },
+  {
+    question: "Why does RFC 9457 recommend application/problem+json over ad-hoc { error: '...' } objects?",
+    options: [
+      { label: "It standardizes machine-readable fields (type, title, status, detail, instance) across all endpoints", description: "Clients and gateways can inspect status and type URI reliably without per-endpoint custom parsers.", correct: true },
+      { label: "It automatically encrypts sensitive error details", description: "RFC 9457 is a JSON structure convention; you still must strip secrets and stack traces yourself." },
+      { label: "It bypasses HTTP status codes by always returning 200 OK", description: "RFC 9457 pairs with the real 4xx/5xx HTTP status code." }
+    ]
+  },
+  {
+    question: "Which pagination approach avoids skipped or duplicated items when new rows are inserted between page fetches?",
+    options: [
+      { label: "Cursor (keyset) pagination", description: "Keyset pagination anchors on the last seen indexed value rather than a shifting row offset.", correct: true },
+      { label: "OFFSET / LIMIT pagination", description: "Inserting new rows shifts offsets, causing items from page 1 to reappear on page 2." },
+      { label: "Returning all rows in one unpaginated array", description: "Unbounded responses exhaust memory and time out as the table grows." }
+    ]
+  }
+]} />
+
+## Sources
+- [RFC 9110: HTTP Semantics](https://www.rfc-editor.org/rfc/rfc9110.html)
+- [RFC 9457: Problem Details for HTTP APIs](https://www.rfc-editor.org/rfc/rfc9457.html)
+- [OpenAPI Specification v3.2.1](https://spec.openapis.org/oas/latest.html)

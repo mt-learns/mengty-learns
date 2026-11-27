@@ -5,9 +5,12 @@
     "git-internals",
     "networking-basics",
     "linux-processes-signals",
+    "linux-server-hardening",
+    "firewall-basics",
     "reverse-proxy-tls",
     "backups-and-dr",
-    "observability"
+    "observability",
+    "sizing-and-cost"
   ],
   "icon": "foundations"
 }

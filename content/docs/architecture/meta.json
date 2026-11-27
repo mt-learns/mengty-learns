@@ -16,7 +16,13 @@
     "event-driven-outbox",
     "event-sourcing",
     "caching-redis",
+    "database-indexing",
+    "transactions-isolation",
+    "orm-pitfalls",
+    "schema-migrations",
+    "error-handling-logging",
     "queues-async",
+    "api-design",
     "c4-model"
   ],
   "icon": "architecture"

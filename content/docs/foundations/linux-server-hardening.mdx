@@ -1,0 +1,157 @@
+---
+title: Linux Server Hardening (Ubuntu 24.04)
+description: Harden a single Ubuntu 24.04 LTS VPS with SSH key-only auth, no root login, least-privilege users, unattended-upgrades, fail2ban vs rate limiting, and auditing.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: how-to
+level: intermediate
+tags: [foundations, linux, ubuntu, ssh, hardening, security]
+tested_with:
+  ubuntu: "24.04 LTS (docs)"
+  openssh: "9.6p1 (docs)"
+cards:
+  - q: "Why should you place custom OpenSSH settings in /etc/ssh/sshd_config.d/00-hardening.conf instead of editing /etc/ssh/sshd_config?"
+    a: "Drop-in files in sshd_config.d survive package upgrades cleanly without merge conflicts, and a 00- prefix ensures your rules are evaluated before later defaults."
+  - q: "What must you always do before closing your current SSH session after changing sshd configuration?"
+    a: "Validate syntax with sudo sshd -t, reload ssh, and open a brand-new second terminal to verify key login works while the first session stays open."
+  - q: "How does fail2ban differ from firewall rate limiting (like ufw limit)?"
+    a: "Firewall rate limiting throttles new TCP connections per IP in the kernel, whereas fail2ban tails daemon logs (sshd, nginx) and dynamically bans IPs after repeated auth failures."
+  - q: "Why does disabling PasswordAuthentication matter more than changing the SSH port?"
+    a: "Automated scanners sweep all 65,535 ports quickly, whereas disabling password auth eliminates brute-force guessing completely regardless of port."
+related:
+  - foundations/linux-processes-signals
+  - foundations/reverse-proxy-tls
+  - security/secrets-management
+sources:
+  - title: "Ubuntu Server Docs: OpenSSH Server"
+    url: https://documentation.ubuntu.com/server/how-to/security/openssh-server/
+  - title: "Ubuntu Server Docs: Automatic Updates (unattended-upgrades)"
+    url: https://documentation.ubuntu.com/server/how-to/software/automatic-updates/
+  - title: "Ubuntu 24.04 Manpages: sshd_config(5)"
+    url: https://manpages.ubuntu.com/manpages/noble/en/man5/sshd_config.5.html
+---
+
+## TL;DR
+On a single Ubuntu 24.04 VPS: create a **least-privilege `sudo` user**, enforce **SSH key-only auth** and **`PermitRootLogin no`** in `/etc/ssh/sshd_config.d/`, enable **`unattended-upgrades`** for security patches, and pair kernel **rate limiting** with basic port/log **auditing**.
+
+## Why it exists
+A fresh VPS with a public IPv4 address receives automated SSH brute-force probes within minutes of booting. Default root logins, forgotten password auth, and unpatched OpenSSH or kernel packages turn a cheap hobby server into an easy target.
+
+## Mental model
+Shrink the attack surface in layers: remove password guessing at `sshd`, remove direct `root` access, keep packages patched automatically, and verify what is listening on public interfaces.
+
+<Diagram
+  id="linux-vps-hardening"
+  ariaLabel="Admin connects with SSH key to hardened sshd as a non-root sudo user"
+  caption="Key-only sshd drops password probes; a non-root user escalates via sudo only when needed."
+  nodes={[
+    { id: 'admin', label: 'Admin Laptop', subtitle: 'Ed25519 SSH key', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'sshd', label: 'OpenSSH Daemon', subtitle: 'Key-only, no root', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+    { id: 'user', label: 'Deploy User', subtitle: 'Least-privilege sudo', icon: 'service', category: 'service', rank: 2, order: 0 },
+  ]}
+  edges={[
+    { from: 'admin', to: 'sshd', kind: 'request', label: 'Pubkey auth' },
+    { from: 'sshd', to: 'user', kind: 'request', label: 'Shell / sudo' },
+  ]}
+/>
+
+## Do it
+
+### 1. Create a least-privilege admin user
+Run these on the VPS as `root` first, and copy your SSH public key before disabling root login:
+
+```bash
+# Create non-root admin user and grant sudo (not run)
+sudo adduser deploy
+sudo usermod -aG sudo deploy
+
+# Copy authorized_keys from root to deploy (not run)
+sudo rsync --archive --chown=deploy:deploy ~/.ssh /home/deploy/
+```
+
+For application processes (e.g., Node/Go daemons), create a dedicated system user with no login shell (`sudo useradd --system --shell /usr/sbin/nologin appuser`).
+
+### 2. Enforce SSH keys only and disable root login
+Create a drop-in file in `/etc/ssh/sshd_config.d/00-hardening.conf` (Ubuntu 24.04 evaluates `sshd_config.d/*.conf` in lexical order, first match wins for most directives):
+
+```text
+# /etc/ssh/sshd_config.d/00-hardening.conf (not run)
+PermitRootLogin no
+PasswordAuthentication no
+PubkeyAuthentication yes
+PermitEmptyPasswords no
+MaxAuthTries 3
+LoginGraceTime 30
+```
+
+Validate syntax and reload while keeping your existing session open:
+
+```bash
+# Test config before reloading; verify login in a SECOND terminal (not run)
+sudo sshd -t && sudo systemctl reload ssh
+```
+
+### 3. Enable unattended security upgrades
+```bash
+# Install and enable Ubuntu security auto-updates (not run)
+sudo apt update && sudo apt install -y unattended-upgrades
+sudo dpkg-reconfigure --priority=low unattended-upgrades
+
+# Preview what unattended-upgrades would install (not run)
+sudo unattended-upgrades --dry-run --debug
+```
+
+In `/etc/apt/apt.conf.d/50unattended-upgrades`, optionally set `Unattended-Upgrade::Automatic-Reboot "true";` with `Unattended-Upgrade::Automatic-Reboot-Time "03:30";` for kernel patches.
+
+### 4. `fail2ban` vs rate limiting & basic auditing
+- **Rate limiting (`ufw limit 22/tcp` or `nftables`):** Caps new SSH connections per source IP in the kernel with near-zero memory overhead.
+- **`fail2ban`:** Tails `/var/log/auth.log` / `journald` and bans offending IPs after repeated failures. Useful for reducing log noise or protecting HTTP endpoints, though key-only SSH already blocks password guessing.
+- **Routine auditing:**
+  ```bash
+  # Check listening sockets, recent logins, and SSH auth logs (not run)
+  sudo ss -tulpn
+  last -n 20
+  sudo journalctl -u ssh -n 50 --no-pager
+  ```
+
+## When you DON'T need this
+- **Serverless / static platforms:** Hosting this static site on Cloudflare Workers means there is no Ubuntu OS, SSH daemon, or kernel for you to patch.
+- **Immutable / ephemeral cloud images:** If your fleet rebuilds golden AMIs daily via CI/CD and disables SSH completely (using AWS SSM or Tailscale), skip `unattended-upgrades` and SSH tuning on live instances.
+- **Cost / complexity trade-off:** Managing your own VPS gives predictable flat pricing, at the cost of owning OS patching, SSH key rotation, and log auditing.
+
+## Gotchas
+- **Cloud-init overriding `PasswordAuthentication`:** Ubuntu cloud images sometimes include `/etc/ssh/sshd_config.d/50-cloud-init.conf` setting `PasswordAuthentication yes`. Naming your file `00-hardening.conf` ensures it takes precedence—verify with `sudo sshd -T | grep -E 'permitrootlogin|passwordauthentication'`.
+- **Locking yourself out:** Never restart `ssh` without running `sudo sshd -t` first, and always test a new session before closing the current one.
+- **Auto-rebooting stateful DBs mid-day:** Always set `Automatic-Reboot-Time` to a quiet maintenance window.
+
+## Production checklist
+- [ ] `sshd -T` confirms `permitrootlogin no` and `passwordauthentication no`.
+- [ ] Admin access uses a named non-root `sudo` user; app daemons run as unprivileged system users.
+- [ ] `unattended-upgrades` is active and tested with `--dry-run`.
+- [ ] `ss -tulpn` shows only expected public ports (e.g., `22`, `80`, `443`).
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "You set PasswordAuthentication no in /etc/ssh/sshd_config, but password logins still work on an Ubuntu 24.04 cloud VPS. What is the most likely cause?",
+    options: [
+      { label: "A drop-in file like /etc/ssh/sshd_config.d/50-cloud-init.conf sets PasswordAuthentication yes before your line is read", description: "OpenSSH applies the first matching directive; put your rules in 00-hardening.conf and verify with sshd -T.", correct: true },
+      { label: "OpenSSH 9.6 ignores PasswordAuthentication unless PermitRootLogin is yes", description: "PermitRootLogin and PasswordAuthentication are independent directives." },
+      { label: "unattended-upgrades resets sshd_config every hour", description: "unattended-upgrades only installs package updates." }
+    ]
+  },
+  {
+    question: "Why should you keep your current SSH terminal open when testing a new sshd_config change?",
+    options: [
+      { label: "If a typo or missing key blocks new logins, your existing session lets you revert the config without console recovery", description: "Always verify a second connection before closing the active session.", correct: true },
+      { label: "systemd refuses to reload sshd while only one terminal is open", description: "systemd reloads sshd regardless of active sessions." },
+      { label: "SSH keys are only generated when two terminals are connected", description: "Keys are generated locally with ssh-keygen." }
+    ]
+  }
+]} />
+
+## Sources
+- [Ubuntu Server Docs: OpenSSH Server](https://documentation.ubuntu.com/server/how-to/security/openssh-server/)
+- [Ubuntu Server Docs: Automatic Updates](https://documentation.ubuntu.com/server/how-to/software/automatic-updates/)
+- [Ubuntu 24.04 Manpages: sshd_config(5)](https://manpages.ubuntu.com/manpages/noble/en/man5/sshd_config.5.html)

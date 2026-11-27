@@ -1,0 +1,215 @@
+---
+title: Transactions, Isolation Levels & Locking
+description: Understand ACID guarantees, PostgreSQL isolation levels (Read Committed, Repeatable Read, Serializable), lost updates, optimistic vs pessimistic locking, and deadlocks.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: concept
+type: explanation
+level: intermediate
+tags: [architecture, database, postgresql, transactions, isolation, locking]
+tested_with:
+  postgresql: "19.x (docs)"
+cards:
+  - q: "What is PostgreSQL's default transaction isolation level, and which read anomaly does it still allow?"
+    a: "Read Committed is the default; it prevents dirty reads, but each statement sees a new snapshot, allowing non-repeatable reads, phantom reads, and read-then-write lost updates."
+  - q: "How does PostgreSQL Repeatable Read handle two concurrent transactions updating the same row?"
+    a: "The second transaction waits for the first; if the first commits, PostgreSQL aborts the second with a serialization failure (SQLSTATE 40001) so the app can retry."
+  - q: "What is the difference between optimistic locking and pessimistic locking?"
+    a: "Pessimistic locking (SELECT ... FOR UPDATE) holds a DB row lock during the read-modify-write; optimistic locking reads without locking and checks a version column in the UPDATE WHERE clause."
+  - q: "How do you prevent deadlocks when two transactions lock multiple rows?"
+    a: "Always acquire locks in a consistent, deterministic order (for example, sorted by primary key ID ascending) so circular wait chains cannot form."
+  - q: "Why must applications using Repeatable Read or Serializable isolation implement a retry loop?"
+    a: "PostgreSQL resolves serialization conflicts by aborting one transaction with SQLSTATE 40001 (serialization_failure), expecting the caller to retry cleanly."
+related:
+  - architecture/database-indexing
+  - architecture/caching-redis
+sources:
+  - title: "PostgreSQL Docs: Transaction Isolation"
+    url: https://www.postgresql.org/docs/current/transaction-iso.html
+  - title: "PostgreSQL Docs: Explicit Locking"
+    url: https://www.postgresql.org/docs/current/explicit-locking.html
+---
+
+## TL;DR
+**ACID** transactions group reads and writes into an all-or-nothing unit. PostgreSQL defaults to **Read Committed**, which allows **lost updates** on read-modify-write flows unless you use **`SELECT ... FOR UPDATE`**, **optimistic version checks**, or **`REPEATABLE READ` / `SERIALIZABLE`** with automatic **retry on `40001`**.
+
+## Intent
+<Intent>
+Choose the right isolation level and locking strategy to prevent race conditions like lost updates and write skew without stalling concurrent throughput or causing deadlocks.
+</Intent>
+
+## Problem
+Two concurrent requests read `balance = 100`, subtract `$20` and `$30` in application code, and write `80` and `70` back to the database. Under default `READ COMMITTED` isolation, both `COMMIT`s succeed—and `$20` vanishes silently.
+
+## Solution
+
+### 1. ACID in plain words
+- **Atomicity:** Either every statement in the `BEGIN ... COMMIT` block succeeds, or `ROLLBACK` undoes all of them.
+- **Consistency:** Constraints (`CHECK`, `UNIQUE`, foreign keys) hold at commit time.
+- **Isolation:** Controls what concurrent transactions can see of each other's uncommitted or newly committed writes.
+- **Durability:** Once `COMMIT` returns, writes are flushed to the WAL and survive crashes.
+
+### 2. PostgreSQL isolation levels
+PostgreSQL never allows **dirty reads** (reading uncommitted data), even at `READ UNCOMMITTED` (which behaves like `READ COMMITTED` in Postgres):
+
+| Isolation level | Prevents | Still allows | Cost / behavior |
+|---|---|---|---|
+| **Read Committed** (default) | Dirty reads | Non-repeatable reads, phantom reads, lost updates on read-then-write | Lowest overhead; each query gets a fresh snapshot |
+| **Repeatable Read** | Dirty, non-repeatable, and phantom reads; lost updates | **Write skew** (two transactions read overlapping sets and update disjoint rows) | Transaction-level snapshot; concurrent write to same row aborts with `40001` |
+| **Serializable** | All of the above, including write skew | None (equivalent to serial execution) | Uses Serializable Snapshot Isolation (SSI); highest `40001` retry rate under contention |
+
+### 3. Optimistic vs pessimistic locking
+- **Pessimistic (`SELECT ... FOR UPDATE`):** Locks the target row immediately so concurrent updaters wait in line. Best when contention is high and transactions are short (e.g., inventory or wallet balance).
+- **Optimistic (`version` column):** Read the row with `version = 5`, compute the new state, and run `UPDATE accounts SET balance = $1, version = 6 WHERE id = $2 AND version = 5`. If `rowCount === 0`, someone else updated it first—retry. Best when conflicts are rare or a user edits a form over seconds.
+
+### 4. Deadlocks
+A **deadlock** occurs when Transaction A locks row 1 and waits for row 2, while Transaction B locks row 2 and waits for row 1. PostgreSQL's deadlock detector breaks the cycle after `deadlock_timeout` (default 1s) by aborting one transaction with `SQLSTATE 40P01`. Prevent deadlocks by **always locking rows in a consistent order** (e.g., `ORDER BY id ASC`).
+
+## Real-world analogy
+<Analogy>
+Editing a shared config file without locking is like two people downloading `config.json` at 10:00, each changing one line locally, and uploading their copy—the second upload erases the first person's edit (**lost update**). Pessimistic locking is checking the file out exclusively; optimistic locking is Git rejecting your push because `HEAD` moved since you pulled.
+</Analogy>
+
+## ▶ Flow: watch it work
+<Flow
+  id="transactions-isolation"
+  title="Lost Update Race vs Pessimistic Row Lock"
+  variants={[
+    {
+      id: 'lost-update',
+      label: 'Lost Update (Read Committed)',
+      nodes: [
+        { id: 'txa', label: 'Tx A (Read+Write)', subtitle: 'Reads balance 100', icon: 'pod', category: 'service', rank: 0, order: 0 },
+        { id: 'txb', label: 'Tx B (Read+Write)', subtitle: 'Reads balance 100', icon: 'pod', category: 'client', rank: 0, order: 1 },
+        { id: 'db', label: 'Postgres Row', subtitle: 'balance = 100', icon: 'db', category: 'data', rank: 1, order: 0, variant: 'problem' },
+      ],
+      steps: [
+        { edge: 'txa->db', title: 'Tx A reads balance', text: 'Tx A reads balance = 100 in Read Committed before modifying it.', label: 'SELECT 100' },
+        { edge: 'txb->db', title: 'Tx B reads stale balance', text: 'Tx B also reads balance = 100 before Tx A commits.', label: 'SELECT 100' },
+        { edge: 'txa->db', title: 'Tx A writes 100 - 20', text: 'Tx A updates balance to 80 and commits its transaction.', label: 'UPDATE 80' },
+        { edge: 'db->txa', title: 'Tx A commits 80', text: 'Database confirms Tx A committed balance = 80.', kind: 'response', label: 'Commit 80' },
+        { edge: 'txb->db', title: 'Tx B overwrites with 70', text: 'Tx B computes 100 - 30 = 70 and overwrites Tx A’s deduction.', kind: 'error', label: 'UPDATE 70' },
+        { edge: 'db->txb', title: 'Lost update committed', text: 'Final balance is 70 instead of 50—Tx A’s update vanished.', kind: 'error', label: 'Lost -$20' },
+      ],
+    },
+    {
+      id: 'for-update',
+      label: 'Fix (FOR UPDATE lock)',
+      nodes: [
+        { id: 'txa', label: 'Tx A (FOR UPDATE)', subtitle: 'Acquires row lock', icon: 'pod', category: 'service', rank: 0, order: 0 },
+        { id: 'txb', label: 'Tx B (FOR UPDATE)', subtitle: 'Waits for lock', icon: 'pod', category: 'client', rank: 0, order: 1 },
+        { id: 'db', label: 'Postgres Row', subtitle: 'Row lock serializes', icon: 'db', category: 'data', rank: 1, order: 0 },
+      ],
+      steps: [
+        { edge: 'txa->db', title: 'Tx A locks and reads row', text: 'Tx A runs SELECT ... FOR UPDATE, acquiring an exclusive row lock.', label: 'FOR UPDATE' },
+        { edge: 'txb->db', title: 'Tx B blocks on row lock', text: 'Tx B runs SELECT ... FOR UPDATE and waits until Tx A commits.', label: 'Blocked' },
+        { edge: 'txa->db', title: 'Tx A writes 80 and commits', text: 'Tx A updates balance to 80 and commits, releasing the row lock.', label: 'COMMIT 80' },
+        { edge: 'db->txa', title: 'Tx A completes cleanly', text: 'Database confirms Tx A committed balance = 80.', kind: 'response', label: 'Done' },
+        { edge: 'db->txb', title: 'Tx B wakes up with 80', text: 'Tx B acquires the lock and reads the newly committed balance = 80.', kind: 'response', label: 'Reads 80' },
+        { edge: 'txb->db', title: 'Tx B writes 50 and commits', text: 'Tx B computes 80 - 30 = 50 and commits—zero lost updates.', label: 'COMMIT 50' },
+      ],
+    },
+  ]}
+/>
+
+## Code
+Compare a pessimistic `FOR UPDATE` transaction against an optimistic `version` update in SQL:
+
+```sql
+-- Pessimistic: lock the row for the duration of a short transaction (not run)
+BEGIN;
+SELECT balance_cents FROM accounts WHERE id = $1 FOR UPDATE;
+UPDATE accounts SET balance_cents = balance_cents - $2 WHERE id = $1;
+COMMIT;
+
+-- Optimistic: no lock held during read; check version on write (not run)
+UPDATE accounts
+SET balance_cents = $1, version = version + 1
+WHERE id = $2 AND version = $3;
+-- If affected rows = 0, another writer won -> re-read and retry
+```
+
+## When you DON'T need this
+- **Single-statement atomic updates:** If you can write `UPDATE accounts SET balance_cents = balance_cents - $1 WHERE id = $2 AND balance_cents >= $1`, you don't need an explicit `FOR UPDATE` or `SERIALIZABLE` transaction—PostgreSQL's single-statement row lock already serializes it.
+- **Append-only analytics or read-only pages:** Static reads don't need `SERIALIZABLE` or row locks.
+- **Cost / complexity trade-off:** Stronger isolation (`SERIALIZABLE`) and pessimistic locks eliminate subtle data corruption bugs at the cost of lock wait contention or `40001` retry logic in application code.
+
+## When to use / when to avoid
+<Checklist
+  use={[
+    'Use atomic SQL updates or SELECT ... FOR UPDATE for short read-modify-write flows on balances or inventory.',
+    'Use optimistic version checks for multi-step user edits across HTTP requests.',
+  ]}
+  avoid={[
+    'Never hold a database transaction open while calling an external HTTP API or waiting for user input.',
+    'Never enable SERIALIZABLE without adding a bounded retry loop for SQLSTATE 40001.',
+  ]}
+/>
+
+## How to implement
+<Steps>
+  <Step>
+    ### Keep transactions short
+    Do HTTP calls, PDF generation, and slow I/O outside `BEGIN ... COMMIT`.
+  </Step>
+  <Step>
+    ### Pick the simplest concurrency guard
+    Prefer a single atomic `UPDATE ... WHERE`, then optimistic `version`, then `FOR UPDATE` or `REPEATABLE READ` / `SERIALIZABLE`.
+  </Step>
+  <Step>
+    ### Add bounded retries for `40001` and `40P01`
+    Retry serialization (`40001`) and deadlock (`40P01`) errors with short jittered backoff (e.g., up to 3 attempts).
+  </Step>
+</Steps>
+
+## Pros / Cons
+<ProsCons
+  pros={[
+    'Prevents silent lost updates, negative balances, and broken invariants under concurrency.',
+    'Optimistic locking avoids holding DB locks across slow user think time.',
+  ]}
+  cons={[
+    'Pessimistic locks reduce concurrency on hot rows and can deadlock if lock order varies.',
+    'Higher isolation levels require explicit retry handling in the application.',
+  ]}
+/>
+
+## Relations
+<Relations
+  items={[
+    {
+      name: 'Database Indexing & EXPLAIN ANALYZE',
+      href: '/docs/architecture/database-indexing',
+      summary: 'Indexes keep FOR UPDATE row locks narrow instead of locking scanned ranges.',
+    },
+    {
+      name: 'Caching Strategies & Redis',
+      href: '/docs/architecture/caching-redis',
+      summary: 'Invalidate cache keys only after the database transaction commits.',
+    },
+  ]}
+/>
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "Two transactions both read balance = 100 under PostgreSQL Read Committed, compute new values in app code, and issue UPDATE accounts SET balance = ... WHERE id = 1. What happens?",
+    options: [
+      { label: "Both commit and the second write silently overwrites the first (lost update)", description: "Read Committed does not detect that the row changed between your SELECT and UPDATE.", correct: true },
+      { label: "PostgreSQL automatically aborts the second transaction with 40001", description: "Automatic 40001 serialization failure happens in Repeatable Read / Serializable, not Read Committed." },
+      { label: "Read Committed blocks the second SELECT until the first commits", description: "Plain SELECT never blocks writers or readers in PostgreSQL MVCC." }
+    ]
+  },
+  {
+    question: "How do you prevent deadlocks when a transfer transaction locks both from_account and to_account?",
+    options: [
+      { label: "Always lock the lower account ID first, then the higher account ID", description: "A global lock ordering makes circular wait impossible.", correct: true },
+      { label: "Switch from PostgreSQL to Read Committed", description: "Deadlocks still occur in Read Committed whenever two transactions lock rows in opposite orders." },
+      { label: "Remove all indexes on the accounts table", description: "Removing indexes forces table scans and worsens lock contention." }
+    ]
+  }
+]} />
+
+## Sources
+- [PostgreSQL Docs: Transaction Isolation](https://www.postgresql.org/docs/current/transaction-iso.html)
+- [PostgreSQL Docs: Explicit Locking](https://www.postgresql.org/docs/current/explicit-locking.html)
