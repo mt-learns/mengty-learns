@@ -16,6 +16,7 @@
     "event-driven-outbox",
     "event-sourcing",
     "caching-redis",
+    "database-indexing",
     "queues-async",
     "api-design",
     "c4-model"
