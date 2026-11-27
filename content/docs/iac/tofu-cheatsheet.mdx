@@ -18,6 +18,8 @@ cards:
     a: "tofu state rm <address>."
   - q: "Which two commands should run in every CI pull-request check for IaC?"
     a: "tofu fmt -check -recursive and tofu validate (after tofu init -backend=false)."
+  - q: "What does `tofu plan -detailed-exitcode` return when infrastructure drift is detected?"
+    a: "Exit code 2 (0 = no changes, 1 = error, 2 = changes/drift present), making it ideal for nightly drift-detection jobs."
 related:
   - iac/first-project
   - iac/plan-apply
@@ -27,6 +29,8 @@ sources:
     url: https://opentofu.org/docs/cli/commands/
   - title: "OpenTofu Docs: State Subcommands"
     url: https://opentofu.org/docs/cli/commands/state/
+  - title: "learn-devops: Terraform/IaC Interview Q&A (author's notes)"
+    url: https://github.com/limme-learning/learn-devops/blob/main/cheatsheets/11-terraform/interview-qna.md
 ---
 
 ## TL;DR
@@ -52,6 +56,13 @@ tofu validate                   # syntax & type check without cloud creds
 # Preview changes and save exact plan for CI apply (not run)
 tofu plan -out=tfplan
 tofu apply tfplan               # applies exact saved plan (no confirmation prompt)
+
+# Drift detection & state refresh review (not run)
+tofu plan -detailed-exitcode    # 0 = clean, 1 = error, 2 = drift detected
+tofu plan -refresh-only         # review state updates without modifying infra
+
+# Multi-platform provider lockfile for CI (Linux) + laptops (macOS/Windows) (not run)
+tofu providers lock -platform=linux_amd64 -platform=darwin_arm64
 
 # Target a single resource for emergency debugging only (not run)
 tofu plan -target=aws_instance.bastion
@@ -107,3 +118,4 @@ tofu force-unlock <LOCK_ID>
 ## Sources
 - [OpenTofu Docs: CLI Commands](https://opentofu.org/docs/cli/commands/)
 - [OpenTofu Docs: State Subcommands](https://opentofu.org/docs/cli/commands/state/)
+- [learn-devops: Terraform/IaC Interview Q&A (author's notes)](https://github.com/limme-learning/learn-devops/blob/main/cheatsheets/11-terraform/interview-qna.md)
