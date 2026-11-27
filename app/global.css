@@ -261,9 +261,42 @@ figure.shiki pre {
   background-color: var(--sidebar-active-foreground);
 }
 
+@keyframes mt-rise {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes mt-float {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+.mt-hero-rise {
+  animation: mt-rise var(--duration-entrance) var(--ease-ios) both;
+}
+
+.mt-hero-float {
+  animation: mt-float 5.5s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .prose a:not([data-card]) {
     transition: none;
+  }
+  .mt-hero-rise,
+  .mt-hero-float {
+    animation: none !important;
   }
 }
 

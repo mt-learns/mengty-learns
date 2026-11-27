@@ -3,6 +3,7 @@ import { ArrowRight } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Illustration, SectionIcon } from '@/components/illustrations';
 import { Container } from '@/components/layout/container';
+import { HeroIllustration } from '@/components/home/hero-illustration';
 import { K8sRequestFlow } from '@/components/home/k8s-flow';
 import { PathProgress } from '@/components/home/path-progress';
 import { ReviewCta } from '@/components/home/review-cta';
@@ -72,11 +73,14 @@ export default function HomePage() {
             >
               See how infrastructure really works.
             </h1>
-            <p className="mt-5 max-w-[34rem] text-lede text-muted-foreground md:text-lede-lg">
+            <p className="mt-hero-rise mt-5 max-w-[34rem] text-lede text-muted-foreground md:text-lede-lg">
               Notes, animated flows, labs that CI actually runs, and flashcards that make it stick. DevOps, architecture
               and security, by Lim Mengty.
             </p>
-            <div className="mt-8 flex flex-col gap-3 sm:flex-row">
+            <div
+              className="mt-hero-rise mt-8 flex flex-col gap-3 sm:flex-row"
+              style={{ animationDelay: '60ms' }}
+            >
               <Link
                 href="/docs"
                 className="inline-flex min-h-tap items-center justify-center gap-2 whitespace-nowrap rounded-control bg-primary px-6 text-headline text-primary-foreground shadow-[0_1px_2px_rgb(var(--shadow-color)/0.12),0_4px_12px_-4px_rgb(var(--shadow-color)/0.25)] transition-colors hover:bg-primary-hover motion-reduce:transition-none"
@@ -87,13 +91,18 @@ export default function HomePage() {
               <ReviewCta />
             </div>
           </div>
-          <div className="flex justify-center lg:col-span-5 lg:justify-end">
-            <Illustration
-              name="hero-desk"
-              size={256}
-              decorative
-              className="h-auto max-h-[240px] w-auto max-w-full lg:max-h-none lg:w-full lg:max-w-[440px]"
-            />
+          <div
+            className="mt-hero-rise flex justify-center lg:col-span-5 lg:justify-end"
+            style={{ animationDelay: '120ms' }}
+          >
+            <HeroIllustration>
+              <Illustration
+                name="hero-desk"
+                size={256}
+                decorative
+                className="h-auto max-h-[240px] w-auto max-w-full lg:max-h-none lg:w-full lg:max-w-[440px]"
+              />
+            </HeroIllustration>
           </div>
         </Container>
       </section>
