@@ -52,23 +52,42 @@ export function SwRegister() {
       });
     };
 
-    navigator.serviceWorker
-      .register('/sw.js', { scope: '/', updateViaCache: 'none' })
-      .then((reg) => {
-        regRef.current = reg;
-        if (reg.waiting && navigator.serviceWorker.controller) {
-          setWaitingWorker(reg.waiting);
-        }
-        if (reg.installing) {
-          trackInstalling(reg.installing);
-        }
-        reg.addEventListener('updatefound', () => {
-          trackInstalling(reg.installing);
+    // Register only after `load` and an idle period: the install step precaches
+    // ~80 URLs, which must not compete with the page's own LCP/TBT work.
+    const register = () =>
+      navigator.serviceWorker
+        .register('/sw.js', { scope: '/', updateViaCache: 'none' })
+        .then((reg) => {
+          regRef.current = reg;
+          if (reg.waiting && navigator.serviceWorker.controller) {
+            setWaitingWorker(reg.waiting);
+          }
+          if (reg.installing) {
+            trackInstalling(reg.installing);
+          }
+          reg.addEventListener('updatefound', () => {
+            trackInstalling(reg.installing);
+          });
+        })
+        .catch(() => {
+          // Registration can fail in private/in-app browsers; the site still works normally.
         });
-      })
-      .catch(() => {
-        // Registration can fail in private/in-app browsers; the site still works normally.
-      });
+
+    let idleHandle: number | undefined;
+    let usedIdleCallback = false;
+    const scheduleRegister = () => {
+      if (typeof window.requestIdleCallback === 'function') {
+        usedIdleCallback = true;
+        idleHandle = window.requestIdleCallback(() => void register(), { timeout: 5000 });
+      } else {
+        idleHandle = globalThis.setTimeout(() => void register(), 3000) as unknown as number;
+      }
+    };
+    if (document.readyState === 'complete') {
+      scheduleRegister();
+    } else {
+      window.addEventListener('load', scheduleRegister, { once: true });
+    }
 
     const checkUpdate = () => {
       regRef.current?.update().catch(() => {});
@@ -108,6 +127,11 @@ export function SwRegister() {
     window.addEventListener('unhandledrejection', onRejection);
 
     return () => {
+      window.removeEventListener('load', scheduleRegister);
+      if (idleHandle !== undefined) {
+        if (usedIdleCallback) window.cancelIdleCallback(idleHandle);
+        else globalThis.clearTimeout(idleHandle);
+      }
       navigator.serviceWorker.removeEventListener('controllerchange', onControllerChange);
       document.removeEventListener('visibilitychange', onVisibility);
       window.removeEventListener('error', onError);
