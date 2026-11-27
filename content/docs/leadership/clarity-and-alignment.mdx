@@ -1,0 +1,126 @@
+---
+title: "Clarity and Alignment"
+description: How engineering leads eliminate rework by aligning teams on business outcomes, scope boundaries, acceptance criteria, constraints, and Definition of Done before coding starts.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: how-to
+level: beginner
+tags: [leadership, alignment, scope, requirements, clarity]
+tested_with:
+  rework_guide: "Google re:Work (Structure & Clarity)"
+  atlassian_playbook: "Atlassian Team Playbook (Project Poster)"
+cards:
+  - q: "Why does 'Structure & Clarity' directly affect engineering velocity?"
+    a: "When goals, roles, and acceptance criteria are explicit, engineers make good local decisions without waiting to ask permission on every detail."
+  - q: "What must every feature brief include alongside 'In scope'?"
+    a: "An explicit 'Out of scope' list, so deferred work does not silently creep into the current release."
+  - q: "How should a team treat unresolved business ambiguity before implementation?"
+    a: "Treat ambiguity as concrete work with a decision owner and deadline—never guess and hope QA catches it."
+  - q: "What are the core parts of a one-page feature brief?"
+    a: "Business outcome, target user and pain point, in/out of scope, testable acceptance criteria, constraints, risks, and decision deadline."
+related:
+  - process/prd-and-user-stories
+  - process/dor-dod-quality-gates
+  - process/raci
+sources:
+  - title: "Google re:Work: Guide to Understanding Team Effectiveness"
+    url: https://rework.withgoogle.com/en/guides/understanding-team-effectiveness
+  - title: "Atlassian Team Playbook: Project Poster"
+    url: https://www.atlassian.com/team-playbook/plays/project-poster
+  - title: "key-learning: Build Clarity and Alignment (author's notes)"
+    url: https://github.com/limme-learning/key-learning/blob/main/management-playbook/03-clarity-and-alignment.md
+---
+
+## TL;DR
+Teams rarely stall from lack of coding speed—they stall because people hold different mental models of the **goal, scope, constraints, or Definition of Done**. Start every initiative with a **one-page feature brief** that makes scope boundaries, testable acceptance criteria, and decision deadlines explicit.
+
+## Why it exists
+In Google's Project Aristotle research, **Structure & Clarity**—clear goals, roles, and execution plans—is one of the five pillars of effective teams. Without it, engineers either block on micro-questions ("Should cancelled orders restock automatically?") or guess silently, leading to painful rework during QA or demo.
+
+## Mental model
+Alignment is **front-loaded autonomy**:
+- **Outcome** tells the team *why* the work matters (so they can make smart trade-offs).
+- **Boundaries** (In scope / Out of scope + constraints) tell them *where* the guardrails sit.
+- **Acceptance criteria + DoD** define *what finished looks like* before a single line of code is written.
+
+## Do it: 8-step feature alignment checklist
+
+1. **Define the measurable business outcome:** State the target change (e.g., *"Cut inventory transfer discrepancies by 50% across warehouses this quarter"*).
+2. **Name the user and pain point:** Who struggles today, and what exact friction do they hit?
+3. **Lock In-Scope and Out-of-Scope:** Write what ships now and what is explicitly deferred.
+4. **Write testable acceptance criteria:** Use observable rules (permissions, state transitions, idempotency).
+5. **Surface constraints:** Deadlines, latency budgets, compliance rules, legacy data quality, or team capacity.
+6. **List risks and external dependencies:** Unconfirmed business rules, third-party APIs, UX sign-off, or migrations.
+7. **Confirm Definition of Done:** Tests, review, staging verification, monitoring, and demo acceptance (`process/dor-dod-quality-gates`).
+8. **Get explicit sign-off:** Ask PM, PO, QA, and ops to confirm the brief—do not rely on silent nods.
+
+### Worked example: One-page feature brief
+
+```markdown
+# Feature Brief: Warehouse Stock Transfer
+
+## Business outcome
+Eliminate manual spreadsheet errors and give warehouse leads real-time visibility.
+
+## User & pain point
+Warehouse staff cannot verify in-transit stock before approving new transfers.
+
+## In scope
+- Create transfer request
+- Manager approval step
+- Dispatch and receive confirmation
+- Immutable stock-movement audit log
+
+## Out of scope (deferred)
+- Offline mobile sync
+- Cross-company billing
+- Automated reorder forecasting
+
+## Acceptance criteria
+- Only users with `warehouse:approve` permission can approve a transfer.
+- Stock cannot transition to `RECEIVED` before `DISPATCHED`.
+- Every state change records actor, timestamp, and reason.
+- Duplicate submit requests create at most one stock movement (idempotent).
+
+## Key risks & decision deadline
+- Approval threshold for high-value items is unconfirmed.
+- **Decision needed from PO by Wednesday 15:00.**
+```
+
+## Gotchas
+- **"We'll figure it out during sprint":** Unresolved business rules turn into mid-sprint blockers or wrong database schemas.
+- **Missing "Out of scope":** Stakeholders assume deferred features are included unless you write down what is *not* being built.
+- **Jargon in business briefs:** Keep outcome and acceptance criteria in plain domain language so non-engineers can spot gaps.
+
+## Production checklist
+- [ ] Every multi-day feature has a 1-page brief with **In scope** and **Out of scope**.
+- [ ] Acceptance criteria cover happy paths, permissions, and failure/state rules.
+- [ ] Unresolved questions have a named decision owner and deadline.
+- [ ] The brief is linked from the ticket/epic and revisited at planning and demo.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "Why is an explicit 'Out of scope' section essential in a feature brief?",
+    options: [
+      { label: "It prevents unstated expectations from turning into mid-sprint scope creep", description: "Writing down what is deferred aligns stakeholders early and protects the delivery date.", correct: true },
+      { label: "It guarantees the deferred features will never be built", description: "Out-of-scope items are simply deferred to a later iteration, not banned forever." },
+      { label: "It replaces the need for acceptance criteria", description: "You still need testable acceptance criteria for everything that is in scope." }
+    ]
+  },
+  {
+    question: "A critical business rule (e.g. refund policy) is still unclear during planning. What should the lead do?",
+    options: [
+      { label: "Assign a decision owner and deadline as an explicit blocker before build starts", description: "Treat ambiguity as work to resolve with an owner and date rather than guessing in code.", correct: true },
+      { label: "Pick whichever rule is easiest to code and change it later if needed", description: "Guessing core business rules often requires schema and API rework." },
+      { label: "Skip writing a brief and let QA decide during testing", description: "QA verifies against agreed criteria; they should not invent product rules." }
+    ]
+  }
+]} />
+
+## Sources
+- [Google re:Work: Guide to Understanding Team Effectiveness](https://rework.withgoogle.com/en/guides/understanding-team-effectiveness)
+- [Atlassian Team Playbook: Project Poster](https://www.atlassian.com/team-playbook/plays/project-poster)
+- [key-learning: Build Clarity and Alignment (author's notes)](https://github.com/limme-learning/key-learning/blob/main/management-playbook/03-clarity-and-alignment.md)
