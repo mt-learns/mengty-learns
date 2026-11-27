@@ -1,0 +1,103 @@
+---
+title: Choosing REST vs GraphQL vs gRPC
+description: Stop standardizing on one API style everywhere—match REST + OpenAPI, GraphQL/BFF, and gRPC + Protobuf to each system boundary.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: decision
+type: explanation
+level: intermediate
+tags: [architecture, api, rest, graphql, grpc, decision]
+tested_with:
+  openapi: "3.2.1 (spec)"
+cards:
+  - q: "Why does mandating a single API style (e.g. 'all APIs must be GraphQL') across an entire organization backfire?"
+    a: "External partners need OpenAPI/REST with HTTP caching, rich UIs need aggregation, and internal meshes need low-latency compiled contracts—forcing one style onto all three boundaries creates friction and facades."
+  - q: "Which API style gives you HTTP/CDN caching (ETag, Cache-Control) and route-level observability out of the box?"
+    a: "REST over HTTP GET/POST, because resources have distinct URLs and standard HTTP status codes."
+  - q: "When is a REST BFF preferable to a GraphQL gateway for a frontend?"
+    a: "When the UI has a small, stable set of screens, strict per-endpoint audit/rate-limit rules, and one team owns both frontend and BFF."
+  - q: "What is the recommended default API boundary map for a medium-to-large platform?"
+    a: "REST + OpenAPI at the partner/public edge, a REST BFF or GraphQL gateway for rich frontend screens, and gRPC + Protobuf for latency-sensitive internal service-to-service calls."
+related:
+  - architecture/api-design
+  - architecture/graphql-trade-offs
+  - architecture/grpc-protobuf
+  - architecture/choosing-an-architecture
+sources:
+  - title: "RFC 9110: HTTP Semantics"
+    url: https://www.rfc-editor.org/rfc/rfc9110.html
+  - title: "OpenAPI Specification v3.2.1"
+    url: https://spec.openapis.org/oas/latest.html
+  - title: "software-engineering: Choosing REST vs GraphQL vs gRPC (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/05-apis-and-integration/05-choosing-rest-vs-graphql-vs-grpc.md
+---
+
+## TL;DR
+Don't pick one API style for everything—draw **boundaries**. Use **REST + OpenAPI** for public/partner APIs and simple CRUD, **GraphQL** (or a **REST BFF**) when a frontend aggregates 3+ backends, and **gRPC + Protobuf** for internal high-throughput service-to-service calls.
+
+## Why it exists
+Boards often mandate "GraphQL everywhere" or "gRPC everywhere" in the name of consistency. Partners then demand OpenAPI specs anyway, internal services pay JSON/field-selection overhead they don't need, and audit logs turn into opaque `POST /graphql 200` lines.
+
+## Comparison table
+
+| Dimension | REST + OpenAPI | GraphQL | gRPC + Protobuf |
+|---|---|---|---|
+| **HTTP / CDN caching** | Native (`GET`, `ETag`, `304`) | Needs persisted queries over `GET` | None at HTTP layer |
+| **Browser native** | Yes | Yes | No (needs gRPC-Web proxy) |
+| **Contract enforcement** | OpenAPI spec + diff/contract tests | Executable schema | Compiled `.proto` + `buf breaking` |
+| **Observability** | Route + method + status out of the box | Requires operation-name tagging | Structured method + rich status codes |
+| **Streaming** | SSE / WebSockets | Subscriptions | Native bidirectional HTTP/2 |
+| **Best boundary** | Public, partner, standard CRUD | Multi-backend UI aggregation | Internal service mesh |
+
+## Decision guide
+
+<Diagram
+  id="api-style-boundaries"
+  layout="tree"
+  ariaLabel="Choose REST+OpenAPI for external partners, BFF or GraphQL for rich UI aggregation, and gRPC for internal service mesh"
+  caption="Match the API style to the boundary instead of forcing one protocol everywhere."
+  nodes={[
+    { id: 'caller', label: 'Who is calling?', subtitle: 'Pick by boundary', icon: 'gateway', category: 'client', rank: 0, order: 0 },
+    { id: 'rest', label: 'REST + OpenAPI', subtitle: 'Partners & CRUD', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+    { id: 'gql', label: 'BFF / GraphQL', subtitle: 'Multi-API UI', icon: 'user', category: 'abstraction', rank: 1, order: 1 },
+    { id: 'grpc', label: 'gRPC + Protobuf', subtitle: 'Internal mesh', icon: 'service', category: 'data', rank: 1, order: 2 },
+  ]}
+  edges={[
+    { from: 'caller', to: 'rest', label: 'External' },
+    { from: 'caller', to: 'gql', label: 'Rich UI' },
+    { from: 'caller', to: 'grpc', label: 'Internal' },
+  ]}
+/>
+
+## Gotchas
+- **Using gRPC for browser clients directly:** You end up running an Envoy proxy and losing standard DevTools inspection; expose a REST BFF at the edge instead.
+- **Using GraphQL between internal microservices:** Backend callers usually want a fixed payload with deadline propagation, not dynamic field selection.
+- **Small teams splitting into 3 toolchains prematurely:** For a small team with 2–3 services, **REST + OpenAPI everywhere** is a completely respectable, low-overhead default.
+
+## Production checklist
+- [ ] Keep REST + OpenAPI as the default for partner/public APIs and simple services.
+- [ ] Gate contract changes per boundary in CI (`openapi-diff`, `graphql-inspector`, `buf breaking`).
+- [ ] Add a BFF or GraphQL layer only when frontend waterfalls across multiple backends are measurably hurting UX.
+
+## Check yourself
+
+<Quiz
+  questions={[
+    {
+      question: "Which API style is the best default for an external partner-facing API?",
+      options: [
+        { label: "gRPC over HTTP/2", description: "Partners and browsers rarely integrate raw gRPC directly without extra proxy tooling." },
+        { label: "REST + OpenAPI with standard HTTP caching and status codes", description: "REST + OpenAPI is universally supported by partners, gateways, WAFs, and code generators.", correct: true },
+        { label: "GraphQL without persisted queries", description: "Unrestricted GraphQL exposes partners to N+1 and complexity risks and breaks HTTP caching." },
+      ],
+    },
+    {
+      question: "When is plain REST everywhere better than mixing REST, GraphQL, and gRPC?",
+      options: [
+        { label: "For a small team with a few services where maintaining three separate contract toolchains would slow delivery", description: "Protocol diversity adds tooling cost; small teams benefit from keeping one simple standard until scale demands more.", correct: true },
+        { label: "When you need bidirectional binary streaming between 20 internal ML workers", description: "High-throughput internal streaming is a strong fit for gRPC." },
+        { label: "Never—every app needs all three", description: "Most apps start cleanly with REST alone." },
+      ],
+    },
+  ]}
+/>

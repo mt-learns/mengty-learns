@@ -28,6 +28,9 @@
     "performance-budget",
     "queues-async",
     "api-design",
+    "graphql-trade-offs",
+    "grpc-protobuf",
+    "rest-graphql-grpc-decision",
     "c4-model"
   ],
   "icon": "architecture"
