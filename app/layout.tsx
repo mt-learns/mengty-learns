@@ -1,5 +1,7 @@
 import { Atkinson_Hyperlegible_Next, Inter, JetBrains_Mono } from 'next/font/google';
 import { Provider } from '@/components/provider';
+import { ThemeColorSync } from '@/components/pwa/standalone-ui';
+import { SwRegister } from '@/components/pwa/sw-register';
 import './global.css';
 import { type ReactNode } from 'react';
 import type { Metadata, Viewport } from 'next';
@@ -48,6 +50,7 @@ const jetbrainsMono = JetBrains_Mono({
 const tagline = 'See how infrastructure really works: notes, animated flows, labs that CI runs and flashcards for DevOps, architecture and security.';
 
 export const viewport: Viewport = {
+  viewportFit: 'cover',
   themeColor: [
     { media: '(prefers-color-scheme: light)', color: '#FAFAF8' },
     { media: '(prefers-color-scheme: dark)', color: '#0E1013' },
@@ -61,6 +64,11 @@ export const metadata: Metadata = {
     template: `%s | ${appName}`,
   },
   description: tagline,
+  appleWebApp: {
+    capable: true,
+    title: 'Mengty',
+    statusBarStyle: 'default',
+  },
   icons: {
     icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }],
     apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
@@ -92,8 +100,12 @@ export const metadata: Metadata = {
 export default function Layout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} ${atkinson.variable} ${atkinsonItalic.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
-      <body className="flex flex-col min-h-screen">
-        <Provider>{children}</Provider>
+      <body className="flex flex-col min-h-dvh">
+        <Provider>
+          <ThemeColorSync />
+          <SwRegister />
+          {children}
+        </Provider>
       </body>
     </html>
   );

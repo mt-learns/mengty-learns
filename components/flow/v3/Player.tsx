@@ -14,7 +14,9 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import {
+  Component,
   lazy,
+  type ReactNode,
   Suspense,
   type KeyboardEvent,
   useCallback,
@@ -81,6 +83,22 @@ function getStepHeadline(step: ParsedFlowStep, index: number): string {
   const words = step.text.trim().split(/\s+/);
   if (words.length <= 6) return step.text.trim();
   return `${words.slice(0, 6).join(' ')}…` || `Step ${index + 1}`;
+}
+
+class FlowCanvasErrorBoundary extends Component<
+  { fallback: ReactNode; children: ReactNode },
+  { hasError: boolean }
+> {
+  state = { hasError: false };
+
+  static getDerivedStateFromError() {
+    return { hasError: true };
+  }
+
+  render() {
+    if (this.state.hasError) return this.props.fallback;
+    return this.props.children;
+  }
 }
 
 /**
@@ -409,21 +427,32 @@ export function Player({
         className="relative w-full overflow-hidden rounded-panel bg-grouped"
       >
         {shouldLoadCanvas ? (
-          <Suspense fallback={<FlowSkeleton nodes={nodes} steps={steps} title={title} />}>
-            <LazyFlowCanvas
-              flowKey={`${id}-${activeVariant?.id ?? 'default'}`}
-              nodes={nodes}
-              steps={steps}
-              groups={groups}
-              layoutMode={layoutMode}
-              direction={preferredDirection}
-              activeStepIndex={stepIndex}
-              reducedMotion={reducedMotion}
-              precomputed={precomputedLayouts?.[activeVariant?.id ?? 'default']}
-              onControlsReady={handleControlsReady}
-              onLayoutChange={handleLayoutChange}
-            />
-          </Suspense>
+          <FlowCanvasErrorBoundary
+            fallback={
+              <div className="relative h-full w-full">
+                <FlowSkeleton nodes={nodes} steps={steps} title={title} />
+                <p className="absolute bottom-2 left-3 rounded-pill border bg-card/90 px-2.5 py-1 text-caption-1 text-muted-foreground">
+                  Interactive flow unavailable offline — showing static diagram.
+                </p>
+              </div>
+            }
+          >
+            <Suspense fallback={<FlowSkeleton nodes={nodes} steps={steps} title={title} />}>
+              <LazyFlowCanvas
+                flowKey={`${id}-${activeVariant?.id ?? 'default'}`}
+                nodes={nodes}
+                steps={steps}
+                groups={groups}
+                layoutMode={layoutMode}
+                direction={preferredDirection}
+                activeStepIndex={stepIndex}
+                reducedMotion={reducedMotion}
+                precomputed={precomputedLayouts?.[activeVariant?.id ?? 'default']}
+                onControlsReady={handleControlsReady}
+                onLayoutChange={handleLayoutChange}
+              />
+            </Suspense>
+          </FlowCanvasErrorBoundary>
         ) : (
           <FlowSkeleton nodes={nodes} steps={steps} title={title} />
         )}

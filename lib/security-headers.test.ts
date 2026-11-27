@@ -26,6 +26,14 @@ describe('public/_headers', () => {
     expect(rules['/_next/static/*']).toEqual({ 'Cache-Control': immutableCache });
   });
 
+  it('serves sw.js and sw-manifest.json with Cache-Control: no-cache', () => {
+    expect(rules['/sw.js']).toEqual({
+      'Cache-Control': 'no-cache',
+      'Service-Worker-Allowed': '/',
+    });
+    expect(rules['/sw-manifest.json']).toEqual({ 'Cache-Control': 'no-cache' });
+  });
+
   it('sends exactly the security headers from lib/security-headers.mjs on every asset', () => {
     expect(rules['/*']).toEqual(Object.fromEntries(securityHeaders.map((h) => [h.key, h.value])));
   });
