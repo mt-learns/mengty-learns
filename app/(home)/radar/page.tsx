@@ -1,6 +1,6 @@
 import { Container } from '@/components/layout/container';
 import type { Metadata } from 'next';
-import { LargeTitle } from '@/components/ios/tile';
+import { LargeTitle } from '@/components/ios/large-title';
 import { Illustration } from '@/components/illustrations';
 import { radarSource, source } from '@/lib/source';
 import { RadarFilter, type RadarEntryItem } from './radar-filter';

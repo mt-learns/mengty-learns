@@ -2,7 +2,7 @@ import { Container } from '@/components/layout/container';
 import type { Metadata } from 'next';
 import Link from 'next/link';
 import { Rss } from 'lucide-react';
-import { LargeTitle } from '@/components/ios/tile';
+import { LargeTitle } from '@/components/ios/large-title';
 import { GroupedList, GroupedRow } from '@/components/ios/grouped-list';
 import { getPublishedDigests } from '@/lib/source';
 

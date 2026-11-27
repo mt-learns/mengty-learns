@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { ArrowLeft, ExternalLink } from 'lucide-react';
-import { LargeTitle } from '@/components/ios/tile';
+import { LargeTitle } from '@/components/ios/large-title';
 import { GroupedList } from '@/components/ios/grouped-list';
 import { getMDXComponents } from '@/components/mdx';
 import { digestSource, getPublishedDigests } from '@/lib/source';
