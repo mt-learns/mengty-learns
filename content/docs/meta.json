@@ -1,6 +1,7 @@
 {
   "pages": [
     "index",
+    "---[build-ship]Build & Ship---",
     "foundations",
     "containers",
     "kubernetes",
@@ -8,11 +9,19 @@
     "ci-cd",
     "gitops",
     "platform",
+    "---[design-code]Design & Code---",
+    "craft",
     "design",
-    "frontend",
     "architecture",
+    "frontend",
+    "---[secure]Secure---",
     "security",
+    "---[work-grow]Work & Grow---",
     "process",
-    "leadership"
+    "leadership",
+    "communication",
+    "english",
+    "career",
+    "business"
   ]
 }
