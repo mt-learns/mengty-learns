@@ -48,6 +48,7 @@ const jetbrainsMono = JetBrains_Mono({
 const tagline = 'See how infrastructure really works: notes, animated flows, labs that CI runs and flashcards for DevOps, architecture and security.';
 
 export const viewport: Viewport = {
+  viewportFit: 'cover',
   themeColor: [
     { media: '(prefers-color-scheme: light)', color: '#FAFAF8' },
     { media: '(prefers-color-scheme: dark)', color: '#0E1013' },
@@ -61,6 +62,11 @@ export const metadata: Metadata = {
     template: `%s | ${appName}`,
   },
   description: tagline,
+  appleWebApp: {
+    capable: true,
+    title: 'Mengty',
+    statusBarStyle: 'default',
+  },
   icons: {
     icon: [{ url: '/favicon.svg', type: 'image/svg+xml' }],
     apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
