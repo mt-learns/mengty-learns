@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
-import type { ReactNode } from 'react';
+import type { CSSProperties, ReactNode } from 'react';
 import { Illustration, SectionIcon } from '@/components/illustrations';
 import { Container } from '@/components/layout/container';
 import { CountUp } from '@/components/home/count-up';
@@ -11,6 +11,7 @@ import { HeroIllustration } from '@/components/home/hero-illustration';
 import { K8sRequestFlow } from '@/components/home/k8s-flow';
 import { PathProgress } from '@/components/home/path-progress';
 import { ReviewCta } from '@/components/home/review-cta';
+import { StaggerGrid } from '@/components/home/stagger-grid';
 import {
   getLatestNotes,
   getLearningPaths,
@@ -188,11 +189,13 @@ export default function HomePage() {
           />
           {/* 10 sections: 1 column, then 2 (5 rows), then 5 (2 rows) once the
               1200px container is full width, so no row ends on an orphan card. */}
-          <ul className="grid gap-4 sm:grid-cols-2 min-[75rem]:grid-cols-5">
-            {paths.map((path) => {
+          <StaggerGrid className="grid gap-4 sm:grid-cols-2 min-[75rem]:grid-cols-5">
+            {paths.map((path, index) => {
               const body = (
                 <>
-                  <SectionIcon name={path.id} size={48} decorative />
+                  <span className="inline-flex w-fit transition-transform duration-200 ease-[var(--ease-ios)] group-hover:-rotate-3 group-hover:scale-105 group-focus-visible:-rotate-3 group-focus-visible:scale-105 motion-reduce:transition-none motion-reduce:transform-none">
+                    <SectionIcon name={path.id} size={48} decorative />
+                  </span>
                   <h3 className="mt-4 text-headline font-semibold">{path.title}</h3>
                   <p className="mt-1 text-subheadline leading-relaxed text-muted-foreground">{path.blurb}</p>
                   <div className="mt-auto flex flex-wrap items-center justify-between gap-2 pt-5 text-footnote">
@@ -210,11 +213,15 @@ export default function HomePage() {
                 </>
               );
               return (
-                <li key={path.id} className="flex">
+                <li
+                  key={path.id}
+                  className="flex"
+                  style={{ '--stagger-i': index } as CSSProperties}
+                >
                   {path.href ? (
                     <Link
                       href={path.href}
-                      className="flex w-full flex-col rounded-card border border-border bg-card p-6 transition-[border-color,box-shadow] min-[75rem]:p-5 hover:border-primary/40 hover:shadow-[0_2px_4px_rgb(var(--shadow-color)/0.04),0_12px_24px_-12px_rgb(var(--shadow-color)/0.18)] motion-reduce:transition-none"
+                      className="group flex w-full flex-col rounded-card border border-border bg-card p-6 transition-[transform,border-color,box-shadow] duration-200 ease-[var(--ease-ios)] min-[75rem]:p-5 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-[0_2px_4px_rgb(var(--shadow-color)/0.04),0_12px_24px_-12px_rgb(var(--shadow-color)/0.18)] focus-visible:-translate-y-0.5 motion-reduce:transition-none motion-reduce:transform-none"
                     >
                       {body}
                     </Link>
@@ -224,7 +231,7 @@ export default function HomePage() {
                 </li>
               );
             })}
-          </ul>
+          </StaggerGrid>
         </Container>
       </section>
 

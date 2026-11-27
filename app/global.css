@@ -305,6 +305,14 @@ figure.shiki pre {
   animation: mt-blink 1s step-end infinite;
 }
 
+.mt-stagger-grid[data-stagger='armed'] > li {
+  opacity: 0;
+}
+
+.mt-stagger-grid[data-stagger='revealed'] > li {
+  animation: mt-rise 380ms var(--ease-ios) calc(var(--stagger-i, 0) * 40ms) both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .prose a:not([data-card]) {
     transition: none;
@@ -312,6 +320,11 @@ figure.shiki pre {
   .mt-hero-rise,
   .mt-hero-float,
   .mt-cursor-blink {
+    animation: none !important;
+  }
+  .mt-stagger-grid[data-stagger='armed'] > li,
+  .mt-stagger-grid[data-stagger='revealed'] > li {
+    opacity: 1;
     animation: none !important;
   }
 }
