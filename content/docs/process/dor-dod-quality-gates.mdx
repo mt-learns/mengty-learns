@@ -97,9 +97,9 @@ If you are starting a new repo today, set up just **three gates**:
     ]
   },
   {
-    question: "Which workflow in Mengty Learns runs Lighthouse CI and @axe-core/playwright against the built out/ directory?",
+    question: "Which workflow in Mengty Learns runs Lighthouse CI and @axe-core/playwright against the opennextjs-cloudflare preview server on port 8787?",
     options: [
-      { label: ".github/workflows/quality.yml", description: "quality.yml builds the site, runs lhci autorun, and scans key routes with @axe-core/playwright.", correct: true },
+      { label: ".github/workflows/quality.yml", description: "quality.yml builds the site, starts opennextjs-cloudflare preview on port 8787, runs lhci autorun, and scans key routes with @axe-core/playwright.", correct: true },
       { label: ".github/workflows/labs.yml", description: "labs.yml validates Dockerfiles, OpenTofu, Kubernetes manifests, and GitHub Actions workflows." },
       { label: ".github/workflows/inbox.yml", description: "inbox.yml fetches RSS feeds into a private GitHub Issue." }
     ]
