@@ -1,5 +1,6 @@
 {
   "title": "Platform tools",
+  "icon": "platform",
   "pages": [
     "secure-deployment-platform",
     "security-baseline",

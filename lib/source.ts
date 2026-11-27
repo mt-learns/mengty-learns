@@ -4,7 +4,14 @@ import { docsRoute } from './shared';
 import { defineCollections, defineDocs } from 'fumadocs-mdx/macro';
 import { metaSchema, pageSchema } from 'fumadocs-core/source/schema';
 import { z } from 'zod';
-import { SectionIcon, SECTION_ICON_NAMES, type SectionIconName } from '@/components/illustrations';
+import {
+  SectionIcon,
+  SECTION_ICON_NAMES,
+  TrackIcon,
+  TRACK_ICON_NAMES,
+  type SectionIconName,
+  type TrackIconName,
+} from '@/components/illustrations';
 
 const frontmatterSchema = pageSchema.extend({
   type: z.enum(['tutorial', 'how-to', 'reference', 'explanation']).optional(),
@@ -52,6 +59,13 @@ export const source = loader({
     if (icon && (SECTION_ICON_NAMES as readonly string[]).includes(icon)) {
       return createElement(SectionIcon, {
         name: icon as SectionIconName,
+        size: 24,
+        decorative: true,
+      });
+    }
+    if (icon && (TRACK_ICON_NAMES as readonly string[]).includes(icon)) {
+      return createElement(TrackIcon, {
+        name: icon as TrackIconName,
         size: 24,
         decorative: true,
       });

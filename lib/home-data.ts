@@ -50,10 +50,18 @@ const SECTION_COPY: Record<SectionIconName, { title: string; blurb: string }> = 
   iac: { title: 'Infrastructure as Code', blurb: 'OpenTofu projects you can plan, apply and destroy.' },
   'ci-cd': { title: 'CI/CD', blurb: 'Pipelines that build, test and ship on every push.' },
   gitops: { title: 'GitOps', blurb: 'Git as the source of truth for what runs.' },
+  platform: { title: 'Platform tools', blurb: 'Ansible, Nginx, API gateways, Vault, Prometheus/Grafana, ELK, and DevSecOps.' },
+  craft: { title: 'Coding craft', blurb: 'Naming, refactoring, debugging, code review and everyday engineering discipline.' },
   design: { title: 'Design', blurb: 'OOP, SOLID and patterns, shown with TypeScript.' },
   architecture: { title: 'Architecture', blurb: 'Layered, hexagonal and how dependencies should point.' },
+  frontend: { title: 'Frontend', blurb: 'React composition, Next.js rendering, data fetching, forms, Tailwind tokens, accessibility, and UX states.' },
   security: { title: 'Security', blurb: 'The common web risks and the habits that prevent them.' },
   process: { title: 'Process', blurb: 'Idea to production, ADRs, quality gates, and retros for small teams.' },
+  leadership: { title: 'Leadership', blurb: 'Transitioning to team lead, clarity, delegation, feedback, and engineering health.' },
+  communication: { title: 'Communication', blurb: 'Feedback, writing to be read, proposals, and alignment across teams.' },
+  english: { title: 'English for engineers', blurb: 'Grammar, sentence patterns, meetings, presentations, and workplace writing.' },
+  career: { title: 'Career & interviews', blurb: 'Resumes, STAR stories, coding patterns, system design, and growth.' },
+  business: { title: 'Business & startups', blurb: 'Problem discovery, MVPs, pricing, unit economics, and founder habits.' },
 };
 
 export interface LearningPath {

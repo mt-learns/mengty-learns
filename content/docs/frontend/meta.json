@@ -1,5 +1,6 @@
 {
   "title": "Frontend",
+  "icon": "frontend",
   "pages": [
     "react-component-architecture",
     "nextjs-rendering-strategies",
