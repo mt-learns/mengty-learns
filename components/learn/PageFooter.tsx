@@ -17,6 +17,7 @@ export function PageFooter({ related, sources, slug }: PageFooterProps) {
               <Link
                 key={rel}
                 href={`/docs/${rel}`}
+                prefetch={false}
                 className="px-3 py-1.5 rounded-pill bg-secondary text-secondary-foreground text-subheadline hover:bg-primary hover:text-primary-foreground transition-colors"
               >
                 {rel.split('/').pop()?.replace(/-/g, ' ')}

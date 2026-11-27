@@ -46,4 +46,5 @@ if (!fs.existsSync(publicDir)) {
 }
 
 fs.writeFileSync(path.join(publicDir, 'cards.json'), JSON.stringify(cards, null, 2));
+fs.writeFileSync(path.join(publicDir, 'card-ids.json'), JSON.stringify(cards.map((c) => c.id)));
 console.log(`Built ${cards.length} cards into public/cards.json`);
