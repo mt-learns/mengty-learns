@@ -71,7 +71,7 @@ Readability rules (added to CONTENT-PLAN §1):
 - Books are cited only (Shvets rule).
 - No fabricated statistics.
 
-### 5.1 English for engineers: new section `english` (about 20 lessons, kind `lesson`)
+### 5.1 English for engineers: new section `english` (about 130 micro-lessons, kind `lesson`; **full syllabus in `docs/content/ENGLISH-SYLLABUS.md`**. The summary below is superseded by it)
 
 Audience: engineers who use English at work, with a special focus on **Khmer-speaking learners**. Research on Khmer L1 interference (Moore & Bounchan, *Khmer Learner English*, LEiA 2010) reports **dropped final consonants** (/t/ /d/ /s/), **missing plural -s** (Khmer has no plural form), **tense not marked** ("I fix it yesterday"), and **missing articles or prepositions**. These lessons target exactly those patterns.
 
