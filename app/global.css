@@ -313,13 +313,28 @@ figure.shiki pre {
   animation: mt-rise 380ms var(--ease-ios) calc(var(--stagger-i, 0) * 40ms) both;
 }
 
+@keyframes mt-pulse-once {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.06);
+  }
+}
+
+.mt-pulse-once {
+  animation: mt-pulse-once 420ms var(--ease-ios) 1 both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .prose a:not([data-card]) {
     transition: none;
   }
   .mt-hero-rise,
   .mt-hero-float,
-  .mt-cursor-blink {
+  .mt-cursor-blink,
+  .mt-pulse-once {
     animation: none !important;
   }
   .mt-stagger-grid[data-stagger='armed'] > li,

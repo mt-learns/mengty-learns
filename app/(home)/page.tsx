@@ -10,6 +10,7 @@ import { DemoRemember } from '@/components/home/demo-remember';
 import { HeroIllustration } from '@/components/home/hero-illustration';
 import { K8sRequestFlow } from '@/components/home/k8s-flow';
 import { PathProgress } from '@/components/home/path-progress';
+import { RadarPulse } from '@/components/home/radar-pulse';
 import { ReviewCta } from '@/components/home/review-cta';
 import { StaggerGrid } from '@/components/home/stagger-grid';
 import {
@@ -265,7 +266,7 @@ export default function HomePage() {
               <li key={note.url}>
                 <Link
                   href={note.url}
-                  className="flex min-h-tap flex-col gap-1.5 px-5 py-4 transition-colors hover:bg-accent sm:flex-row sm:items-center sm:gap-4 motion-reduce:transition-none"
+                  className="group flex min-h-tap flex-col gap-1.5 px-5 py-4 transition-colors hover:bg-accent sm:flex-row sm:items-center sm:gap-4 motion-reduce:transition-none"
                 >
                   <span className="min-w-0 flex-1 font-medium text-foreground">{note.title}</span>
                   <span className="flex shrink-0 items-center gap-3 text-footnote text-muted-foreground">
@@ -276,6 +277,11 @@ export default function HomePage() {
                         {note.dateLabel}
                       </time>
                     )}
+                    <ArrowRight
+                      className="hidden size-4 shrink-0 text-muted-foreground transition-transform duration-200 ease-[var(--ease-ios)] group-hover:translate-x-0.5 group-hover:text-foreground sm:inline-block motion-reduce:transition-none motion-reduce:transform-none"
+                      strokeWidth={1.75}
+                      aria-hidden="true"
+                    />
                   </span>
                 </Link>
               </li>
@@ -299,9 +305,9 @@ export default function HomePage() {
                   <h3 id={`ring-${ring.ring}`} className="text-headline font-semibold">
                     {ring.label}
                   </h3>
-                  <span className="rounded-pill bg-highlight-soft px-2.5 py-0.5 text-footnote font-semibold tabular-nums text-highlight-text">
+                  <RadarPulse className="rounded-pill bg-highlight-soft px-2.5 py-0.5 text-footnote font-semibold tabular-nums text-highlight-text">
                     {ring.count} {ring.count === 1 ? 'entry' : 'entries'}
-                  </span>
+                  </RadarPulse>
                 </div>
                 {ring.top.length > 0 ? (
                   <ul className="mt-4 flex flex-col gap-3">
