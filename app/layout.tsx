@@ -1,5 +1,6 @@
 import { Atkinson_Hyperlegible_Next, Inter, JetBrains_Mono } from 'next/font/google';
 import { Provider } from '@/components/provider';
+import { SwRegister } from '@/components/pwa/sw-register';
 import './global.css';
 import { type ReactNode } from 'react';
 import type { Metadata, Viewport } from 'next';
@@ -99,7 +100,10 @@ export default function Layout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${inter.variable} ${atkinson.variable} ${atkinsonItalic.variable} ${jetbrainsMono.variable}`} suppressHydrationWarning>
       <body className="flex flex-col min-h-screen">
-        <Provider>{children}</Provider>
+        <Provider>
+          <SwRegister />
+          {children}
+        </Provider>
       </body>
     </html>
   );
