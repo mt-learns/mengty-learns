@@ -80,7 +80,9 @@ Cache-aside is like keeping sticky notes of frequent phone numbers on your monit
     { edge: 'app->db', title: 'Query primary database', text: 'API falls back to Postgres to fetch the authoritative row.', label: 'SELECT' },
     { edge: 'db->app', title: 'DB returns record', text: 'Postgres returns the row to the API service.', kind: 'response', label: 'Row' },
     { edge: 'app->redis', title: 'Populate cache with TTL', text: 'API writes user:42 to Redis with a jittered TTL for future reads.', label: 'SET EX 60' },
-    { edge: 'redis->app', title: 'Next read is a cache hit', text: 'Subsequent requests get the value straight from Redis.', kind: 'response', label: 'Hit' },
+    { edge: 'redis->app', title: 'Confirm cache write', text: 'Redis acknowledges the SET EX 60 write with OK.', kind: 'response', label: 'OK' },
+    { edge: 'app->redis', title: 'Subsequent read requests key', text: 'Next request asks Redis for user:42.', label: 'GET key' },
+    { edge: 'redis->app', title: 'Cache hit returns value', text: 'Redis returns the cached user:42 JSON without touching Postgres.', kind: 'response', label: 'Hit' },
   ]}
 />
 

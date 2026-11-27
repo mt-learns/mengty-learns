@@ -111,6 +111,7 @@ Both attacks exploit **confused-deputy trust**:
     { edge: 'app->imds', title: '2. Block link-local / private IP', text: 'Validator rejects non-HTTPS scheme and 169.254.0.0/16 before opening a socket.', kind: 'error', label: 'Blocked' },
     { edge: 'app->ext', title: '3. Allowlist public HTTPS', text: 'Valid allowlisted HTTPS host resolves to a public IP, pinned with redirects off.' },
     { edge: 'ext->app', title: '4. Webhook returns 200', text: 'Allowed external webhook responds safely to the app server.', kind: 'response' },
+    { edge: 'app->caller', title: '5. Return webhook result', text: 'App server returns 200 OK (or 400 on blocked URL) to the caller.', kind: 'response' },
   ]}
 />
 
