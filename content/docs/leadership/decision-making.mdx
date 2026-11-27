@@ -1,0 +1,114 @@
+---
+title: "Decision-Making for Engineering Leads"
+description: How to make timely, evidence-based decisions using DACI/RACI ownership, reversible vs irreversible trade-offs, and lightweight decision logs.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: how-to
+level: intermediate
+tags: [leadership, decision-making, daci, adr, strategy]
+tested_with:
+  atlassian_daci: "Atlassian Team Playbook (DACI)"
+cards:
+  - q: "In the DACI decision framework, what is the difference between Driver (D) and Approver (A)?"
+    a: "The Driver gathers context, options, and input to keep the decision moving; the single Approver makes the final call."
+  - q: "Why should a lead distinguish reversible decisions from hard-to-reverse decisions?"
+    a: "Reversible choices can be decided quickly by the closest engineer or tested with a small experiment, saving heavy review for irreversible choices."
+  - q: "What belongs in a decision record beyond the chosen option?"
+    a: "Context, facts vs assumptions, 2–3 evaluated options with trade-offs, ownership (RACI/DACI), and a follow-up review date."
+  - q: "When should a Team Lead escalate a decision instead of deciding locally?"
+    a: "When the choice crosses budget, legal/compliance exposure, customer SLA commitments, or company-wide architecture."
+related:
+  - process/adr
+  - process/raci
+  - leadership/delegation-and-ownership
+sources:
+  - title: "Atlassian Team Playbook: DACI Decision-Making Framework"
+    url: https://www.atlassian.com/team-playbook/plays/daci
+  - title: "key-learning: Decision-Making and Strategy (author's notes)"
+    url: https://github.com/limme-learning/key-learning/blob/main/management-playbook/08-decision-making-and-strategy.md
+---
+
+## TL;DR
+Good engineering decisions are **timely, evidence-based, and owned by one Approver**. Push **reversible** choices down to the engineer closest to the work, reserve **ADRs and DACI** for hard-to-reverse choices, and always separate **facts** from **assumptions** before picking an option.
+
+## Why it exists
+Teams stall in two opposite ways: **analysis paralysis** (everyone debates for three weeks because nobody knows who the single Approver is) or **unrecorded gut calls** (six months later nobody remembers why a risky database or vendor choice was made).
+
+## Mental model: DACI + Reversibility
+Atlassian's **DACI** framework prevents committee gridlock:
+- **Driver (D):** Moves the decision forward—collects facts, drafts options, sets the deadline.
+- **Approver (A):** **One person** with final sign-off authority.
+- **Contributors (C):** Subject-matter experts (Security, Ops, QA, Product) whose input shapes the options.
+- **Informed (I):** Stakeholders notified once the decision is made.
+
+Pair DACI with **reversibility**: if a choice is easy to undo (e.g., an internal helper module), let the responsible developer decide in a PR. If it is costly to undo (e.g., public API contract, auth model, database engine), write a short **ADR** (`process/adr`).
+
+## Do it: 8-step decision process
+
+1. **Frame the problem & outcome:** What must be true after this decision?
+2. **Separate facts from assumptions:** List verified metrics/constraints separately from guesses.
+3. **List hard constraints:** Budget, deadline, compliance, latency, team skills.
+4. **Draft 2–3 real options:** Include *"do nothing / defer"* when relevant.
+5. **Compare trade-offs:** Value, delivery time, operational cost, risk, maintainability, and reversibility.
+6. **Consult only essential experts:** Keep Contributors small (`process/raci`).
+7. **Assign one Approver and decide:** Pick an owner and set a decision deadline.
+8. **Log and revisit:** Document in an ADR/ticket with a metric and review date.
+
+### Compact decision record template
+
+```markdown
+# Decision: [Short Title]
+
+## Context & Constraints
+What problem are we solving, and what deadlines or limits apply?
+
+## Facts vs Assumptions
+- **Fact:** Current p95 query latency is 1.8s at 2k req/min.
+- **Assumption:** Adding a read replica cuts p95 under 300ms.
+
+## Options
+1. **Option A (Read replica):** Fast to ship (2 days); adds replica lag handling.
+2. **Option B (Redis cache):** Sub-50ms reads; requires cache invalidation rules.
+
+## Decision & Ownership (DACI)
+- **Driver:** @backend-dev · **Approver:** @team-lead
+- **Contributors:** @ops, @qa · **Informed:** @pm
+- **Chosen:** Option A, with a 2-week latency review.
+```
+
+## Gotchas
+- **Multiple Approvers:** Two Approvers means neither owns the risk and the decision stalls.
+- **Treating assumptions as facts:** Validating a 2-day spike assumption before committing saves weeks of rework.
+- **Escalating everything (or nothing):** Push local implementation choices down; escalate budget, customer commitments, legal exposure, and cross-team architecture.
+
+## Production checklist
+- [ ] Hard-to-reverse technical decisions have a written ADR (`process/adr`) with ≥ 2 options.
+- [ ] Every major decision names **one Approver** and a decision deadline.
+- [ ] Unvalidated assumptions are flagged for a time-boxed spike before full build.
+- [ ] Decisions include a follow-up metric or review date to verify the outcome.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "In the DACI framework, what happens if a decision has three Approvers listed?",
+    options: [
+      { label: "Accountability splits and the decision risks stalling—there must be exactly one Approver", description: "DACI intentionally limits Approver to one person while allowing multiple Contributors.", correct: true },
+      { label: "It speeds up the decision because three people can approve in parallel", description: "Multiple approvers create conflicting vetoes and ambiguity." },
+      { label: "It turns the Approvers into Informed stakeholders", description: "Informed stakeholders only receive the outcome after the decision is made." }
+    ]
+  },
+  {
+    question: "When should a Team Lead push a technical decision down to the implementing engineer instead of requiring a DACI review?",
+    options: [
+      { label: "When the choice is easily reversible and contained within the team's local boundary", description: "Local, reversible choices move fastest when decided by the engineer with the most context.", correct: true },
+      { label: "When the choice changes public API contracts or compliance boundaries", description: "Hard-to-reverse or cross-cutting choices need an ADR and stakeholder consultation." },
+      { label: "Whenever the lead is busy, regardless of blast radius", description: "High-blast-radius decisions still need proper review and ownership." }
+    ]
+  }
+]} />
+
+## Sources
+- [Atlassian Team Playbook: DACI Decision-Making Framework](https://www.atlassian.com/team-playbook/plays/daci)
+- [key-learning: Decision-Making and Strategy (author's notes)](https://github.com/limme-learning/key-learning/blob/main/management-playbook/08-decision-making-and-strategy.md)
