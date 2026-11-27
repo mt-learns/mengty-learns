@@ -17,6 +17,7 @@
     "event-sourcing",
     "caching-redis",
     "queues-async",
+    "api-design",
     "c4-model"
   ],
   "icon": "architecture"
