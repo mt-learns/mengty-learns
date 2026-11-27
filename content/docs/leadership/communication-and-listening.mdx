@@ -1,0 +1,127 @@
+---
+title: "Communication and Active Listening"
+description: Practical frameworks for engineering leads—active listening, the 7 Cs of clear writing, and RAG status updates that state risks and decisions needed.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: how-to
+level: beginner
+tags: [leadership, communication, listening, status-updates, alignment]
+tested_with:
+  rework_guide: "Google re:Work (Manager Communication)"
+cards:
+  - q: "What is the primary goal of paraphrasing during active listening?"
+    a: "To verify you understood the speaker's actual problem, constraints, and assumptions before proposing a solution."
+  - q: "What makes a 'Yellow' or 'Red' RAG status update actionable for stakeholders?"
+    a: "Pairing the risk and its impact with a specific 'Decision needed' (owner + deadline) and a concrete 'Recommendation'."
+  - q: "When should an engineering team use a synchronous meeting instead of an async written update?"
+    a: "Reserve meetings for decisions, discovery, conflict resolution, and live pairing—keep routine status updates asynchronous."
+  - q: "What should a lead say when they do not know the answer to a stakeholder question?"
+    a: "State clearly what you know, what you do not know yet, and the exact time you will follow up with an answer."
+related:
+  - process/adr
+  - process/raci
+  - leadership/clarity-and-alignment
+sources:
+  - title: "Google re:Work: Guide to Developing and Supporting Your Team"
+    url: https://rework.withgoogle.com/en/guides/managers-develop-and-support-your-team
+  - title: "key-learning: Communication and Active Listening (author's notes)"
+    url: https://github.com/limme-learning/key-learning/blob/main/management-playbook/04-communication-and-active-listening.md
+  - title: "key-learning: Communication Patterns for Team Leads (author's notes)"
+    url: https://github.com/limme-learning/key-learning/blob/main/team-lead-growth/01-becoming-a-team-lead/03-communication-patterns.md
+---
+
+## TL;DR
+Great technical leads listen to **understand before replying**, write using the **7 Cs** (clear, concise, correct, complete, concrete, coherent, courteous), and replace vague "everything is fine" updates with **RAG status reports** that name the risk, decision needed, and recommended option.
+
+## Why it exists
+Most delivery surprises are communication failures, not coding failures. Engineers often report "90% done" while hiding an unconfirmed requirement, or hold status meetings that end without owners or deadlines.
+
+## Mental model: Listen → Separate → Confirm
+1. **Listen without rehearsing:** Do not draft your counter-argument while the other person is talking.
+2. **Ask open questions:** *"Can you walk me through an example?"* or *"Which constraint matters most?"*
+3. **Paraphrase back:** *"So the core issue is that finance needs a reconciled CSV before 09:00—did I get that right?"*
+4. **Separate facts from assumptions:** Distinguish observed logs/metrics from guesses.
+5. **Confirm next action:** End with one owner and one date.
+
+## Do it: Templates you can reuse
+
+### 1. Actionable RAG status update
+
+```text
+Status: YELLOW
+
+Completed:
+- Inventory adjustment API and audit log merged to staging.
+- Automated integration tests passing.
+
+In progress:
+- Staging QA verification.
+
+Risk / blocker:
+- Product has not confirmed whether cancelled orders restore stock automatically.
+
+Impact:
+- Delays production release by 1 day per day of delay.
+
+Decision needed:
+- Confirm cancellation restock rule (Owner: PO, by Today 16:00).
+
+Recommendation:
+- Restore stock only after manager approval, matching our audit policy.
+
+Next milestone / ETA:
+- Staging sign-off: Thursday · Production release: Friday (if decided today).
+```
+
+### 2. Meeting decision summary
+
+```markdown
+# Decision Notes: [Topic] — [YYYY-MM-DD]
+
+## Decisions
+- [Decision] — Owner: [Role/Name]
+
+## Actions
+- [Action] — Owner: [Role/Name] — Due: [YYYY-MM-DD]
+
+## Open risks
+- [Risk] — Decision needed by: [YYYY-MM-DD]
+```
+
+## Gotchas
+- **Raising a problem with zero options:** Escalating *"the third-party API is slow"* forces managers to guess. Always bring 1–2 options and your recommendation.
+- **Meeting without written notes:** If a decision isn't written in the ticket or doc right after the call, each attendee leaves with a different memory.
+- **Hiding Yellow/Red until the deadline:** Surfacing a Yellow risk three days early gives stakeholders options; surfacing it on launch day creates a crisis.
+
+## Production checklist
+- [ ] Routine status updates are sent asynchronously in writing (RAG format).
+- [ ] Every escalation includes **Impact**, **Decision needed (owner + date)**, and **Recommendation**.
+- [ ] Important meetings end with a 5-line **Decision & Action** summary posted in the shared channel/ticket.
+- [ ] Unknowns are answered honestly with a follow-up timestamp.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "A feature is blocked because a third-party webhook format is undocumented. What should your status update include?",
+    options: [
+      { label: "Impact on the timeline, the specific decision needed, and your recommended workaround or fallback", description: "Actionable updates pair the blocker with impact, a decision owner, and a proposed option.", correct: true },
+      { label: "Mark status Green until the day before launch in case it resolves itself", description: "Hiding risks until the deadline removes everyone's ability to adjust scope or help." },
+      { label: "Schedule a 60-minute status meeting with the whole company", description: "Async written escalation to the right decision-maker is faster and clearer." }
+    ]
+  },
+  {
+    question: "What is the purpose of paraphrasing during a tense requirement discussion?",
+    options: [
+      { label: "To confirm shared understanding and separate facts from assumptions before debating solutions", description: "Paraphrasing catches misunderstandings early and lowers defensiveness.", correct: true },
+      { label: "To repeat your own opinion louder", description: "Paraphrasing reflects the other person's point accurately, not your own." },
+      { label: "To avoid writing meeting notes afterward", description: "You still document the agreed decisions and action items." }
+    ]
+  }
+]} />
+
+## Sources
+- [Google re:Work: Guide to Developing and Supporting Your Team](https://rework.withgoogle.com/en/guides/managers-develop-and-support-your-team)
+- [key-learning: Communication and Active Listening (author's notes)](https://github.com/limme-learning/key-learning/blob/main/management-playbook/04-communication-and-active-listening.md)
+- [key-learning: Communication Patterns for Team Leads (author's notes)](https://github.com/limme-learning/key-learning/blob/main/team-lead-growth/01-becoming-a-team-lead/03-communication-patterns.md)
