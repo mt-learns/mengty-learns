@@ -1,0 +1,228 @@
+---
+title: "Next.js Rendering Strategies: SSG, ISR, SSR and Streaming"
+description: Pick when a page is computed - build time, on a schedule, or per request - and stream the slow parts, instead of forcing every page to be static.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: concept
+type: explanation
+level: intermediate
+tags: [nextjs, react, rendering, ssg, isr, ssr, streaming, rsc]
+tested_with:
+  next: "16.4.6"
+  react: "19.3.1"
+cards:
+  - q: "What is the one question that decides between static and dynamic rendering?"
+    a: "Is the HTML safe to share between different users? If the output depends on the signed-in user, it must be rendered per request (dynamic); if it is identical for everyone, it can be static or revalidated."
+  - q: "What does ISR add over plain SSG?"
+    a: "A staleness window: the page is served from cache, then re-rendered in the background after a time or an on-demand tag invalidation, so content can change without a redeploy."
+  - q: "How do you cache a personalised response safely?"
+    a: "You do not share it. Read identity inside the request path, use `cache: 'no-store'`, and never wrap a function that reads cookies or headers in a cross-request cache."
+  - q: "What is the cheapest way to stop one slow region from blocking a whole page?"
+    a: "Wrap each independently useful region in its own `<Suspense>` with a layout-matching fallback, so the shell paints first and the slow region streams in later."
+related:
+  - frontend/react-component-architecture
+  - frontend/data-fetching-tanstack-query
+  - frontend/loading-error-empty-states
+  - containers/multi-stage-nextjs
+sources:
+  - title: "Next.js docs: Caching"
+    url: https://nextjs.org/docs/app/getting-started/caching
+  - title: "Next.js docs: Revalidating"
+    url: https://nextjs.org/docs/app/getting-started/revalidating
+  - title: "Next.js docs: Server and Client Components"
+    url: https://nextjs.org/docs/app/getting-started/server-and-client-components
+  - title: "Next.js docs: loading.js"
+    url: https://nextjs.org/docs/app/api-reference/file-conventions/loading
+  - title: "Next.js docs: use cache directive"
+    url: https://nextjs.org/docs/app/api-reference/directives/use-cache
+  - title: "software-engineering: Next.js App Router and rendering strategies (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/07-frontend-best-practices/02-nextjs-app-router-and-rendering-strategies.md
+---
+
+## 1. Intent
+
+<Intent>
+The App Router has more than one rendering mode, and they can coexist inside one page. Choose **when** the HTML is computed and **whether it is shared** - then stream the regions that are slow. "Everything static" is not the goal; correctness is.
+</Intent>
+
+## 2. Problem
+
+A public marketing page and a signed-in dashboard are not the same problem. Teams that apply one policy to both usually get one of two failures. Either they force a personalised page to be static and serve one user's data to another, or they make every page dynamic and pay server cost and latency for content that never changes. A third failure is subtler: one slow data source blocks the whole page because a single `await Promise.all` and a single error boundary turn six independent widgets into one fate.
+
+## 3. Solution
+
+Separate the two axes: **when** and **for whom**.
+
+| Strategy | Rendered | Shared between users? | Good for |
+|---|---|---|---|
+| **SSG** (static) | At build time | Yes | Marketing, legal, help articles |
+| **ISR** (revalidated) | At build, then background refresh | Yes, with a staleness window | Pricing, rate tables, published content |
+| **SSR** (dynamic) | Per request on the server | No | Dashboards, statements, anything behind auth |
+| **RSC** (Server Components) | On the server, streamed as payload | Depends on the data calls | The default component model in all of the above |
+| **Streaming** | Shell first, regions later | Orthogonal | Any page where one region is slower than the rest |
+
+The decision rule is one sentence: **if the output depends on who is asking, it is dynamic; if it is identical for everyone, it can be static or revalidated.** RSC and streaming are the mechanism, not alternatives to SSG/ISR/SSR.
+
+## 4. Real-world analogy
+
+<Analogy>
+A bakery bakes and seals a batch once and every shop sells the same sealed loaf (SSG). If the recipe changes, the shop keeps selling the old batch until the new one arrives (ISR). A made-to-order sandwich with the customer's name on it is assembled per customer and never handed to someone else (SSR). Streaming is serving the bread while the sandwich filling is still being prepared.
+</Analogy>
+
+## 5. Flow: watch it work
+
+<Flow
+  id="nextjs-rendering-path"
+  title="Dynamic page with streaming"
+  nodes={[
+    { id: 'req', label: 'Browser request', subtitle: 'A URL is opened', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'route', label: 'Route segment', subtitle: 'Params + cookies', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+    { id: 'render', label: 'Dynamic render', subtitle: 'Per request', icon: 'service', category: 'service', rank: 2, order: 0 },
+    { id: 'shell', label: 'Static shell', subtitle: 'loading.tsx', icon: 'interface', category: 'abstraction', rank: 3, order: 0 },
+    { id: 'region', label: 'Suspense region', subtitle: 'Slow data', icon: 'db', category: 'data', rank: 4, order: 0 },
+  ]}
+  steps={[
+    { edge: 'req->route', title: 'Match the route', text: 'The App Router matches a segment and reads cookies, headers or params.' },
+    { edge: 'route->render', title: 'Per-user? Go dynamic', text: 'If the output depends on the signed-in user, render it per request. Never share it.' },
+    { edge: 'render->shell', title: 'Render the shell', text: 'loading.tsx paints immediately while the slow regions are still waiting.' },
+    { edge: 'shell->region', title: 'Stream the slow region', text: 'Each Suspense boundary resolves on its own; the fastest region does not wait for the slowest.' },
+    { edge: 'region->shell', title: 'Region resolves', text: 'The slow data arrives and replaces its fallback without blocking the rest of the page.', kind: 'response' },
+    { edge: 'shell->render', title: 'Page assembled', text: 'The shell and its resolved regions form one HTML response.', kind: 'response' },
+    { edge: 'render->route', title: 'HTML ready', text: 'The request-scoped render finishes and hands the response back to the route.', kind: 'response' },
+    { edge: 'route->req', title: 'Stream to browser', text: 'HTML streams to the client; static parts were already cached at the edge.', kind: 'response' },
+  ]}
+/>
+
+**This site is the worked example.** Every docs page is rendered at build time (SSG) and the build fails if a route would render on demand (`scripts/check-static-routes.mjs`). The only client JavaScript on most pages is a small interactive island: `<Flow>` is lazy-imported with `next/dynamic` and React Flow is fetched only when the diagram scrolls into view. The static shell and the numbered step list work without JavaScript at all.
+
+## 6. Structure
+
+Route groups express the policy per segment:
+
+```text
+app/
+  (marketing)/            # no URL segment, own layout
+    page.tsx              # SSG
+    pricing/page.tsx      # ISR: revalidate 3600, tag "pricing"
+  (authenticated)/
+    layout.tsx            # session check
+    portal/
+      page.tsx            # dynamic (reads cookies)
+      loading.tsx         # streamed skeleton for this segment
+      error.tsx           # client boundary for this segment
+  api/
+    webhooks/cms/route.ts # calls revalidateTag("pricing")
+```
+
+Be explicit about caching at the call site. Do not rely on version defaults that have changed before:
+
+```ts
+// Shared reference data: cache it, tag it, invalidate on publish.
+await fetch(`${API}/products/motor/rates`, {
+  next: { revalidate: 3600, tags: ['motor-rates'] },
+})
+
+// Personalised data: never cached, and say so.
+await fetch(`${API}/brokers/${brokerId}/commission`, {
+  cache: 'no-store',
+  headers: { authorization: `Bearer ${token}` },
+})
+```
+
+For non-`fetch` work, Next 16 offers the `use cache` directive with `cacheLife` and `cacheTag`; the older `unstable_cache` remains available for projects that have not adopted Cache Components. Either way, **every input that affects the output belongs in the cache key**. A function that reads `cookies()`, `headers()` or `auth()` must never sit behind a cross-request cache.
+
+## 7. When to use / when to avoid
+
+<Checklist
+  use={[
+    "SSG for content that only changes when you deploy: marketing, legal, documentation.",
+    "ISR with a tag for content an editor changes on a schedule: pricing, catalogues, help centre.",
+    "SSR for anything personalised or behind auth: dashboards, statements, approval queues.",
+    "Per-region Suspense for a fast page with one expensive report or third-party widget."
+  ]}
+  avoid={[
+    "Caching a response whose body depends on the request identity - that is a data-disclosure incident.",
+    "One root-level error boundary and one Suspense around the whole page: it hides partial failure and serialises loading.",
+    "Streaming a region whose fallback changes the layout - reserve the space or you trade a wait for a layout shift."
+  ]}
+/>
+
+## 8. How to implement
+
+<Steps>
+  <Step title="Classify each route">
+    Ask whether its HTML is safe to share. Write the answer next to the route (a comment, an ADR, a test) so the next engineer does not guess.
+  </Step>
+  <Step title="Make caching explicit">
+    Put `revalidate` + `tags` on shared fetches and `cache: 'no-store'` on per-user fetches. Never inherit a default you did not choose.
+  </Step>
+  <Step title="Split slow regions">
+    Move each independently useful region into its own async component behind `<Suspense>` with a fallback that matches the final layout.
+  </Step>
+  <Step title="Invalidate narrowly">
+    After a write, prefer `revalidateTag('pricing')` over `revalidatePath('/')`, and `updateTag` when the user must see their own change immediately.
+  </Step>
+  <Step title="Test the boundary">
+    Add a test that the per-user page never returns another user's data, and that the static route is in the prerender manifest.
+  </Step>
+</Steps>
+
+## 9. Pros / Cons
+
+<ProsCons
+  pros={[
+    "Each page gets the cheapest correct rendering mode instead of one global policy.",
+    "Static and revalidated pages cost almost nothing at request time and survive traffic spikes.",
+    "Per-region streaming makes a slow dependency a small wait instead of a blank page."
+  ]}
+  cons={[
+    "More decisions per route: each one needs an owner and a documented reason.",
+    "A cache key that misses one input is a security bug, not a performance bug.",
+    "Streaming adds boundaries and skeletons to design, build and test."
+  ]}
+/>
+
+## 10. Relations
+
+- Component boundaries decide what can stream: see [React Component Architecture](/docs/frontend/react-component-architecture).
+- Client-side server state after first paint is a different cache: see [Data Fetching with TanStack Query](/docs/frontend/data-fetching-tanstack-query).
+- The failure half of streaming is covered in [Loading, Error and Empty States](/docs/frontend/loading-error-empty-states).
+- The build-time container for this app is [Multi-stage builds for Next.js](/docs/containers/multi-stage-nextjs).
+
+## 11. Check yourself
+
+<Quiz questions={[
+  {
+    question: "A commission statement is read from a cookie and cached under a key that only includes the reporting period. What is the likely result?",
+    options: [
+      { label: "One user's statement can be served to every user for the cache lifetime", description: "The cache key omits the identity, so the first user's response becomes the shared value.", correct: true },
+      { label: "The cache simply misses and re-fetches per user", description: "A cache hit does not know who is asking; it returns the stored value." },
+      { label: "Next.js throws a build error", description: "The framework cannot see that the key is incomplete." }
+    ]
+  },
+  {
+    question: "Which strategy gives static speed but lets an editor publish a new price without a redeploy?",
+    options: [
+      { label: "ISR with a time window and a cache tag", description: "The cached page is served, then refreshed in the background or on `revalidateTag`.", correct: true },
+      { label: "SSG with no revalidation", description: "SSG only changes when the build runs again." },
+      { label: "SSR for every visitor", description: "That is correct but not static speed." }
+    ]
+  },
+  {
+    question: "One widget on an otherwise fast page is slow. What is the right shape?",
+    options: [
+      { label: "A Suspense boundary around that widget with a layout-matching fallback", description: "The shell paints first and only that region waits.", correct: true },
+      { label: "One Suspense boundary around the whole page", description: "The fastest regions then wait for the slowest." },
+      { label: "A client-side spinner for the whole page", description: "That throws away the server-rendered shell." }
+    ]
+  }
+]} />
+
+## 12. Sources
+
+- [Next.js docs: Caching](https://nextjs.org/docs/app/getting-started/caching)
+- [Next.js docs: Revalidating](https://nextjs.org/docs/app/getting-started/revalidating)
+- [Next.js docs: Server and Client Components](https://nextjs.org/docs/app/getting-started/server-and-client-components)
+- [Next.js docs: loading.js](https://nextjs.org/docs/app/api-reference/file-conventions/loading)
+- [Next.js docs: use cache directive](https://nextjs.org/docs/app/api-reference/directives/use-cache)
+- [software-engineering: Next.js App Router and rendering strategies (author's notes)](https://github.com/limme-learning/software-engineering/blob/main/07-frontend-best-practices/02-nextjs-app-router-and-rendering-strategies.md)
