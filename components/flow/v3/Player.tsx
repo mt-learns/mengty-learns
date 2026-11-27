@@ -1,6 +1,5 @@
 'use client';
 
-import dynamic from 'next/dynamic';
 import {
   Check,
   ChevronLeft,
@@ -15,6 +14,8 @@ import {
   RotateCcw,
 } from 'lucide-react';
 import {
+  lazy,
+  Suspense,
   type KeyboardEvent,
   useCallback,
   useEffect,
@@ -44,9 +45,11 @@ import type { FlowCanvasControls, FlowCanvasLayoutMeta } from './FlowCanvas';
 
 const STEP_INTERVAL_MS = 2200;
 
-const LazyFlowCanvas = dynamic(
-  () => import('./FlowCanvas').then((mod) => mod.FlowCanvas),
-  { ssr: false },
+// React.lazy (not next/dynamic) so Next does not inject a <link rel="preload">
+// for the @xyflow/react chunk into the initial HTML. The chunk is fetched only
+// when `shouldLoadCanvas` flips true on viewport intersection.
+const LazyFlowCanvas = lazy(() =>
+  import('./FlowCanvas').then((mod) => ({ default: mod.FlowCanvas })),
 );
 
 function subscribeReducedMotion(callback: () => void): () => void {
@@ -406,19 +409,21 @@ export function Player({
         className="relative w-full overflow-hidden rounded-panel bg-grouped"
       >
         {shouldLoadCanvas ? (
-          <LazyFlowCanvas
-            flowKey={`${id}-${activeVariant?.id ?? 'default'}`}
-            nodes={nodes}
-            steps={steps}
-            groups={groups}
-            layoutMode={layoutMode}
-            direction={preferredDirection}
-            activeStepIndex={stepIndex}
-            reducedMotion={reducedMotion}
-            precomputed={precomputedLayouts?.[activeVariant?.id ?? 'default']}
-            onControlsReady={handleControlsReady}
-            onLayoutChange={handleLayoutChange}
-          />
+          <Suspense fallback={<FlowSkeleton nodes={nodes} steps={steps} title={title} />}>
+            <LazyFlowCanvas
+              flowKey={`${id}-${activeVariant?.id ?? 'default'}`}
+              nodes={nodes}
+              steps={steps}
+              groups={groups}
+              layoutMode={layoutMode}
+              direction={preferredDirection}
+              activeStepIndex={stepIndex}
+              reducedMotion={reducedMotion}
+              precomputed={precomputedLayouts?.[activeVariant?.id ?? 'default']}
+              onControlsReady={handleControlsReady}
+              onLayoutChange={handleLayoutChange}
+            />
+          </Suspense>
         ) : (
           <FlowSkeleton nodes={nodes} steps={steps} title={title} />
         )}
