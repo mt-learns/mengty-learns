@@ -1,9 +1,48 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import vm from 'node:vm';
 import matter from 'gray-matter';
 
 const docsDir = path.join('content', 'docs');
 const cards = [];
+
+function extractTakeawayCards(body, relativeSlug, title) {
+  const regex = /<KeyTakeaways\b[^>]*\bitems=\{(\[[\s\S]*?\])\}[^>]*\/>/g;
+  let match;
+  let offset = 0;
+  while ((match = regex.exec(body)) !== null) {
+    try {
+      const items = vm.runInNewContext(`(${match[1]})`, Object.create(null), { timeout: 100 });
+      if (!Array.isArray(items)) continue;
+      items.forEach((item, idx) => {
+        if (typeof item === 'string') {
+          cards.push({
+            id: `${relativeSlug}-kt-${offset + idx}`,
+            slug: relativeSlug,
+            title,
+            q: `Key takeaway #${offset + idx + 1} from ${title}`,
+            a: item,
+          });
+        } else if (item && typeof item === 'object') {
+          const q = item.card?.q ?? `Key takeaway #${offset + idx + 1} from ${title}`;
+          const a = item.card?.a ?? (item.detail ? `${item.point} — ${item.detail}` : item.point);
+          if (q && a) {
+            cards.push({
+              id: `${relativeSlug}-kt-${offset + idx}`,
+              slug: relativeSlug,
+              title,
+              q,
+              a,
+            });
+          }
+        }
+      });
+      offset += items.length;
+    } catch {
+      // Skip malformed JSX literal
+    }
+  }
+}
 
 function walk(dir) {
   const files = fs.readdirSync(dir);
@@ -14,7 +53,7 @@ function walk(dir) {
       walk(fullPath);
     } else if (file.endsWith('.mdx')) {
       const content = fs.readFileSync(fullPath, 'utf8');
-      const { data } = matter(content);
+      const { data, content: body } = matter(content);
       if (data.status === 'draft') continue;
       const relativeSlug = path
         .relative(docsDir, fullPath)
@@ -32,6 +71,7 @@ function walk(dir) {
           });
         });
       }
+      extractTakeawayCards(body, relativeSlug, data.title || relativeSlug);
     }
   }
 }

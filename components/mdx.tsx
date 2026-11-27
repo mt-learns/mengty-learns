@@ -17,6 +17,18 @@ import {
   Steps,
 } from '@/components/mdx/concept';
 
+import {
+  Dialogue,
+  Example,
+  KeyTakeaways,
+  OnePicture,
+  Rule,
+  Say,
+  YouWillLearn,
+} from '@/components/mdx/reading';
+import { Template } from '@/components/mdx/Template';
+import { PatternBank } from '@/components/mdx/PatternBank';
+import { DecisionTree } from '@/components/mdx/DecisionTree';
 import { FlowServer as Flow } from '@/components/flow/FlowServer';
 import { Diagram } from '@/components/diagram/Diagram';
 import { Quiz } from '@/components/learn/Quiz';
@@ -46,6 +58,16 @@ export function getMDXComponents(components?: MDXComponents) {
     Relations,
     LabLink,
     MyTake,
+    YouWillLearn,
+    OnePicture,
+    KeyTakeaways,
+    Rule,
+    Example,
+    Say,
+    Dialogue,
+    Template,
+    PatternBank,
+    DecisionTree,
     Flow,
     Diagram,
     Quiz,
