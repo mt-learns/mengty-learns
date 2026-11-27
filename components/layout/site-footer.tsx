@@ -17,7 +17,7 @@ export function SiteFooter() {
             <LogoMark className="size-6" />
             {appName}
           </span>
-          <p className="text-subheadline text-muted-foreground">Static site. No tracking.</p>
+          <p className="text-subheadline text-muted-foreground">Static site. Cookie-free analytics, no ads.</p>
         </div>
         <nav aria-label="Footer">
           <ul className="flex flex-wrap gap-x-6 gap-y-1">
