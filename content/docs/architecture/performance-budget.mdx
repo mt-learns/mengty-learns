@@ -1,0 +1,117 @@
+---
+title: Performance Budgets & CI Gates
+description: Turn subjective "it feels slow" debates into objective CI gates—API p95 latency, query-count assertions, bundle size limits, and throttled Core Web Vitals.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: reference
+level: intermediate
+tags: [architecture, performance, ci-cd, web-vitals, lighthouse, database]
+tested_with:
+  lhci: "0.16.1"
+  next: "16.4.6"
+cards:
+  - q: "What three elements define an actionable performance budget?"
+    a: "A user-facing metric (e.g. LCP, API p95, bundle KB, queries/request), an explicit numeric threshold, and an automated CI gate that fails when exceeded."
+  - q: "Why are N+1 queries called the default enterprise performance bug?"
+    a: "They pass code review and fast unit tests with 10 fixture rows, then degrade production latency catastrophically when a table reaches thousands of rows."
+  - q: "Why should Lighthouse CI run with CPU and network throttling enabled?"
+    a: "Unthrottled developer laptops mask real-world bottlenecks experienced by users on mid-tier hardware or slower mobile/VPN networks."
+  - q: "Why track p95/p99 latency per tenant or route instead of only a global average?"
+    a: "A healthy global mean can hide severe tail latency affecting your largest tenant or slowest critical endpoint."
+related:
+  - architecture/database-indexing
+  - architecture/orm-pitfalls
+  - ci-cd/this-site-pipeline
+  - process/testing-strategy
+sources:
+  - title: "web.dev: Performance Budgets 101"
+    url: https://web.dev/articles/performance-budgets-101
+  - title: "web.dev: Core Web Vitals (LCP, INP, CLS)"
+    url: https://web.dev/articles/vitals
+  - title: "Lighthouse CI Documentation"
+    url: https://github.com/GoogleChrome/lighthouse-ci/blob/main/docs/configuration.md
+  - title: "software-engineering: Performance Budget (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/01-core-concepts/06-performance-budget.md
+---
+
+## TL;DR
+A **performance budget** pairs a concrete metric (**API p95**, **queries per request**, **JS bundle KB**, or **Core Web Vitals**) with a hard **CI threshold**. Without an automated gate, performance erodes by 200ms per sprint until users abandon the app.
+
+## Why it exists
+No single PR ruins performance. One PR adds a chart library, the next adds an unindexed query, and a third adds a full icon barrel import. Eighteen months later, page load has tripled and no single commit is to blame.
+
+## Mental model
+Measure **before** optimizing, gate **every PR** in CI, and calibrate budgets with **real-user monitoring (RUM)**.
+
+<Diagram
+  id="perf-budget-loop"
+  ariaLabel="PR checks enforce query count, bundle size, and Lighthouse CI budgets before merge; production RUM recalibrates thresholds"
+  caption="CI gates catch regressions before merge; production RUM keeps budgets honest."
+  nodes={[
+    { id: 'pr', label: 'Pull Request', subtitle: 'Code + assets', icon: 'git', category: 'client', rank: 0, order: 0 },
+    { id: 'ci', label: 'CI Budget Gates', subtitle: 'Bundle, Queries, LHCI', icon: 'ci', category: 'service', rank: 1, order: 0 },
+    { id: 'rum', label: 'Production RUM', subtitle: 'p75/p95 telemetry', icon: 'gateway', category: 'data', rank: 2, order: 0 },
+  ]}
+  edges={[
+    { from: 'pr', to: 'ci', label: 'check' },
+    { from: 'ci', to: 'rum', label: 'deploy' },
+    { from: 'rum', to: 'ci', label: 'recalibrate', kind: 'response' },
+  ]}
+/>
+
+## Do it
+
+### Four high-leverage budgets
+
+| Budget | Example threshold | What it catches |
+|---|---|---|
+| **Queries per request** | `<= 5–10` per endpoint | N+1 ORM lazy-loading loops |
+| **API p95 latency** | `< 300–400ms` | Missing indexes, chatty downstream RPCs |
+| **Route JS bundle** | `< 200–250 KB` gzip | Accidental barrel imports (`import *`), unsplit heavy widgets |
+| **Core Web Vitals** | `LCP < 2.5s`, `INP < 200ms`, `CLS < 0.1` | Render-blocking assets, layout shifts, main-thread TBT |
+
+### Real example in this site
+This repository enforces Lighthouse CI budgets in `.github/workflows/quality.yml` and lazy-loads heavy client libraries (such as `@xyflow/react`) only on pages that render a `<Flow>` and only when scrolled into view (`IntersectionObserver`), keeping non-flow pages at 0 KB of React Flow JS.
+
+```ts
+// Good: dynamic import keeps heavy widgets out of the initial route bundle
+const LazyFlow = dynamic(() => import('@/components/flow/Flow'), {
+  ssr: false,
+  loading: () => <FlowSkeleton />,
+});
+```
+
+## Gotchas
+- **Warning-only budgets:** A CI warning that never fails the build gets ignored within two sprints.
+- **Unthrottled lab tests:** Testing on an M-series laptop over fiber hides 4-second INP/LCP on mid-tier Android or corporate VPNs.
+- **Premature micro-optimization:** Tuning a helper that takes 0.5% of request time while an N+1 loop takes 80% wastes effort—always profile first.
+
+## Production checklist
+- [ ] Assert constant query counts in repository integration tests for list endpoints.
+- [ ] Enforce Core Web Vitals (`LCP`, `INP`, `CLS`) and bundle budgets in CI (e.g. Lighthouse CI).
+- [ ] Lazy-load heavy charts, editors, and diagram canvases outside the critical initial bundle.
+- [ ] Segment production latency (p75/p95) by route and tenant so outliers are visible.
+
+## Check yourself
+
+<Quiz
+  questions={[
+    {
+      question: "Why are query-count assertions in integration tests such a high-return performance check?",
+      options: [
+        { label: "They replace all database indexes", description: "Indexes are still needed for query speed; query-count assertions catch extra round-trips." },
+        { label: "They catch N+1 query loops deterministically in CI before data grows in production", description: "An N+1 loop passes fast unit tests on 5 rows but explodes in production; asserting query count <= K fails immediately.", correct: true },
+        { label: "They minify client-side JavaScript", description: "Query-count tests run against the backend/ORM layer." },
+      ],
+    },
+    {
+      question: "What happens when a performance budget is configured as a non-blocking warning instead of a failing gate?",
+      options: [
+        { label: "Teams consistently ignore it under deadline pressure and budgets erode over time", description: "Only an automated pass/fail gate prevents death by a thousand small additions.", correct: true },
+        { label: "Lighthouse automatically deletes unused dependencies", description: "Lighthouse only reports metrics and assertions." },
+        { label: "CDN caching is disabled", description: "CI configuration does not alter CDN behavior." },
+      ],
+    },
+  ]}
+/>

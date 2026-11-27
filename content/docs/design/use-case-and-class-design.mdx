@@ -1,0 +1,137 @@
+---
+title: Use-Case Analysis & Class Design
+description: Turn ambiguous product requests into clear use cases (actor, goal, preconditions, main and exception flows) and cohesive domain classes with real behavior.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: how-to
+level: beginner
+tags: [design, oop, use-cases, domain-modeling, typescript]
+tested_with:
+  typescript: "7.0.2"
+cards:
+  - q: "What are the core sections of a well-written use case?"
+    a: "Primary actor, goal, preconditions, main (happy) flow, alternative/exception flows, and postconditions."
+  - q: "Why should alternative and exception flows be written alongside the happy path?"
+    a: "Most production bugs, permission gaps, and QA edge cases live in failure and boundary paths—not the happy path."
+  - q: "What is an Anemic Domain Model?"
+    a: "Classes that hold only public fields/getters/setters while all validation and business rules sit outside in procedural service scripts."
+  - q: "How do you move from a use case to initial class design?"
+    a: "Extract domain nouns as candidate entities/value objects, map verbs to methods on the object owning that data, and place interfaces at external I/O boundaries."
+related:
+  - design/oop-pillars
+  - design/solid
+  - design/state-machines
+  - process/prd-and-user-stories
+sources:
+  - title: "Martin Fowler: Anemic Domain Model"
+    url: https://martinfowler.com/bliki/AnemicDomainModel.html
+  - title: "key-learning: use-case analysis (author's notes)"
+    url: https://github.com/limme-learning/key-learning/blob/main/software-design/01-system-analysis-and-design/03-use-case-analysis.md
+  - title: "key-learning: class design (author's notes)"
+    url: https://github.com/limme-learning/key-learning/blob/main/software-design/01-system-analysis-and-design/04-class-design.md
+---
+
+## TL;DR
+Before writing code for a non-trivial workflow, capture a **use case** (actor, preconditions, main flow, exception flows, postconditions), then extract **nouns** into cohesive domain classes that own their own invariants rather than anemic data bags.
+
+## Why it exists
+Jumping straight from a one-line ticket ("Cancel an invoice") to database tables leaves authorization, concurrency, and rollback behavior undefined. Each developer guesses differently, and QA discovers missing rules after implementation.
+
+## Mental model
+Use cases bridge **business intent** and **code structure**:
+
+<Diagram
+  id="use-case-to-class"
+  ariaLabel="Requirements feed into use case flows, which map nouns and verbs into cohesive domain classes and external ports"
+  caption="Translate use cases into domain entities (nouns + invariants) and port interfaces at I/O boundaries."
+  nodes={[
+    { id: 'uc', label: 'Use Case', subtitle: 'Actor, flows, rules', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'dom', label: 'Domain Class', subtitle: 'Owns invariants', icon: 'class', category: 'service', rank: 1, order: 0 },
+    { id: 'port', label: 'External Port', subtitle: 'Repo / Notifier', icon: 'interface', category: 'abstraction', rank: 2, order: 0 },
+  ]}
+  edges={[
+    { from: 'uc', to: 'dom', label: 'nouns/verbs' },
+    { from: 'dom', to: 'port', label: 'calls port' },
+  ]}
+/>
+
+## Do it
+
+### Step 1: Write a lightweight use case
+Example: **Cancel Paid Invoice**
+- **Primary actor:** Operations Manager
+- **Preconditions:** User is authenticated and holds `invoice.cancel` permission; invoice exists.
+- **Main flow:**
+  1. Manager submits invoice ID and cancellation reason.
+  2. System checks permission and verifies invoice status is `PAID`.
+  3. System transitions invoice to `CANCELLED`, records reason + timestamp, and emits an audit event.
+- **Exception flows:**
+  - *E1 (Unauthorized):* Return `403 Forbidden`; no state change.
+  - *E2 (Already cancelled or refunded):* Reject with `409 Conflict`.
+- **Postconditions:** Invoice status is `CANCELLED`; audit log entry persisted.
+
+### Step 2: Assign behavior to the object that owns the data
+Avoid putting every rule in a giant `InvoiceManager` while `Invoice` is just `{ id, status }`:
+
+```ts
+export class Invoice {
+  private constructor(
+    public readonly id: string,
+    private _status: 'DRAFT' | 'PAID' | 'CANCELLED',
+    private _cancelReason?: string,
+  ) {}
+
+  static paid(id: string): Invoice {
+    return new Invoice(id, 'PAID');
+  }
+
+  get status() {
+    return this._status;
+  }
+
+  cancel(reason: string): void {
+    if (this._status !== 'PAID') {
+      throw new Error(`Cannot cancel invoice in status ${this._status}`);
+    }
+    if (reason.trim().length < 5) {
+      throw new Error('Cancellation reason must be at least 5 characters');
+    }
+    this._status = 'CANCELLED';
+    this._cancelReason = reason.trim();
+  }
+}
+```
+
+## Gotchas
+- **Skipping exception flows:** If you only specify the happy path, error codes, idempotency, and partial-failure rollbacks get invented inconsistently at 2 a.m.
+- **Anemic entities:** Putting `invoice.status = 'CANCELLED'` directly in a controller lets another endpoint mutate status without checking invariants.
+- **Over-modeling trivial CRUD:** A simple tag or lookup table does not need a formal use-case document—save this for workflows with permissions, state transitions, or money/inventory invariants.
+
+## Production checklist
+- [ ] Every non-trivial workflow lists preconditions, main flow, exception flows, and postconditions.
+- [ ] Domain invariants (like `cancel()` preconditions) live inside the entity, not scattered across controllers.
+- [ ] QA test cases trace directly to both the main flow and every exception flow.
+
+## Check yourself
+
+<Quiz
+  questions={[
+    {
+      question: "Why are exception flows treated as first-class parts of a use case?",
+      options: [
+        { label: "They make the document longer for compliance", description: "Length is not the goal; clarity on edge cases is." },
+        { label: "They specify how permissions, invalid states, and failures behave before coding starts", description: "Most production bugs happen in permission, validation, and failure paths rather than the happy path.", correct: true },
+        { label: "They replace unit tests", description: "Exception flows become inputs to unit and integration tests." },
+      ],
+    },
+    {
+      question: "What distinguishes a rich domain class from an Anemic Domain Model?",
+      options: [
+        { label: "A rich domain class enforces its own invariants and state transitions via methods instead of exposing raw mutable setters", description: "Encapsulating rules inside the class prevents callers from putting the object into an invalid state.", correct: true },
+        { label: "A rich domain class directly opens SQL connections", description: "Domain classes should stay independent of database drivers." },
+        { label: "An Anemic Domain Model has more methods than fields", description: "Anemic models typically have only getters/setters and zero domain behavior." },
+      ],
+    },
+  ]}
+/>

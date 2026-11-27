@@ -1,0 +1,99 @@
+---
+title: Contract Testing for APIs
+description: Catch breaking API changes between independent teams before either deploys—using consumer-driven Pact contracts, OpenAPI diffing, and buf breaking.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: explanation
+level: intermediate
+tags: [process, testing, contract-testing, pact, openapi, ci-cd]
+tested_with:
+  openapi: "3.2.1 (spec)"
+cards:
+  - q: "What gap does contract testing close that unit tests and mocked integration tests miss?"
+    a: "Integration tests with stubs only verify your code against your assumptions; contract tests verify that the provider's real implementation actually satisfies those consumer expectations before either deploys."
+  - q: "What are three things contract testing does NOT verify?"
+    a: "Business arithmetic/semantics (e.g. cents vs dollars), runtime performance/latency under load, and fields/paths that no consumer wrote an expectation for."
+  - q: "When is OpenAPI diff + response validation better than consumer-driven Pact?"
+    a: "For public or external partner APIs where consumers are outside your organization and cannot publish Pact expectations to your broker."
+  - q: "What does `pact-broker can-i-deploy` check before a production release?"
+    a: "It verifies that the consumer version you are deploying has a passing contract verification against the exact provider version currently in production."
+related:
+  - process/testing-strategy
+  - architecture/api-design
+  - architecture/grpc-protobuf
+sources:
+  - title: "Pact Docs: How Pact Works"
+    url: https://docs.pact.io/
+  - title: "OpenAPI Initiative: Specification"
+    url: https://spec.openapis.org/oas/latest.html
+  - title: "software-engineering: Contract Testing for APIs (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/08-testing-strategies/04-contract-testing-for-apis.md
+---
+
+## TL;DR
+When two teams deploy on independent schedules, mocked integration tests only prove your code matches *your guess* about the other API. **Contract testing** (consumer-driven **Pact** for internal services, **OpenAPI diff / `buf breaking`** at partner/gRPC edges) catches breaking schema drift in CI *before* merge.
+
+## Why it exists
+A provider team renames or removes a nullable field and updates its own tests—all green. Meanwhile, the consumer team's MSW mocks still return the old field—all green. Both deploy, and production crashes with `undefined` until a customer calls.
+
+## Mental model
+Turn consumer assumptions into an **executable contract** verified against the provider in CI:
+
+<Diagram
+  id="contract-testing-flow"
+  ariaLabel="Consumer publishes pact contract to broker; provider verifies it in CI; can-i-deploy gates production release"
+  caption="Consumers publish expectations; providers verify them in CI before either side deploys."
+  nodes={[
+    { id: 'con', label: 'Consumer CI', subtitle: 'Generates Pact', icon: 'ci', category: 'client', rank: 0, order: 0 },
+    { id: 'brk', label: 'Pact Broker', subtitle: 'can-i-deploy', icon: 'db', category: 'data', rank: 1, order: 0 },
+    { id: 'pro', label: 'Provider CI', subtitle: 'Verifies real API', icon: 'service', category: 'service', rank: 2, order: 0 },
+  ]}
+  edges={[
+    { from: 'con', to: 'brk', label: 'publish' },
+    { from: 'brk', to: 'pro', label: 'verify' },
+    { from: 'pro', to: 'brk', label: 'pass/fail', kind: 'response' },
+  ]}
+/>
+
+## Do it
+
+| Boundary | Recommended contract check |
+|---|---|
+| **Internal REST (known teams)** | Consumer-driven **Pact** + Pact Broker + `can-i-deploy` gate |
+| **External / Partner REST** | `openapi-diff --fail-on-incompatible` + provider response schema validation |
+| **Internal gRPC** | `buf breaking --against main` on `.proto` files |
+| **GraphQL** | `graphql-inspector diff` checking live field usage before removing `@deprecated` fields |
+
+## Gotchas
+- **Over-specifying contracts:** Matching exact timestamps or array lengths in Pact turns harmless provider changes into false failures—use type/regex matchers (`like`, `eachLike`).
+- **Running Pact without `can-i-deploy`:** Publishing contracts without blocking deploys turns failures into ignored notifications.
+- **Expecting contract tests to catch business bugs:** Changing `price` from `100` (cents) to `1.00` (dollars) passes a `number` type check—keep semantic tests in unit/integration suites.
+
+## Production checklist
+- [ ] Gate partner OpenAPI specs with `openapi-diff` and `.proto` files with `buf breaking` in CI.
+- [ ] Use Pact + `can-i-deploy` when independent internal teams ship frontend/BFF and backend APIs separately.
+- [ ] Match shapes and types in contracts rather than brittle literal values.
+
+## Check yourself
+
+<Quiz
+  questions={[
+    {
+      question: "Why can an integration test using MSW or WireMock still miss a breaking API change in production?",
+      options: [
+        { label: "Mock handlers are slower than real HTTP", description: "Mocks are fast; the issue is staleness." },
+        { label: "Mocks only verify your code against your own assumptions, which drift when the provider changes its response", description: "Contract testing verifies those assumptions against the real provider in CI.", correct: true },
+        { label: "MSW does not support JSON", description: "MSW supports JSON natively." },
+      ],
+    },
+    {
+      question: "Which tool is best suited for preventing breaking changes on a public partner REST API?",
+      options: [
+        { label: "OpenAPI breaking-change diffing plus provider response validation against the spec", description: "External partners cannot push Pact files to your internal broker, so gating on the published OpenAPI spec works best.", correct: true },
+        { label: "Asking every external partner to run your internal unit tests", description: "External partners do not have access to your internal test suite." },
+        { label: "Disabling schema validation", description: "Removing validation increases the risk of silent breaking changes." },
+      ],
+    },
+  ]}
+/>

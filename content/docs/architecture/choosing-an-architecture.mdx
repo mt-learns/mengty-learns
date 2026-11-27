@@ -1,0 +1,123 @@
+---
+title: Choosing an Architecture (Decision Guide)
+description: Match architecture complexity to real constraints—reversibility, team size, latency, and operational overhead—instead of applying one template everywhere.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: decision
+type: explanation
+level: intermediate
+tags: [architecture, decision, adr, monolith, microservices, hexagonal]
+tested_with:
+  adr_format: "MADR / Nygard"
+cards:
+  - q: "What is the Reversibility Principle in architecture decisions?"
+    a: "Make easily reversible decisions (like folder layout or internal module style) quickly, and defer costly irreversible decisions (like splitting into microservices or event sourcing) until real constraints demand them—except tenancy and data residency, which must be decided upfront."
+  - q: "Which architectural property justifies paying the complexity cost of Hexagonal or Clean Architecture?"
+    a: "Domain rules that must be tested independently of frameworks, databases, and transport protocols."
+  - q: "Why do teams systematically underestimate the cost of adding a new microservice?"
+    a: "They quote only the feature build time while forgetting 3-5x ongoing operational costs: CI/CD pipelines, dashboards, alerts, SLOs, on-call rotation, and dependency upgrades."
+  - q: "What should every non-trivial architecture decision leave behind in the repository?"
+    a: "An Architecture Decision Record (ADR) capturing context, the chosen option, rejected alternatives, consequences, and the revisit trigger."
+related:
+  - architecture/compare-styles
+  - architecture/monolith-vs-microservices
+  - process/adr
+  - design/yagni-kiss-dry
+sources:
+  - title: "Martin Fowler: Software Architecture Guide"
+    url: https://martinfowler.com/architecture/
+  - title: "ADR GitHub Organization: Architecture Decision Records"
+    url: https://adr.github.io/
+  - title: "software-engineering: Choosing the Right Architecture (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/03-architecture/06-choosing-the-right-architecture.md
+---
+
+## TL;DR
+There is no universally "best" architecture—only a match between **what property you are buying** (latency, independent deploys, domain isolation, or speed) and **what operational cost you can afford**. Prefer **reversible choices** inside one deployable, decide **multi-tenancy** upfront, and record every trade-off in an **ADR**.
+
+## Why it exists
+Applying one "gold-standard" template (such as event-sourced microservices with CQRS) to every project wastes months on simple CRUD apps and adds latency to low-latency paths. Architecture should answer a forced question: *which specific constraint are we solving right now?*
+
+## Comparison table: what property are you buying?
+
+| Property you need | Structure that buys it | Main cost |
+|---|---|---|
+| **Fastest time to first release** | Layered monolith | Domain rules can couple to DB/ORM over time |
+| **Testable business logic independent of frameworks** | Hexagonal / Clean (per module) | Extra ports, adapters, and mapping code |
+| **Independent deployment & team scaling** | Modular monolith → separate services | Network latency, distributed tracing, 3–5× ops overhead |
+| **Lowest possible request latency** | Single process, fewest network hops | Shares failure domain and deploy cadence |
+| **Temporal decoupling & replay** | Event-driven / Outbox | Eventual consistency, schema evolution, dead-letter handling |
+| **Full audit history of every state change** | Event sourcing | Projection rebuilds, steep learning curve, hard to reverse |
+
+## Reversibility matrix
+
+| Decision | Reversibility | Practical rule |
+|---|---|---|
+| **Folder & module boundaries** | Hours to days | Decide quickly; refactor as you learn |
+| **Layered → Hexagonal inside one app** | Days to weeks | Adopt incrementally on complex modules only |
+| **Monolith → extract one service** | Weeks | Easy later if module boundaries were kept clean |
+| **Microservices → merge back to monolith** | Quarters | Expensive; don't split before team or scale forces you |
+| **CRUD state → Event Sourcing** | Quarters | Very hard to undo; require a genuine audit/replay driver |
+| **Primary database & multi-tenancy model** | Years | Effectively permanent; decide deliberately upfront |
+
+## Decision guide
+
+<Diagram
+  id="arch-decision-guide"
+  layout="tree"
+  ariaLabel="Start with one deployable modular monolith, apply hexagonal only to complex domain cores, and extract services only for independent scaling or team autonomy"
+  caption="Default to a modular monolith; add hexagonal isolation or separate services only where a concrete driver demands it."
+  nodes={[
+    { id: 'start', label: 'New System', subtitle: 'Start simple', icon: 'service', category: 'client', rank: 0, order: 0 },
+    { id: 'mono', label: 'Modular Monolith', subtitle: 'Default deployable', icon: 'pod', category: 'service', rank: 1, order: 0 },
+    { id: 'hex', label: 'Hexagonal Core', subtitle: 'Complex domain only', icon: 'interface', category: 'abstraction', rank: 2, order: 0 },
+    { id: 'svc', label: 'Extract Service', subtitle: 'Scale or team split', icon: 'gateway', category: 'edge', rank: 2, order: 1 },
+  ]}
+  edges={[
+    { from: 'start', to: 'mono', label: 'default' },
+    { from: 'mono', to: 'hex', label: 'rich rules' },
+    { from: 'mono', to: 'svc', label: 'team/scale' },
+  ]}
+/>
+
+## Gotchas
+- **Standardizing on one template estate-wide:** A 6-table internal admin tool does not need CQRS and Kafka just because the core billing engine uses them.
+- **Deferring multi-tenancy:** Adding `tenant_id` and row-level isolation after launch means rewriting almost every query and index.
+- **Unrecorded decisions:** Without an ADR listing rejected options and revisit triggers, future teams either blindly copy the old pattern or rewrite it without knowing why it existed.
+
+## Production checklist
+- [ ] Name the specific property you are buying (latency, testability, independent deploy) before picking an architecture.
+- [ ] Mix styles per module inside one deployable (e.g., Hexagonal for pricing/billing, simple CRUD for reference tables).
+- [ ] Decide multi-tenancy and data-residency boundaries before writing schema migrations.
+- [ ] Write a short ADR with context, consequences, rejected options, and a concrete revisit trigger.
+
+## Check yourself
+
+<Quiz
+  questions={[
+    {
+      question: "Which architectural decision is hardest to reverse later and should be decided deliberately upfront?",
+      options: [
+        { label: "Folder naming inside a single TypeScript service", description: "Folder structure can be refactored in hours or days." },
+        { label: "Multi-tenancy isolation model and primary database choice", description: "Changing tenancy or database engines later touches nearly every query, index, and migration.", correct: true },
+        { label: "Switching one module from layered to hexagonal inside a monolith", description: "Internal module refactoring takes days to weeks." },
+      ],
+    },
+    {
+      question: "When does extracting a separate microservice pay off?",
+      options: [
+        { label: "On day one of a 3-person greenfield project", description: "Early microservices add operational overhead before domain boundaries are even clear." },
+        { label: "When a specific module needs independent deployment, scaling, or team ownership", description: "Separate services solve organizational contention and independent scaling needs.", correct: true },
+        { label: "Whenever you want to share a single database table across two teams", description: "Sharing a database table across services creates a distributed monolith." },
+      ],
+    },
+    {
+      question: "Why should an ADR include a 'Rejected' section and a revisit trigger?",
+      options: [
+        { label: "So future engineers know what trade-offs were weighed and when the decision should be reconsidered", description: "Recording rejected alternatives and triggers prevents future teams from repeating old debates or keeping an outdated choice too long.", correct: true },
+        { label: "To satisfy TypeScript compiler checks", description: "ADRs are markdown documentation, not compiled code." },
+        { label: "To avoid writing automated tests", description: "ADRs document architecture decisions and never replace tests." },
+      ],
+    },
+  ]}
+/>

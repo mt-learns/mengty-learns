@@ -1,0 +1,273 @@
+---
+title: Proxy Pattern
+description: Place a surrogate with the same interface in front of a real service to enforce access control, caching, lazy initialization, or audit logging.
+kind: concept
+type: explanation
+level: intermediate
+tags: [design-patterns, proxy, structural, typescript, security]
+tested_with:
+  typescript: "7.0.2"
+status: stable
+updated: "2026-11-27"
+verified: "2026-11-27"
+cards:
+  - q: "What is the defining structural trait of the Proxy pattern?"
+    a: "The Proxy implements the exact same interface as the RealSubject it wraps, so the client can use either transparently."
+  - q: "Name four common types of Proxies in backend and platform systems."
+    a: "Protection proxy (access control/RBAC), Caching proxy (memoizing expensive reads), Virtual proxy (lazy initialization), and Logging/Remote proxy (auditing or RPC stubs)."
+  - q: "How does Proxy differ from Decorator when both implement the same interface as the wrapped object?"
+    a: "Decorator lets the caller stack arbitrary layers of behavior dynamically, whereas Proxy typically manages the lifecycle or access to a single service on the caller's behalf."
+  - q: "How does Proxy differ from Adapter?"
+    a: "Proxy keeps the exact same interface as the target object, while Adapter translates an incompatible interface into one the client expects."
+related:
+  - design/decorator
+  - design/adapter
+  - design/pattern-relations
+sources:
+  - title: "Refactoring.Guru: Proxy Pattern"
+    url: https://refactoring.guru/design-patterns/proxy
+  - title: "MDN Web Docs: JavaScript Proxy"
+    url: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Proxy
+  - title: "key-learning: proxy pattern (author's notes)"
+    url: https://github.com/limme-learning/key-learning/blob/main/software-design/03-design-patterns/05-proxy-pattern.md
+---
+
+## TL;DR
+The **Proxy** pattern wraps a service behind the **same interface** to control access—handling authorization, caching, lazy loading, or audit logging before forwarding allowed calls to the real object.
+
+## 1. Intent
+
+<Intent>
+Provide a surrogate or placeholder for another object to control access to it, without changing the interface clients use.
+</Intent>
+
+## 2. Problem
+
+Suppose your platform CLI talks to a `ClusterSecretsClient` that reads and rotates Kubernetes secrets. Now you need two cross-cutting controls:
+1. Only operators with the `secrets:read` role may fetch values, and every access must be audited.
+2. Repeated reads of unchanged config secrets within 30 seconds should hit an in-memory cache instead of hammering the API server.
+
+If you embed RBAC checks, audit logs, and TTL caching directly inside `ClusterSecretsClient`, the core client mixes infrastructure concerns with secret-fetching logic—and every other client class ends up duplicating the same boilerplate.
+
+<Diagram
+  id="proxy-problem"
+  ariaLabel="ClusterSecretsClient mixes RBAC, caching, audit logging, and API calls in one class"
+  caption="Without a Proxy, cross-cutting access control and caching clutter the core service."
+  nodes={[
+    { id: 'cli', label: 'Platform CLI', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'client', label: 'SecretsClient', subtitle: 'RBAC + cache + API', icon: 'service', category: 'service', rank: 1, order: 0, variant: 'problem' },
+    { id: 'api', label: 'Cluster API', icon: 'db', category: 'data', rank: 2, order: 0 },
+  ]}
+  edges={[
+    { from: 'cli', to: 'client', label: 'getSecret()' },
+    { from: 'client', to: 'api', label: 'HTTPS' },
+  ]}
+/>
+
+## 3. Solution
+
+Define a shared `SecretsReader` interface implemented by both `RealSecretsClient` and `ProtectedSecretsProxy`.
+
+The proxy holds a reference to `RealSecretsClient`. When a caller invokes `getSecret(key, actor)`:
+- If `actor` lacks permission, the proxy throws `ForbiddenError` immediately—the real client is never called.
+- If the key is cached and fresh, the proxy returns the cached value.
+- Otherwise, the proxy forwards the call to `RealSecretsClient`, records an audit entry, caches the result, and returns it.
+
+## 4. Real-world analogy
+
+<Analogy>
+Think of a **reverse proxy** (like Nginx or Envoy) sitting in front of an internal microservice. Downstream callers speak the exact same HTTP contract, while the reverse proxy terminates TLS, enforces rate limits, checks JWT scopes, and caches `GET` responses before forwarding valid traffic to the upstream app.
+</Analogy>
+
+## 5. Flow: watch it work
+
+<Flow
+  id="proxy"
+  title="Protection & Caching Proxy Flow"
+  nodes={[
+    { id: 'caller', label: 'Platform CLI', subtitle: 'Caller', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'proxy', label: 'SecretsProxy', subtitle: 'RBAC + Cache', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+    { id: 'real', label: 'RealSecretsClient', subtitle: 'Cluster API', icon: 'service', category: 'service', rank: 2, order: 0 },
+  ]}
+  steps={[
+    { edge: 'caller->proxy', title: 'Request secret', text: 'CLI calls getSecret("db-url", actor) on SecretsReader interface' },
+    { edge: 'proxy->real', title: 'Allow & forward miss', text: 'Proxy verifies RBAC role, sees cache miss, and forwards to RealSecretsClient' },
+    { edge: 'real->proxy', title: 'Return secret value', text: 'RealSecretsClient fetches secret from cluster and returns it', kind: 'response' },
+    { edge: 'proxy->caller', title: 'Cache & return', text: 'Proxy stores value with 30s TTL, logs audit, and returns to CLI', kind: 'response' },
+    { edge: 'caller->proxy', title: 'Denied request', text: 'Unauthorized actor calls getSecret("db-url", guest)' },
+    { edge: 'proxy->caller', title: 'Reject at proxy', text: 'Proxy blocks call with 403 Forbidden; RealSecretsClient is never touched', kind: 'error' },
+  ]}
+/>
+
+## 6. Structure
+
+<Diagram
+  id="proxy-structure"
+  layout="tree"
+  ariaLabel="SecretsProxy and RealSecretsClient both implement SecretsReader"
+  caption="Both Proxy and RealSubject implement the same interface; Proxy delegates to RealSubject."
+  nodes={[
+    { id: 'iface', label: 'SecretsReader', subtitle: '«interface»', icon: 'interface', category: 'abstraction', rank: 0, order: 0 },
+    { id: 'proxy', label: 'SecretsProxy', subtitle: 'Controls access', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+    { id: 'real', label: 'RealSecretsClient', subtitle: 'Fetches secret', icon: 'service', category: 'service', rank: 1, order: 1 },
+  ]}
+  edges={[
+    { from: 'iface', to: 'proxy', kind: 'response', dashed: true },
+    { from: 'iface', to: 'real', kind: 'response', dashed: true },
+  ]}
+/>
+
+## 7. Code
+
+```ts
+export interface Actor {
+  id: string;
+  roles: readonly string[];
+}
+
+export interface SecretsReader {
+  getSecret(key: string, actor: Actor): Promise<string>;
+}
+
+export class RealSecretsClient implements SecretsReader {
+  async getSecret(key: string): Promise<string> {
+    // Real implementation would call Vault or Kubernetes API
+    return `secret-value-for-${key}`;
+  }
+}
+
+export class ProtectedCachedSecretsProxy implements SecretsReader {
+  private cache = new Map<string, { value: string; expiresAt: number }>();
+
+  constructor(
+    private readonly target: SecretsReader,
+    private readonly ttlMs = 30_000,
+    private readonly audit: (msg: string) => void = console.log,
+  ) {}
+
+  async getSecret(key: string, actor: Actor): Promise<string> {
+    if (!actor.roles.includes('secrets:read')) {
+      this.audit(`DENY actor=${actor.id} key=${key}`);
+      throw new Error(`Forbidden: ${actor.id} lacks secrets:read`);
+    }
+
+    const hit = this.cache.get(key);
+    if (hit && hit.expiresAt > Date.now()) {
+      this.audit(`CACHE_HIT actor=${actor.id} key=${key}`);
+      return hit.value;
+    }
+
+    const value = await this.target.getSecret(key, actor);
+    this.cache.set(key, { value, expiresAt: Date.now() + this.ttlMs });
+    this.audit(`ALLOW_FETCH actor=${actor.id} key=${key}`);
+    return value;
+  }
+}
+```
+
+## 8. When to use / when to avoid
+
+<Checklist
+  use={[
+    "Protection proxy: enforce authorization or rate limits before an expensive or sensitive service runs.",
+    "Caching / Virtual proxy: defer heavy initialization or memoize read-only responses transparently.",
+    "Audit / Remote proxy: log calls or wrap an RPC stub behind a local interface.",
+  ]}
+  avoid={[
+    "Do not put core business rules inside a proxy—keep them in the real service.",
+    "If you need to change the method signatures, use Adapter instead of Proxy.",
+    "In JavaScript/TypeScript, avoid the built-in global Proxy object for simple wrapper classes unless you genuinely need dynamic property interception.",
+  ]}
+/>
+
+## 9. How to implement
+
+<Steps>
+  <Step>
+    ### Extract a shared interface
+    Define an interface (`SecretsReader`) implemented by both the real service and the proxy.
+  </Step>
+  <Step>
+    ### Inject the real service into the proxy
+    Have the proxy accept the real service in its constructor and store it as a field.
+  </Step>
+  <Step>
+    ### Add control logic around delegation
+    Implement authorization checks, cache lookups, lazy init, or audit logging before/after forwarding.
+  </Step>
+  <Step>
+    ### Wire at the composition root
+    Pass the proxy to callers instead of the raw service.
+  </Step>
+  <Step>
+    ### Test allowed and denied paths
+    Verify unauthorized calls fail at the proxy without invoking the real service.
+  </Step>
+</Steps>
+
+## 10. Pros / Cons
+
+<ProsCons
+  pros={[
+    "Keeps cross-cutting access control, caching, and auditing out of core business services.",
+    "Transparent to callers because the interface does not change.",
+    "Works even when you cannot modify the wrapped class (e.g. third-party SDK client).",
+  ]}
+  cons={[
+    "Adds latency or subtle behavior (like stale cache hits) that callers may not expect unless documented.",
+    "Too many proxies can obscure where a request is blocked or mutated during debugging.",
+  ]}
+/>
+
+## 11. Relations
+
+<Relations
+  items={[
+    {
+      name: "Proxy vs Decorator",
+      summary: "Both implement the same interface as the wrapped object; Decorator stacks composable behaviors, while Proxy controls access or lifecycle.",
+      href: "/docs/design/decorator",
+    },
+    {
+      name: "Proxy vs Adapter",
+      summary: "Adapter translates an incompatible interface; Proxy keeps the interface identical.",
+      href: "/docs/design/adapter",
+    },
+    {
+      name: "Pattern Relations",
+      summary: "Full side-by-side comparison of structural and behavioral wrappers.",
+      href: "/docs/design/pattern-relations",
+    },
+  ]}
+/>
+
+## 12. Check yourself
+
+<Quiz
+  questions={[
+    {
+      question: "What must be true for a Proxy to be transparent to its callers?",
+      options: [
+        { label: "It must inherit from a global EventEmitter", description: "EventEmitter inheritance is unrelated to Proxy transparency." },
+        { label: "It must implement the same interface as the RealSubject it wraps", description: "Implementing the same interface lets callers swap the real service for the proxy without changing call sites.", correct: true },
+        { label: "It must expose a different method name for cached calls", description: "Changing method names breaks transparency and turns it into an Adapter." },
+      ],
+    },
+    {
+      question: "Where should core business validation live when using a Protection Proxy?",
+      options: [
+        { label: "Inside the Proxy, so the real service can be empty", description: "Putting business logic in the Proxy couples domain rules to access control." },
+        { label: "Inside the RealSubject; the Proxy handles cross-cutting access control, caching, or logging", description: "Proxies handle cross-cutting access concerns; keeping domain logic in the target service preserves single responsibility.", correct: true },
+        { label: "Duplicated in both the Proxy and the caller", description: "Duplicating validation causes drift." },
+      ],
+    },
+    {
+      question: "Which test case is essential for a Protection Proxy?",
+      options: [
+        { label: "Verifying that the denied path rejects the call without invoking the underlying target service", description: "Testing both allowed and denied paths ensures unauthorized callers never reach the wrapped service.", correct: true },
+        { label: "Verifying that the Proxy has at least 10 methods", description: "Interfaces should stay small and focused." },
+        { label: "Verifying that the Proxy bypasses authentication in production", description: "Authentication must never be bypassed in production." },
+      ],
+    },
+  ]}
+/>

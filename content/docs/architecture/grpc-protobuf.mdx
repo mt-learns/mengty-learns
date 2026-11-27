@@ -1,0 +1,122 @@
+---
+title: gRPC & Protobuf for Internal Services
+description: Replace prose JSON contracts between internal microservices with compiled .proto schemas, strict field-number compatibility, deadlines, and mTLS.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: explanation
+level: intermediate
+tags: [architecture, grpc, protobuf, api, microservices, contracts]
+tested_with:
+  protobuf: "proto3 (spec)"
+cards:
+  - q: "Why must you NEVER change or reuse a Protobuf field number in a .proto schema?"
+    a: "Protobuf serializes field numbers (tags) on the wire rather than field names; changing or reusing a number causes old and new peers to silently decode bytes into the wrong field."
+  - q: "How do you safely retire a removed field in a .proto message?"
+    a: "Delete the field and add both its tag number and field name to a `reserved` statement so compilers reject accidental reuse."
+  - q: "Why can browsers not call standard gRPC services directly without a proxy?"
+    a: "Standard gRPC relies on HTTP/2 framing, trailers, and binary payloads that browser Fetch/XHR APIs do not expose directly, requiring gRPC-Web + an Envoy-style proxy or a REST/BFF edge."
+  - q: "What advantage does gRPC deadline propagation provide across multi-hop internal calls?"
+    a: "The remaining time budget travels in the request metadata across hops, so downstream services abort work automatically once the caller's deadline expires."
+related:
+  - architecture/api-design
+  - architecture/rest-graphql-grpc-decision
+  - architecture/failure-modes-resilience
+sources:
+  - title: "gRPC Documentation: Core Concepts, Architecture & Lifecycle"
+    url: https://grpc.io/docs/what-is-grpc/core-concepts/
+  - title: "Protocol Buffers Documentation: Language Guide (proto3)"
+    url: https://protobuf.dev/programming-guides/proto3/
+  - title: "software-engineering: gRPC & Protobuf Inside the Estate (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/05-apis-and-integration/03-grpc-and-protobuf-for-internal-services.md
+---
+
+## TL;DR
+Use **gRPC + Protobuf** for latency-sensitive, internal service-to-service calls where compiled contracts eliminate DTO drift and HTTP/2 multiplexing + binary framing cut serialization overhead. Keep **field numbers permanent** (`reserved` when retired), propagate **deadlines**, and put a **REST/BFF gateway** at the browser/partner edge.
+
+## Why it exists
+When internal microservices pass JSON over HTTP/1.1, a renamed field in Service A can silently deserialize as `undefined` or `0` in Service B—passing unit tests on both sides while corrupting production data. Compiling `.proto` schemas turns contract drift into a build-time error.
+
+## Mental model
+Protobuf sends **field numbers**, not field names, over HTTP/2—and `buf breaking` in CI guards wire compatibility.
+
+<Diagram
+  id="grpc-edge-mesh"
+  ariaLabel="External clients call REST or BFF at the edge, which translates to typed gRPC calls over HTTP/2 inside the mesh"
+  caption="Use REST/JSON at the external edge and compiled gRPC + Protobuf between internal services."
+  nodes={[
+    { id: 'ext', label: 'Browser / Partner', subtitle: 'REST / JSON', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'gw', label: 'API Gateway / BFF', subtitle: 'Translates + auth', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+    { id: 'svcA', label: 'Orders Service', subtitle: 'gRPC client', icon: 'service', category: 'service', rank: 2, order: 0 },
+    { id: 'svcB', label: 'Risk Service', subtitle: 'gRPC server (mTLS)', icon: 'pod', category: 'data', rank: 3, order: 0 },
+  ]}
+  edges={[
+    { from: 'ext', to: 'gw', label: 'HTTPS' },
+    { from: 'gw', to: 'svcA', label: 'gRPC' },
+    { from: 'svcA', to: 'svcB', label: 'HTTP/2' },
+  ]}
+/>
+
+## Do it
+
+### Wire-compatibility rules in `.proto`
+
+```protobuf
+syntax = "proto3";
+package orders.v1;
+
+message SubmitOrderRequest {
+  reserved 3;                 // Retired tag number: never reuse!
+  reserved "legacy_code";     // Retired field name
+
+  string order_id = 1;        // Tags 1..15 use 1 byte on the wire
+  int64 amount_cents = 2;
+  OrderChannel channel = 4;
+}
+
+enum OrderChannel {
+  ORDER_CHANNEL_UNSPECIFIED = 0; // Always reserve 0 for unknown/default
+  ORDER_CHANNEL_WEB = 1;
+  ORDER_CHANNEL_API = 2;
+}
+```
+
+### Key rules for safe evolution
+- **Never change a field number** or reuse a retired number (`reserved` enforces this).
+- **Never change a field's type** or switch between `singular` and `repeated`.
+- **Always define `_UNSPECIFIED = 0`** on every enum so unknown values from newer peers are handled explicitly.
+- **Retry only `UNAVAILABLE` / `RESOURCE_EXHAUSTED`**, never `DEADLINE_EXCEEDED` (the budget is already spent).
+
+## Gotchas
+- **HTTP/1.1 L4 load balancing:** A single long-lived HTTP/2 TCP connection pins all gRPC RPCs to one pod unless you use L7-aware load balancing (Envoy/mesh/client-side round-robin).
+- **Debugging opaque payloads:** Binary frames aren't human-readable in `tcpdump` or `curl`—use `grpcurl` with server reflection (in non-prod) and OpenTelemetry tracing.
+- **Missing deadlines:** Calling gRPC without a deadline defaults to waiting indefinitely on a hung server.
+
+## Production checklist
+- [ ] Run `buf lint` and `buf breaking` in CI on every `.proto` change.
+- [ ] Set explicit deadlines on every gRPC call and propagate incoming deadlines downstream.
+- [ ] Use L7 load balancing (or client-side `round_robin`) over HTTP/2 connections.
+- [ ] Enforce mTLS between internal gRPC workloads.
+
+## Check yourself
+
+<Quiz
+  questions={[
+    {
+      question: "What happens if you remove field `string tax_id = 3;` from a proto3 message and later assign `int64 discount = 3;`?",
+      options: [
+        { label: "Protobuf automatically migrates old clients", description: "Protobuf does not migrate schemas at runtime." },
+        { label: "Old peers interpret the new field's bytes as tax_id, causing silent data corruption", description: "Wire compatibility depends on permanent field numbers; always mark retired numbers as reserved.", correct: true },
+        { label: "The HTTP/2 connection refuses to start", description: "Wire-level framing succeeds and corrupts the decoded message." },
+      ],
+    },
+    {
+      question: "Why should you NOT retry a gRPC call that failed with DEADLINE_EXCEEDED?",
+      options: [
+        { label: "Because the caller's overall time budget has already expired, so retrying wastes work and amplifies load", description: "Retry transient UNAVAILABLE errors only while time remains in the deadline.", correct: true },
+        { label: "Because Protobuf deletes the message on timeout", description: "The request is simply canceled when the deadline expires." },
+        { label: "Because gRPC only supports retries on HTTP/1.1", description: "gRPC runs over HTTP/2 and has built-in retry policies." },
+      ],
+    },
+  ]}
+/>

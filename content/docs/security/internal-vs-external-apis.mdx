@@ -1,0 +1,101 @@
+---
+title: Securing Internal vs External APIs
+description: Why "it's internal" is not an authentication mechanism—pair edge gateways, per-identity quotas, and WAFs with internal mTLS, workload identity, and per-route authz.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: explanation
+level: intermediate
+tags: [security, zero-trust, mtls, api-gateway, spiffe, authz]
+tested_with:
+  owasp_api_top10: "2023"
+cards:
+  - q: "Why is relying solely on a VPC or firewall ('internal network') dangerous for microservice-to-microservice calls?"
+    a: "If a single internet-facing pod is compromised via a dependency vulnerability, an unauthenticated internal mesh allows unrestricted lateral movement to sensitive endpoints."
+  - q: "What is the core principle of Zero Trust for internal APIs?"
+    a: "Every call carries a verifiable cryptographic identity (workload mTLS cert + scoped token), and every callee authenticates and authorizes it regardless of network location."
+  - q: "Why should external API rate limiting be keyed on authenticated identity (client/partner ID) rather than IP address alone?"
+    a: "Corporate partners and mobile users often share NAT gateways, so IP-based limits either block legitimate traffic or fail to stop distributed abuse."
+  - q: "What is the difference between coarse OAuth scopes at an API gateway and object-level authorization in the service?"
+    a: "Gateway scopes check capability (e.g. orders:read), while the service must still verify ownership/tenant predicates (WHERE tenant_id = ?) to prevent BOLA/IDOR."
+related:
+  - security/authn-vs-authz
+  - security/sso-architecture-keycloak
+  - security/rate-limiting
+sources:
+  - title: "NIST SP 800-207: Zero Trust Architecture"
+    url: https://csrc.nist.gov/pubs/sp/800/207/final
+  - title: "OWASP API Security Top 10"
+    url: https://owasp.org/API-Security/
+  - title: "software-engineering: Securing Internal vs External APIs (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/04-security-and-authentication/07-securing-internal-vs-external-apis.md
+---
+
+## TL;DR
+A network perimeter answers *where* a packet came from, not *who* sent it. Defend **external APIs** with a gateway, WAF, per-identity rate limits, and OAuth/mTLS; defend **internal APIs** with **mTLS workload identity**, **scoped tokens**, and **per-endpoint authorization** so one compromised pod cannot pivot across your mesh.
+
+## Why it exists
+Teams frequently put strong OAuth, WAF, and rate limits on their public gateway while leaving internal service-to-service HTTP calls completely unauthenticated. The first RCE in an edge-adjacent pod (such as a file parser) then gets free access to internal admin and payment endpoints with zero audit actor.
+
+## Mental model
+**Two boundaries, zero implicit trust:**
+
+<Diagram
+  id="internal-external-zero-trust"
+  ariaLabel="External callers pass gateway OAuth and WAF checks; internal service-to-service calls enforce mTLS workload identity and per-route authorization"
+  caption="Require cryptographic identity and authorization on both sides of the gateway."
+  nodes={[
+    { id: 'ext', label: 'External Client', subtitle: 'Untrusted', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'gw', label: 'API Gateway + WAF', subtitle: 'TLS, quotas, schema', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+    { id: 'svcA', label: 'Orders Service', subtitle: 'mTLS + JWT check', icon: 'service', category: 'service', rank: 2, order: 0 },
+    { id: 'svcB', label: 'Billing Service', subtitle: 'mTLS + aud + authz', icon: 'db', category: 'data', rank: 3, order: 0 },
+  ]}
+  edges={[
+    { from: 'ext', to: 'gw', label: 'OAuth / mTLS' },
+    { from: 'gw', to: 'svcA', label: 'mTLS + JWT' },
+    { from: 'svcA', to: 'svcB', label: 'mTLS + exch' },
+  ]}
+/>
+
+## Do it
+
+| Control | External / Partner Edge | Internal Service Mesh |
+|---|---|---|
+| **Identity** | OIDC user or partner client + mTLS | Workload identity (mTLS / SPIFFE) + narrowed JWT |
+| **Transport** | Public TLS 1.3 | Strict mTLS between pods |
+| **Authorization** | Coarse scopes at gateway + object check in service | Default-deny mesh policy + per-route `@PreAuthorize`/guard |
+| **Abuse protection** | WAF, schema validation, per-identity rate limits | Circuit breakers, bulkheads, per-caller quotas |
+
+## Gotchas
+- **Static API keys as sole auth:** Long-lived API keys without expiry or scopes leak into repos and logs; pair partner mTLS or OAuth client credentials instead.
+- **Checking auth only at the gateway:** If an internal service skips token/audience checks, any lateral call inside the cluster bypasses authorization.
+- **Missing object-level checks (BOLA):** Validating `orders.read` scope without filtering `WHERE tenant_id = token.tenant_id` lets Partner A read Partner B's orders.
+
+## Production checklist
+- [ ] Enforce strict mTLS (`STRICT` peer authentication) and default-deny network/mesh policies internally.
+- [ ] Require authentication and explicit authorization checks on every internal route, including admin/override endpoints.
+- [ ] Key external rate limits on authenticated client/partner ID rather than IP alone.
+- [ ] Write negative tests verifying 401 (missing/wrong audience), 403 (missing role), and 404/403 (cross-tenant access).
+
+## Check yourself
+
+<Quiz
+  questions={[
+    {
+      question: "Why is 'internal services only talk inside our VPC' an insufficient security control?",
+      options: [
+        { label: "VPCs do not support HTTP/2", description: "VPCs support HTTP/2 normally." },
+        { label: "If an attacker compromises one internet-facing pod, they inherit network access to all unauthenticated internal services", description: "Zero Trust requires cryptographic identity and authorization on every hop, even inside the VPC.", correct: true },
+        { label: "Firewalls cannot block port 80", description: "Firewalls can block ports, but allowed service ports are still open to lateral movement from a compromised peer." },
+      ],
+    },
+    {
+      question: "What does a gateway OAuth scope check (e.g. orders:read) NOT protect against on its own?",
+      options: [
+        { label: "Broken Object Level Authorization (BOLA), where Partner A requests Partner B's order ID", description: "The target service must enforce tenant/ownership predicates in its data query.", correct: true },
+        { label: "Missing TLS on the public edge", description: "The gateway terminates public TLS." },
+        { label: "Expired JWT signatures", description: "The gateway validates token signature and expiration." },
+      ],
+    },
+  ]}
+/>

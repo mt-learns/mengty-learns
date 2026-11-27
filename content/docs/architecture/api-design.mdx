@@ -23,9 +23,11 @@ cards:
   - q: "When is gRPC a better fit than JSON over REST?"
     a: "Internal service-to-service calls with strict Protobuf contracts, high throughput, low-latency requirements, or bidirectional streaming—where browser clients are not calling the endpoint directly."
 related:
+  - architecture/rest-graphql-grpc-decision
+  - architecture/graphql-trade-offs
+  - architecture/grpc-protobuf
   - architecture/caching-redis
   - security/rate-limiting
-  - architecture/layered
 sources:
   - title: "RFC 9110: HTTP Semantics (Methods & Status Codes)"
     url: https://www.rfc-editor.org/rfc/rfc9110.html
@@ -123,6 +125,8 @@ Return `Content-Type: application/problem+json` with a stable schema so clients 
 | **REST (HTTP + JSON)** | Public APIs, CRUD services, browser/mobile backends | Over-fetching/under-fetching on deeply nested graphs |
 | **gRPC (HTTP/2 + Protobuf)** | High-throughput internal microservices, streaming | Needs proxy (gRPC-Web/Envoy) for browsers; binary payloads harder to inspect with `curl` |
 | **GraphQL** | Complex UIs aggregating many entities with varied client needs | N+1 resolver traps, caching complexity, query-depth/cost DoS surface |
+
+For deeper guidance, see [Choosing REST vs GraphQL vs gRPC](/docs/architecture/rest-graphql-grpc-decision), [GraphQL Trade-offs](/docs/architecture/graphql-trade-offs), and [gRPC & Protobuf](/docs/architecture/grpc-protobuf).
 
 ## When you DON'T need this
 - **Internal single-app forms or tiny prototypes:** If one Next.js frontend talks to two private route handlers you own, skip API versioning, hypermedia, and GraphQL—just use typed JSON endpoints with Zod validation and RFC 9457 errors.

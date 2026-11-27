@@ -2,6 +2,7 @@
   "title": "Process",
   "pages": [
     "scrum-kanban-waterfall",
+    "project-kickoff-checklist",
     "idea-to-production",
     "prd-and-user-stories",
     "raci",
@@ -9,9 +10,12 @@
     "dor-dod-quality-gates",
     "code-review",
     "testing-strategy",
+    "e2e-playwright-cypress",
+    "contract-testing",
     "incident-management",
     "retrospectives",
-    "estimation-and-prioritization"
+    "estimation-and-prioritization",
+    "tech-debt-tracking"
   ],
   "icon": "process"
 }

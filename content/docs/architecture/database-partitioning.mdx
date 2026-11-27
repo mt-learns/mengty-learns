@@ -1,0 +1,250 @@
+---
+title: Database Partitioning & Pruning
+description: Split massive tables into physical partitions so the query planner skips irrelevant data (pruning) and retention becomes instant metadata drops.
+kind: concept
+type: explanation
+level: advanced
+tags: [architecture, database, postgresql, partitioning, performance]
+tested_with:
+  postgresql: "17.x (docs)"
+status: stable
+updated: "2026-11-27"
+verified: "2026-11-27"
+cards:
+  - q: "What are the two biggest operational wins of PostgreSQL range partitioning on a timestamp column?"
+    a: "Partition pruning lets queries skip irrelevant partitions, and archival becomes an instant metadata operation (DETACH/DROP PARTITION) instead of a multi-hour DELETE that bloats WAL and dead tuples."
+  - q: "What happens if you range-partition a table by created_at, but most queries filter only by tenant_id without a date predicate?"
+    a: "Partition pruning cannot eliminate any partition, so PostgreSQL must scan every monthly partition's index—making point lookups slower than on one unpartitioned table."
+  - q: "Why must a UNIQUE constraint or primary key on a PostgreSQL partitioned table include the partition key?"
+    a: "PostgreSQL only supports local per-partition indexes (no global index across partitions), so global uniqueness can only be enforced if the partition key is part of the unique index."
+  - q: "When should you NOT partition a PostgreSQL table?"
+    a: "When the table is relatively small (e.g. under ~100 GB) and proper B-tree/partial indexes already satisfy query latency and vacuum maintenance."
+related:
+  - architecture/database-indexing
+  - architecture/schema-migrations
+  - architecture/transactions-isolation
+sources:
+  - title: "PostgreSQL Docs: Table Partitioning"
+    url: https://www.postgresql.org/docs/current/ddl-partitioning.html
+  - title: "PostgreSQL Docs: Partition Pruning"
+    url: https://www.postgresql.org/docs/current/ddl-partitioning.html#DDL-PARTITIONING-PRUNING
+  - title: "software-engineering: Partitioning for Scale (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/06-database-strategies/02-partitioning-for-scale.md
+---
+
+## TL;DR
+**Table partitioning** splits one logical table into smaller physical tables by **Range**, **List**, or **Hash**. Its value comes from **partition pruning** (skipping irrelevant chunks at query time) and **instant archival** (`DETACH`/`DROP` instead of massive `DELETE`s)—never use it as a substitute for indexing.
+
+## 1. Intent
+
+<Intent>
+Keep multi-hundred-gigabyte tables fast to query, vacuum, and archive by dividing them along a natural boundary that matches your dominant query predicate.
+</Intent>
+
+## 2. Problem
+
+An unpartitioned `audit_events` table grows to 2 billion rows. Two things break at once:
+1. **Archival:** Deleting rows older than 2 years with `DELETE FROM audit_events WHERE created_at < ...` generates tens of gigabytes of WAL, spikes replication lag, and leaves millions of dead tuples for `autovacuum`.
+2. **Maintenance:** `REINDEX` or `VACUUM` on the whole table takes hours, and monthly reports scan a giant 80 GB index that evicts hot working data from the buffer cache.
+
+<Diagram
+  id="partitioning-problem"
+  ariaLabel="Whole-table DELETE and full-index scans saturate WAL, vacuum, and buffer cache on a 2-billion-row table"
+  caption="On a single huge table, bulk DELETEs bloat WAL and reporting scans evict the buffer cache."
+  nodes={[
+    { id: 'job', label: 'Retention DELETE', subtitle: 'Millions of rows', icon: 'ci', category: 'client', rank: 0, order: 0, variant: 'problem' },
+    { id: 'big', label: 'audit_events (2B)', subtitle: 'Single huge heap', icon: 'db', category: 'external', rank: 1, order: 0, variant: 'problem' },
+    { id: 'wal', label: 'WAL & Dead Tuples', subtitle: 'Replica lag spike', icon: 'queue', category: 'external', rank: 2, order: 0, variant: 'problem' },
+  ]}
+  edges={[
+    { from: 'job', to: 'big', label: '6h DELETE' },
+    { from: 'big', to: 'wal', label: 'bloats', kind: 'error' },
+  ]}
+/>
+
+## 3. Solution
+
+Declare a partitioned parent table (`PARTITION BY RANGE (created_at)`) with monthly child partitions:
+
+| Strategy | Partition key | Best fit |
+|---|---|---|
+| **Range** | `created_at` (month/day) | Time-series logs, events, orders with retention policies |
+| **List** | `region_code` / `tenant_tier` | Discrete domains, regional data residency, per-entity backups |
+| **Hash** | `account_id` | Uniform write/index distribution when no time/region boundary exists (no `DROP` archival) |
+
+When a query filters on `created_at >= '2026-07-01' AND created_at < '2026-08-01'`, the planner **prunes** every other partition before touching disk.
+
+## 4. Real-world analogy
+
+<Analogy>
+Think of **monthly bank statements filed in separate physical binders**. To audit July, you pull only the July binder off the shelf instead of flipping through seven years of paper. When year-one binders expire, you shred the entire binder in seconds instead of erasing individual lines with correction tape.
+</Analogy>
+
+## 5. Flow: watch it work
+
+<Flow
+  id="database-partitioning"
+  title="PostgreSQL Partition Pruning on Query"
+  nodes={[
+    { id: 'app', label: 'Service Query', subtitle: 'WHERE created_at...', icon: 'service', category: 'client', rank: 0, order: 0 },
+    { id: 'plan', label: 'Query Planner', subtitle: 'Evaluates bounds', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+    { id: 'pjul', label: 'events_2026_07', subtitle: 'Scanned (match)', icon: 'db', category: 'data', rank: 2, order: 0 },
+    { id: 'paug', label: 'events_2026_08', subtitle: 'Pruned (skipped)', icon: 'db', category: 'concrete', rank: 2, order: 1 },
+  ]}
+  steps={[
+    { edge: 'app->plan', title: 'Send range query', text: 'Query filters WHERE created_at >= 2026-07-01 AND created_at < 2026-08-01' },
+    { edge: 'plan->pjul', title: 'Scan July partition', text: 'Planner proves only events_2026_07 overlaps range and scans its local index' },
+    { edge: 'pjul->plan', title: 'Return matching rows', text: 'July partition returns rows without touching August or older partitions', kind: 'response' },
+    { edge: 'plan->app', title: 'Return query result', text: 'Query Planner streams results back to Service Query', kind: 'response' },
+    { edge: 'plan->paug', title: 'Prune August partition', text: 'Partition bounds exclude events_2026_08 completely (0 pages read)', kind: 'response' },
+  ]}
+/>
+
+## 6. Structure
+
+<Diagram
+  id="partitioning-structure"
+  layout="tree"
+  ariaLabel="Parent partitioned table routes writes and reads to monthly child partitions, each with its own local index"
+  caption="Each child partition is a separate physical table with its own local indexes."
+  nodes={[
+    { id: 'parent', label: 'audit_events', subtitle: 'PARTITION BY RANGE', icon: 'interface', category: 'abstraction', rank: 0, order: 0 },
+    { id: 'p1', label: 'events_2026_07', subtitle: 'Local PK + Index', icon: 'db', category: 'data', rank: 1, order: 0 },
+    { id: 'p2', label: 'events_2026_08', subtitle: 'Local PK + Index', icon: 'db', category: 'data', rank: 1, order: 1 },
+  ]}
+  edges={[
+    { from: 'parent', to: 'p1', label: 'Jul' },
+    { from: 'parent', to: 'p2', label: 'Aug' },
+  ]}
+/>
+
+## 7. Code
+
+```sql
+-- 1. Parent table: composite primary key includes partition key (created_at)
+CREATE TABLE audit_events (
+    id          BIGINT GENERATED ALWAYS AS IDENTITY,
+    created_at  TIMESTAMPTZ NOT NULL,
+    actor_id    TEXT NOT NULL,
+    action      TEXT NOT NULL,
+    PRIMARY KEY (id, created_at)
+) PARTITION BY RANGE (created_at);
+
+-- 2. Monthly partitions + local index template
+CREATE TABLE audit_events_2026_07 PARTITION OF audit_events
+    FOR VALUES FROM ('2026-07-01 00:00:00+00') TO ('2026-08-01 00:00:00+00');
+
+CREATE INDEX idx_audit_events_actor ON audit_events (actor_id, created_at);
+
+-- 3. Pruning works: bare partition key compared to bounds
+EXPLAIN (ANALYZE)
+SELECT * FROM audit_events
+WHERE created_at >= '2026-07-01' AND created_at < '2026-08-01'
+  AND actor_id = 'svc-deploy';
+
+-- 4. Instant archival (metadata operation, no massive DELETE)
+ALTER TABLE audit_events DETACH PARTITION audit_events_2024_01 CONCURRENTLY;
+```
+
+## 8. When to use / when to avoid
+
+<Checklist
+  use={[
+    "Tables exceeding ~100 GB or hundreds of millions of rows with clear time-series or tenant boundaries.",
+    "Compliance retention policies where dropping old months must not saturate WAL or autovacuum.",
+    "Hot working sets where only the latest 1–3 partitions need to stay warm in shared_buffers.",
+  ]}
+  avoid={[
+    "Small or medium tables where B-tree and partial indexes already give sub-10ms queries.",
+    "Using partitioning to avoid creating proper indexes—a pruned partition still needs indexes inside it.",
+  ]}
+/>
+
+## 9. How to implement
+
+<Steps>
+  <Step>
+    ### Pick the partition key from your dominant query
+    Ensure most hot queries include the partition key without wrapping it in functions like `date_trunc()`.
+  </Step>
+  <Step>
+    ### Include the partition key in unique constraints
+    Update primary keys and `UNIQUE` indexes to `(id, partition_key)` because PostgreSQL indexes are local.
+  </Step>
+  <Step>
+    ### Automate future partition creation
+    Pre-create partitions 2–3 months ahead via a scheduled job and alert if next month's partition is missing.
+  </Step>
+  <Step>
+    ### Detach expired partitions concurrently
+    Use `DETACH PARTITION ... CONCURRENTLY` (PostgreSQL 14+) before archiving or dropping old data.
+  </Step>
+</Steps>
+
+## 10. Pros / Cons
+
+<ProsCons
+  pros={[
+    "Instant archival via DETACH/DROP without WAL storms or dead-tuple bloat.",
+    "Smaller per-partition indexes stay hot in memory and reindex quickly.",
+    "Partition pruning skips irrelevant historical data automatically.",
+  ]}
+  cons={[
+    "Queries omitting the partition key fan out across every partition.",
+    "No global UNIQUE index across partitions without including the partition key.",
+    "Requires automated lifecycle management so inserts never fail on a missing partition.",
+  ]}
+/>
+
+## 11. Relations
+
+<Relations
+  items={[
+    {
+      name: "Database Indexing",
+      summary: "Partitioning complements B-tree and partial indexes—never replace indexing with partitioning.",
+      href: "/docs/architecture/database-indexing",
+    },
+    {
+      name: "Schema Migrations",
+      summary: "Plan zero-downtime DDL changes carefully across partitioned tables.",
+      href: "/docs/architecture/schema-migrations",
+    },
+    {
+      name: "Transactions & Isolation",
+      summary: "Understand lock behavior when attaching or detaching partitions concurrently.",
+      href: "/docs/architecture/transactions-isolation",
+    },
+  ]}
+/>
+
+## 12. Check yourself
+
+<Quiz
+  questions={[
+    {
+      question: "Which WHERE clause allows PostgreSQL to prune monthly partitions on created_at?",
+      options: [
+        { label: "WHERE date_trunc('month', created_at) = '2026-07-01'", description: "Wrapping the partition key in a function prevents the planner from matching partition bounds." },
+        { label: "WHERE created_at >= '2026-07-01' AND created_at < '2026-08-01'", description: "Comparing the bare partition key against range literals lets the planner prune every other partition.", correct: true },
+        { label: "WHERE actor_id = 'svc-deploy'", description: "Filtering only on a non-partition column forces a scan of all partitions." },
+      ],
+    },
+    {
+      question: "Why does PostgreSQL require a UNIQUE constraint on a partitioned table to include the partition key?",
+      options: [
+        { label: "Because PostgreSQL builds one local index per partition rather than a single global index across all partitions", description: "Without the partition key, a local index on partition A cannot check uniqueness against rows in partition B.", correct: true },
+        { label: "Because SQL forbids composite primary keys", description: "Composite primary keys are standard SQL and required here." },
+        { label: "To disable autovacuum on child tables", description: "Autovacuum still runs per child partition independently." },
+      ],
+    },
+    {
+      question: "How should you remove an expired 100-million-row month from a range-partitioned table?",
+      options: [
+        { label: "Run DELETE FROM table WHERE created_at < ... in one transaction", description: "A massive DELETE generates huge WAL volume and dead tuples." },
+        { label: "Use ALTER TABLE ... DETACH PARTITION ... CONCURRENTLY, then DROP the detached table", description: "Detaching and dropping a partition is a fast metadata operation with minimal lock impact.", correct: true },
+        { label: "Run VACUUM FULL on the parent table", description: "VACUUM FULL does not delete expired business rows." },
+      ],
+    },
+  ]}
+/>

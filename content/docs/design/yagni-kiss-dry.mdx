@@ -1,0 +1,142 @@
+---
+title: YAGNI, KISS, and the Two Kinds of DRY
+description: Build for today's real requirements (YAGNI), keep designs understandable (KISS), and deduplicate shared business knowledge rather than coincidental code shape (DRY).
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: explanation
+level: beginner
+tags: [design-principles, yagni, kiss, dry, typescript, maintainability]
+tested_with:
+  typescript: "7.0.2"
+  zod: "4.6.7"
+cards:
+  - q: "What does YAGNI warn against?"
+    a: "Building abstractions, hooks, or configuration engines for speculative future requirements that have not been specified yet."
+  - q: "What is the difference between genuine DRY and false DRY?"
+    a: "Genuine DRY deduplicates a single source of business knowledge (like a shared validation schema), whereas false DRY merges two functions that only happen to look similar today but change for different reasons."
+  - q: "What is the Rule of Three for extracting an abstraction?"
+    a: "Write the concrete code the first time, note the duplication the second time, and extract an abstraction on the third occurrence when the real axis of variation is visible."
+  - q: "What does KISS mean in practice?"
+    a: "Choosing the simplest solution that solves the actual problem clearly so the next engineer can understand and modify it without a guided tour."
+related:
+  - design/solid
+  - design/anti-patterns
+  - design/composition-vs-inheritance
+sources:
+  - title: "Martin Fowler: Yagni"
+    url: https://martinfowler.com/bliki/Yagni.html
+  - title: "Zod Documentation: Schema Definition & Inference"
+    url: https://zod.dev/
+  - title: "software-engineering: YAGNI, KISS and the Two Kinds of DRY (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/01-core-concepts/02-yagni-kiss-dry.md
+---
+
+## TL;DR
+**YAGNI** keeps you from building for imaginary futures, **KISS** favors code the next engineer can read without a tour, and **DRY** means **one source of truth for a business rule**—never blindly merging two functions just because their syntax looks alike today.
+
+## Why it exists
+Duplication is visible and cheap to fix later. A **wrong abstraction** is invisible and expensive to undo because every caller has already coupled to it—forcing future requirements through boolean flags and escape-hatch maps.
+
+## Mental model
+Before merging two similar code blocks, ask: *"If rule A changes tomorrow, must rule B change identically?"*
+
+<Diagram
+  id="dry-decision-tree"
+  layout="tree"
+  ariaLabel="Decision flow for DRY: separate coincidental similarity, wait for three occurrences of shared knowledge"
+  caption="Deduplicate shared business knowledge on the third case; leave coincidental similarity separate."
+  nodes={[
+    { id: 'start', label: 'Similar Code', subtitle: 'Two blocks look alike', icon: 'class', category: 'client', rank: 0, order: 0 },
+    { id: 'same', label: 'Same Rule?', subtitle: 'Change together?', icon: 'interface', category: 'abstraction', rank: 1, order: 0 },
+    { id: 'leave', label: 'Keep Separate', subtitle: 'Coincidental shape', icon: 'service', category: 'concrete', rank: 2, order: 0 },
+    { id: 'three', label: 'Rule of Three', subtitle: 'Wait for 3rd case', icon: 'gateway', category: 'service', rank: 2, order: 1 },
+  ]}
+  edges={[
+    { from: 'start', to: 'same', label: 'check' },
+    { from: 'same', to: 'leave', label: 'No' },
+    { from: 'same', to: 'three', label: 'Yes' },
+  ]}
+/>
+
+## Do it
+
+### 1. YAGNI (You Aren't Gonna Need It)
+Build for the requirement you have. Adding flexibility *after* a second real requirement arrives is usually cheaper than guessing upfront, because by then you know what actually varies.
+
+### 2. KISS (Keep It Simple, Stupid)
+"Simple" does not mean clever or terse—it means the next engineer can trace the behavior in two minutes without decoding a custom YAML rules engine or five layers of generics.
+
+### 3. The Two Kinds of DRY (Don't Repeat Yourself)
+- **False DRY (merging by shape):** Two email validators—one for public signups and one for internal staff—happen to share the same regex today. Merging them into `validateEmail(email, { requireCorpDomain?: boolean })` couples unrelated rules. When staff rules change, every caller has to inspect flags.
+- **Genuine DRY (single source of truth):** A validation schema shared between frontend form and backend API ensures they never drift.
+
+```ts
+import { z } from 'zod';
+
+// Genuine DRY: one schema shared by client form and server handler
+export const deployRequestSchema = z.object({
+  service: z.string().min(2),
+  environment: z.enum(['staging', 'production']),
+  replicas: z.number().int().min(1).max(20),
+});
+
+export type DeployRequest = z.infer<typeof deployRequestSchema>;
+```
+
+```ts
+// False DRY avoided: shared regex constant, separate business rules
+const EMAIL_FORMAT = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+export function isValidPublicEmail(email: string): boolean {
+  return EMAIL_FORMAT.test(email);
+}
+
+export function isValidStaffEmail(email: string, allowedDomains: readonly string[]): boolean {
+  if (!EMAIL_FORMAT.test(email)) return false;
+  const domain = email.split('@')[1]?.toLowerCase();
+  return domain !== undefined && allowedDomains.includes(domain);
+}
+```
+
+## Gotchas
+- **Flag-parameter creep:** A shared helper accumulating `isAdmin`, `skipCheck`, or `mode` flags is a sign of false DRY—split it back into two explicit functions.
+- **Abstracting on case #1:** Creating `BaseNotifier` + `NotifierFactory` when you only send Slack messages locks in the wrong interface before you know what email or PagerDuty actually need.
+- **Using YAGNI as an excuse to skip fundamentals:** YAGNI applies to speculative features, *not* to input validation, auth checks, or parameterized SQL.
+
+## Production checklist
+- [ ] Apply the **Rule of Three**: duplicate once, note it twice, abstract on the third real case.
+- [ ] Keep shared validation schemas, status enums, and API contracts in one source of truth (genuine DRY).
+- [ ] Split shared helpers that accumulate boolean mode flags for different callers.
+- [ ] Prefer explicit, readable functions over clever generic frameworks.
+
+## Check yourself
+
+<Quiz
+  questions={[
+    {
+      question: "When should you extract a shared abstraction according to the Rule of Three?",
+      options: [
+        { label: "Before writing the first implementation", description: "Abstracting before the first case means guessing what varies without real evidence." },
+        { label: "On the third real occurrence, when you can see what actually varies versus what stays fixed", description: "Waiting until the third occurrence gives you real examples of variation so the abstraction fits the actual domain.", correct: true },
+        { label: "Only after a production outage", description: "Refactoring should happen during normal development, not only after outages." },
+      ],
+    },
+    {
+      question: "Why is merging two functions solely because they currently look identical often a mistake?",
+      options: [
+        { label: "Because TypeScript forbids sharing regexes", description: "Constants and pure helpers can be shared safely." },
+        { label: "If they represent different business rules, future changes force boolean flags and couple unrelated callers", description: "DRY is about single source of truth for knowledge; coincidental similarity should stay separate so each rule can evolve independently.", correct: true },
+        { label: "Because identical functions cannot be unit tested", description: "Identical functions are easy to test, but coupled flags make testing exponential." },
+      ],
+    },
+    {
+      question: "Which of the following is an example of genuine DRY?",
+      options: [
+        { label: "Sharing one Zod schema between the frontend form and backend API route", description: "Client and server enforcing the same input contract is one piece of knowledge that must not drift.", correct: true },
+        { label: "Merging customer billing logic and admin audit logging into one function", description: "Billing and auditing change for different reasons and should stay decoupled." },
+        { label: "Adding a YAML rule engine for a single static tax rate", description: "Building a rule engine for one static value violates YAGNI and KISS." },
+      ],
+    },
+  ]}
+/>

@@ -28,6 +28,10 @@ sources:
     url: https://www.postgresql.org/docs/current/sql-createindex.html
   - title: "Prisma Docs: Prisma Migrate"
     url: https://www.prisma.io/docs/orm/prisma-migrate
+  - title: "Liquibase Docs: Best Practices & Changelogs"
+    url: https://docs.liquibase.com/concepts/changelogs/home.html
+  - title: "software-engineering: Regulated Schema Migrations (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/06-database-strategies/06-schema-migrations-in-a-regulated-environment.md
 ---
 
 ## TL;DR
@@ -91,6 +95,21 @@ As covered in [Deployment & Rollback Strategies](/docs/ci-cd/deploy-and-rollback
 - If Deploy 1 only **added** a nullable column or `CONCURRENTLY` index, you can roll back the app code without touching the DB at all.
 - Never run `down.sql` scripts that `DROP TABLE` or `DROP COLUMN` in production—you will destroy data written after the deploy. Fix forward with a new migration instead.
 
+### 4. Liquibase & regulated environments
+In enterprise and regulated systems (SOC 2, PCI DSS, banking), schema migrations also serve as **audit evidence**:
+- **Separate DDL vs DML roles:** Run migrations with a dedicated `migrator` role that owns DDL, while the runtime application user has only `SELECT`/`INSERT`/`UPDATE`/`DELETE` (DML)—never `ALTER` or `DROP` in production.
+- **SQL-first Liquibase changelogs:** Prefer formatted SQL or YAML changelogs with explicit `rollback` blocks and `runInTransaction:false` for `CREATE INDEX CONCURRENTLY`.
+- **Compatibility window ≥ rollback horizon:** Keep the old column alive for at least one full release cycle (and any reconciliation window) before running the Contract `DROP COLUMN` deploy.
+- **Dry-run + evidence:** Rehearse migrations against a masked production-sized snapshot, record `lock_timeout` / duration / row counts, and test rollback + re-apply in CI.
+
+```sql
+-- liquibase formatted sql
+-- changeset team:2026-11-27-add-display-name runInTransaction:false
+SET lock_timeout = '2s';
+ALTER TABLE users ADD COLUMN display_name TEXT;
+-- rollback ALTER TABLE users DROP COLUMN IF EXISTS display_name;
+```
+
 ## When you DON'T need this
 - **Pre-launch prototypes with zero real users:** When you can afford a 5-second maintenance window or `db push`, multi-deploy expand/contract is unnecessary ceremony.
 - **Static sites with no database:** This site has no runtime database and ships only static assets.
@@ -132,3 +151,5 @@ As covered in [Deployment & Rollback Strategies](/docs/ci-cd/deploy-and-rollback
 - [PostgreSQL Docs: Modifying Tables (ALTER TABLE)](https://www.postgresql.org/docs/current/ddl-alter.html)
 - [PostgreSQL Docs: CREATE INDEX](https://www.postgresql.org/docs/current/sql-createindex.html)
 - [Prisma Docs: Prisma Migrate](https://www.prisma.io/docs/orm/prisma-migrate)
+- [Liquibase Docs: Changelogs](https://docs.liquibase.com/concepts/changelogs/home.html)
+- [software-engineering: Regulated Schema Migrations (author's notes)](https://github.com/limme-learning/software-engineering/blob/main/06-database-strategies/06-schema-migrations-in-a-regulated-environment.md)

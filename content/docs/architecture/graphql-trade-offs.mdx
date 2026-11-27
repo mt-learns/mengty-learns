@@ -1,0 +1,128 @@
+---
+title: GraphQL Trade-offs (Schemas, N+1 & Complexity)
+description: When a GraphQL aggregation layer pays off—and the three controls every production graph needs (DataLoader batching, depth/complexity limits, and persisted queries).
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: explanation
+level: intermediate
+tags: [architecture, graphql, api, dataloader, performance, security]
+tested_with:
+  graphql_spec: "October 2021 (spec)"
+cards:
+  - q: "What problem does GraphQL solve best compared to plain REST?"
+    a: "Allowing rich client screens to aggregate data from multiple backend services in a single round trip while selecting only the fields needed."
+  - q: "How does DataLoader prevent the N+1 query explosion in GraphQL resolvers?"
+    a: "It batches individual load(id) calls made during a single event-loop tick into one batch request and caches results per request—returning items in the exact requested key order."
+  - q: "Why should remote-service fields in a GraphQL schema usually be nullable?"
+    a: "In GraphQL, an error on a non-null field propagates upward and nulls out the parent object; making remote fields nullable lets one degraded downstream service fail gracefully."
+  - q: "What two protections prevent denial-of-service from deeply nested ad-hoc GraphQL queries?"
+    a: "Enforcing query depth and complexity limits during validation, or restricting production traffic to an allow-list of persisted queries."
+related:
+  - architecture/api-design
+  - architecture/rest-graphql-grpc-decision
+  - architecture/failure-modes-resilience
+sources:
+  - title: "GraphQL Specification & Best Practices"
+    url: https://graphql.org/learn/best-practices/
+  - title: "GraphQL: Pagination & Connections"
+    url: https://graphql.org/learn/pagination/
+  - title: "software-engineering: GraphQL Without the Regret (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/05-apis-and-integration/02-graphql-core-concepts-and-tradeoffs.md
+---
+
+## TL;DR
+Adopt **GraphQL** when a client screen must stitch multiple backends in one round trip with flexible field selection. Never ship a production graph without **per-request DataLoader batching**, **depth/complexity limits** (or **persisted queries**), **nullable remote fields**, and **operation-level logging**.
+
+## Why it exists
+Complex dashboards often suffer from multi-hop REST waterfalls (fetch user → fetch accounts → fetch recent orders) or over-fetching huge payloads over slow connections. A GraphQL BFF/gateway collapses those into one typed request.
+
+## Mental model
+GraphQL replaces multiple URLs with one typed graph—meaning **caching, rate limiting, and audit logging** move from HTTP routes into your validation and resolver layers.
+
+<Diagram
+  id="graphql-gateway-n1"
+  ariaLabel="GraphQL gateway uses DataLoader to batch resolver lookups into single backend calls instead of N+1 loops"
+  caption="Per-request DataLoader collapses N resolver calls into one batched backend request."
+  nodes={[
+    { id: 'ui', label: 'Dashboard UI', subtitle: '1 query', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'gql', label: 'GraphQL Gateway', subtitle: 'Depth + Cost limit', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+    { id: 'dl', label: 'DataLoader', subtitle: 'Per-request batch', icon: 'service', category: 'service', rank: 2, order: 0 },
+    { id: 'be', label: 'Orders API', subtitle: '1 batch call', icon: 'db', category: 'data', rank: 3, order: 0 },
+  ]}
+  edges={[
+    { from: 'ui', to: 'gql', label: 'query' },
+    { from: 'gql', to: 'dl', label: 'load(id)' },
+    { from: 'dl', to: 'be', label: 'batchIds' },
+  ]}
+/>
+
+## Do it
+
+### 1. Design nullability for partial failure
+Make structural invariants (`id`, `createdAt`) non-null (`!`), and keep fields backed by separate microservices **nullable** so a single service outage degrades one panel rather than blanking the entire `data` payload:
+
+```graphql
+type AccountOverview {
+  id: ID!
+  displayName: String!
+  recentOrders: OrderConnection   # Nullable: orders-api outage won't wipe the whole screen
+  creditScore: Int                # Nullable: risk-api timeout degrades cleanly
+}
+```
+
+### 2. Per-request DataLoader (never shared across requests)
+Always construct DataLoaders inside the per-request `context` factory so cached entities never leak between users, and ensure your batch function aligns results with the exact order of `keys`:
+
+```ts
+// Per-request context: safe isolation + N+1 batching
+export function createLoaders(ordersApi: OrdersClient) {
+  return {
+    ordersByAccount: new DataLoader<string, Order[]>(async (accountIds) => {
+      const rows = await ordersApi.batchByAccountIds([...accountIds]);
+      const grouped = new Map<string, Order[]>();
+      for (const row of rows) {
+        const list = grouped.get(row.accountId) ?? [];
+        list.push(row);
+        grouped.set(row.accountId, list);
+      }
+      // Must return one entry per key in the exact input order
+      return accountIds.map((id) => grouped.get(id) ?? []);
+    }),
+  };
+}
+```
+
+## Gotchas
+- **POST-only breaks CDN/HTTP caching:** Standard `POST /graphql` bypasses `GET` HTTP caches; use persisted queries over `GET` if you need edge caching.
+- **Unbounded nested cycles:** Without depth/complexity limits, a cyclic query (`user -> orders -> user -> orders`) can trigger exponential backend fan-out.
+- **Opaque `POST /graphql 200` access logs:** Log the GraphQL operation name, trace ID, and sensitive field access explicitly in resolvers for auditability.
+
+## Production checklist
+- [ ] Instantiate DataLoaders per request (never at module scope) and test key-order alignment with missing keys.
+- [ ] Enforce maximum query depth, query complexity, or strict persisted-query allow-lists.
+- [ ] Disable GraphQL introspection in production for external-facing endpoints.
+- [ ] Keep remote-service fields nullable so partial failures do not cascade to `data: null`.
+
+## Check yourself
+
+<Quiz
+  questions={[
+    {
+      question: "Why must a GraphQL DataLoader be created per request rather than as a module-level singleton?",
+      options: [
+        { label: "Module-level DataLoaders are slower in Node.js", description: "The risk is data leakage and stale caches, not speed." },
+        { label: "DataLoader caches results in memory, so sharing one across requests leaks data between users and serves stale state", description: "Each request needs a fresh DataLoader instance scoped to that caller's context.", correct: true },
+        { label: "GraphQL forbids singleton objects", description: "GraphQL does not forbid singletons, but caching loaders across users is a security bug." },
+      ],
+    },
+    {
+      question: "What happens in GraphQL if a non-null (!) field throws an error during resolution?",
+      options: [
+        { label: "Only that field becomes null", description: "Non-null fields cannot return null, so the error bubbles up." },
+        { label: "The null bubbles up to the nearest nullable parent (potentially nulling the entire response)", description: "Keeping remote-service fields nullable isolates failures to just that section of the response.", correct: true },
+        { label: "GraphQL automatically retries the resolver three times", description: "GraphQL execution does not automatically retry failed resolvers." },
+      ],
+    },
+  ]}
+/>
