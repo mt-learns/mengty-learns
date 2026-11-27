@@ -194,7 +194,11 @@ await csvBatch.exportBatch([
   </Tab>
 </Tabs>
 
-> **Lab planned:** A hands-on `labs/bridge-pattern-ts` exercise for `OrderExporter` and `StorageDriver` is planned. In the meantime, you can copy the TypeScript snippet above into a local file and run it with `npx tsx`.
+<LabLink
+  name="bridge-pattern-ts"
+  description="Run OrderExporter and AsyncExporter against PostgresDriver and CsvDriver, and extend both hierarchies independently."
+  command="cd labs/bridge-pattern-ts && npm install && npm run typecheck && npm test && npm start"
+/>
 
 ## 8. When to use / when to avoid
 

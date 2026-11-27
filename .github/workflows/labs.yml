@@ -143,3 +143,26 @@ jobs:
         run: |
           bash <(curl -sSfL https://raw.githubusercontent.com/rhysd/actionlint/main/scripts/download-actionlint.bash)
           ./actionlint -color .github/workflows/*.yml
+
+  typescript:
+    name: TypeScript (typecheck + test)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4.2.2
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Install, typecheck, and test TypeScript labs
+        shell: bash
+        run: |
+          shopt -s nullglob
+          for cfg in labs/*/tsconfig.json; do
+            dir="$(dirname "$cfg")"
+            echo "::group::typescript $dir"
+            npm --prefix "$dir" ci
+            npm --prefix "$dir" run typecheck
+            npm --prefix "$dir" test
+            echo "::endgroup::"
+          done
