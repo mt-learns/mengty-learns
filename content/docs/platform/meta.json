@@ -1,6 +1,8 @@
 {
   "title": "Platform tools",
+  "icon": "platform",
   "pages": [
+    "index",
     "secure-deployment-platform",
     "security-baseline",
     "ansible-essentials",

@@ -1,6 +1,7 @@
 {
   "title": "Security",
   "pages": [
+    "index",
     "owasp-top-10",
     "asvs-5-overview",
     "threat-modeling",

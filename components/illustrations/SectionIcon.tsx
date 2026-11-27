@@ -1,5 +1,5 @@
 import { useId } from 'react';
-import type { AssetSize, SectionIconName } from './types';
+import type { AssetSize, ClayIconName, SectionIconName, TrackIconName } from './types';
 
 export interface SectionIconProps {
   name: SectionIconName;
@@ -9,45 +9,94 @@ export interface SectionIconProps {
   className?: string;
 }
 
-const DEFAULT_TITLES: Record<SectionIconName, string> = {
+export interface TrackIconProps {
+  name: TrackIconName;
+  size?: AssetSize;
+  title?: string;
+  decorative?: boolean;
+  className?: string;
+}
+
+const DEFAULT_TITLES: Record<ClayIconName, string> = {
   foundations: 'Foundations section icon',
   containers: 'Containers section icon',
   kubernetes: 'Kubernetes section icon',
   iac: 'Infrastructure as Code section icon',
   'ci-cd': 'CI/CD section icon',
   gitops: 'GitOps section icon',
+  platform: 'Platform tools section icon',
+  craft: 'Coding craft section icon',
   design: 'Design patterns section icon',
   architecture: 'Architecture section icon',
+  frontend: 'Frontend section icon',
   security: 'Security section icon',
   process: 'Process section icon',
+  leadership: 'Leadership section icon',
+  communication: 'Communication section icon',
+  english: 'English for engineers section icon',
+  career: 'Career and interviews section icon',
+  business: 'Business and startups section icon',
+  'build-ship': 'Build & Ship track icon',
+  'design-code': 'Design & Code track icon',
+  secure: 'Secure track icon',
+  'work-grow': 'Work & Grow track icon',
 };
 
-const SECTION_TINTS: Record<SectionIconName, { glow: string; rim: string }> = {
+const ICON_TINTS: Record<ClayIconName, { glow: string; rim: string }> = {
   foundations: { glow: 'var(--primary, #0F766E)', rim: '#5EEAD4' },
   containers: { glow: '#f59e0b', rim: '#fbbf24' },
   kubernetes: { glow: 'var(--primary, #0F766E)', rim: '#2DD4BF' },
   iac: { glow: '#8b5cf6', rim: '#a78bfa' },
   'ci-cd': { glow: '#f97316', rim: '#fb923c' },
   gitops: { glow: '#10b981', rim: '#34d399' },
+  platform: { glow: '#0ea5e9', rim: '#38bdf8' },
+  craft: { glow: '#f59e0b', rim: '#fbbf24' },
   design: { glow: '#ec4899', rim: '#f472b6' },
   architecture: { glow: '#6366f1', rim: '#818cf8' },
+  frontend: { glow: '#ec4899', rim: '#f472b6' },
   security: { glow: '#10b981', rim: '#34d399' },
   process: { glow: '#0ea5e9', rim: '#38bdf8' },
+  leadership: { glow: '#8b5cf6', rim: '#a78bfa' },
+  communication: { glow: '#10b981', rim: '#34d399' },
+  english: { glow: '#6366f1', rim: '#818cf8' },
+  career: { glow: '#f97316', rim: '#fb923c' },
+  business: { glow: '#10b981', rim: '#34d399' },
+  'build-ship': { glow: 'var(--primary, #0F766E)', rim: '#5EEAD4' },
+  'design-code': { glow: '#8b5cf6', rim: '#a78bfa' },
+  secure: { glow: '#10b981', rim: '#34d399' },
+  'work-grow': { glow: '#f59e0b', rim: '#fbbf24' },
 };
 
 /**
- * Soft 3D clay app-icon squircle for each of the 10 learning sections.
+ * Soft 3D clay app-icon squircle for each learning section.
  */
-export function SectionIcon({
+export function SectionIcon(props: SectionIconProps) {
+  return <ClayIcon {...props} />;
+}
+
+/**
+ * Soft 3D clay app-icon squircle for each of the 4 learning tracks.
+ */
+export function TrackIcon(props: TrackIconProps) {
+  return <ClayIcon {...props} />;
+}
+
+function ClayIcon({
   name,
   size = 48,
   title,
   decorative = false,
   className,
-}: SectionIconProps) {
+}: {
+  name: ClayIconName;
+  size?: AssetSize;
+  title?: string;
+  decorative?: boolean;
+  className?: string;
+}) {
   const uid = useId().replace(/:/g, '');
   const resolvedTitle = title ?? DEFAULT_TITLES[name];
-  const tint = SECTION_TINTS[name];
+  const tint = ICON_TINTS[name];
 
   const a11yProps = decorative
     ? { 'aria-hidden': true as const }
@@ -279,6 +328,146 @@ export function SectionIcon({
             <rect x="45" y="39.5" width="15" height="3" rx="1.5" fill="#94a3b8" />
             <rect x="45" y="48.5" width="12" height="3" rx="1.5" fill="#94a3b8" />
             <rect x="45" y="57.5" width="14" height="3" rx="1.5" fill={`url(#${uid}-clay-lavender)`} />
+          </g>
+        )}
+
+        {name === 'leadership' && (
+          <g>
+            {/* Matte compass: guiding direction */}
+            <circle cx="48" cy="48" r="24" fill={`url(#${uid}-clay-lavender)`} />
+            <circle cx="48" cy="48" r="18" fill="#f8fafc" />
+            <path d="M 48 33 L 54 48 L 48 45 L 42 48 Z" fill={`url(#${uid}-clay-coral)`} />
+            <path d="M 48 63 L 54 48 L 48 51 L 42 48 Z" fill={`url(#${uid}-clay-blue)`} />
+            <circle cx="48" cy="48" r="3.5" fill={`url(#${uid}-clay-amber)`} />
+          </g>
+        )}
+
+        {name === 'platform' && (
+          <g>
+            {/* Stacked server blades + control-plane dial */}
+            <rect x="21" y="25" width="54" height="19" rx="7" fill={`url(#${uid}-clay-blue)`} />
+            <rect x="21" y="49" width="54" height="19" rx="7" fill={`url(#${uid}-clay-lavender)`} />
+            <circle cx="31" cy="34.5" r="3.5" fill={`url(#${uid}-clay-mint)`} />
+            <rect x="39" y="32.5" width="24" height="4" rx="2" fill="#ffffff" fillOpacity="0.7" />
+            <circle cx="31" cy="58.5" r="3.5" fill={`url(#${uid}-clay-amber)`} />
+            <rect x="39" y="56.5" width="18" height="4" rx="2" fill="#ffffff" fillOpacity="0.7" />
+            <circle cx="65" cy="58.5" r="5" fill={`url(#${uid}-clay-mint)`} stroke="#ffffff" strokeWidth="1.5" />
+          </g>
+        )}
+
+        {name === 'frontend' && (
+          <g>
+            {/* Browser window with overlapping UI cards */}
+            <rect x="20" y="24" width="56" height="48" rx="9" fill={`url(#${uid}-clay-blue)`} />
+            <rect x="25" y="36" width="46" height="31" rx="5" fill="#f8fafc" />
+            <circle cx="28" cy="30" r="2" fill="#ffffff" fillOpacity="0.85" />
+            <circle cx="34.5" cy="30" r="2" fill="#ffffff" fillOpacity="0.85" />
+            <circle cx="41" cy="30" r="2" fill="#ffffff" fillOpacity="0.85" />
+            <rect x="29" y="41" width="20" height="21" rx="4" fill={`url(#${uid}-clay-coral)`} />
+            <rect x="52" y="41" width="15" height="9" rx="3.5" fill={`url(#${uid}-clay-amber)`} />
+            <rect x="52" y="53" width="15" height="9" rx="3.5" fill={`url(#${uid}-clay-mint)`} />
+          </g>
+        )}
+
+        {name === 'craft' && (
+          <g>
+            {/* Craftsman's square + precision mallet */}
+            <path d="M 25 25 H 69 V 37 H 37 V 69 H 25 Z" fill={`url(#${uid}-clay-amber)`} stroke={`url(#${uid}-clay-amber)`} strokeWidth="4" strokeLinejoin="round" />
+            <rect x="44" y="45" width="26" height="14" rx="5" transform="rotate(-35 57 52)" fill={`url(#${uid}-clay-blue)`} />
+            <rect x="54" y="53" width="6" height="19" rx="3" transform="rotate(-35 57 62)" fill={`url(#${uid}-clay-coral)`} />
+          </g>
+        )}
+
+        {name === 'communication' && (
+          <g>
+            {/* Two overlapping clay speech bubbles */}
+            <rect x="20" y="25" width="42" height="30" rx="11" fill={`url(#${uid}-clay-blue)`} />
+            <path d="M 27 52 L 24 62 L 36 54 Z" fill={`url(#${uid}-clay-blue)`} />
+            <rect x="28" y="35" width="24" height="3.5" rx="1.75" fill="#ffffff" fillOpacity="0.85" />
+            <rect x="28" y="42" width="16" height="3.5" rx="1.75" fill="#ffffff" fillOpacity="0.7" />
+            <rect x="42" y="42" width="34" height="24" rx="10" fill={`url(#${uid}-clay-mint)`} />
+            <path d="M 65 63 L 71 71 L 58 65 Z" fill={`url(#${uid}-clay-mint)`} />
+            <circle cx="53" cy="54" r="2.5" fill="#ffffff" fillOpacity="0.9" />
+            <circle cx="60" cy="54" r="2.5" fill="#ffffff" fillOpacity="0.9" />
+            <circle cx="67" cy="54" r="2.5" fill={`url(#${uid}-clay-amber)`} />
+          </g>
+        )}
+
+        {name === 'english' && (
+          <g>
+            {/* Open clay book with geometric "A" and bookmark */}
+            <rect x="20" y="27" width="56" height="42" rx="8" fill={`url(#${uid}-clay-lavender)`} />
+            <rect x="24" y="30" width="22" height="36" rx="4" fill="#f8fafc" />
+            <rect x="50" y="30" width="22" height="36" rx="4" fill="#f8fafc" />
+            <path d="M 31 54 L 35 41 L 39 54 M 32.5 50 H 37.5" fill="none" stroke={`url(#${uid}-clay-blue)`} strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+            <rect x="54" y="39" width="14" height="3.5" rx="1.75" fill="#94a3b8" />
+            <rect x="54" y="46" width="11" height="3.5" rx="1.75" fill="#94a3b8" />
+            <rect x="54" y="53" width="13" height="3.5" rx="1.75" fill={`url(#${uid}-clay-mint)`} />
+            <path d="M 62 24 H 69 V 38 L 65.5 35 L 62 38 Z" fill={`url(#${uid}-clay-amber)`} />
+          </g>
+        )}
+
+        {name === 'career' && (
+          <g>
+            {/* Ascending stepping stones + summit flag */}
+            <rect x="22" y="56" width="16" height="14" rx="5" fill={`url(#${uid}-clay-mint)`} />
+            <rect x="40" y="44" width="16" height="26" rx="5" fill={`url(#${uid}-clay-blue)`} />
+            <rect x="58" y="32" width="16" height="38" rx="5" fill={`url(#${uid}-clay-amber)`} />
+            <path d="M 66 32 V 19" stroke="#64748b" strokeWidth="3" strokeLinecap="round" />
+            <path d="M 66 19 L 78 23.5 L 66 28 Z" fill={`url(#${uid}-clay-coral)`} />
+          </g>
+        )}
+
+        {name === 'business' && (
+          <g>
+            {/* Rising bar chart + trend arrow */}
+            <rect x="23" y="51" width="13" height="19" rx="5" fill={`url(#${uid}-clay-lavender)`} />
+            <rect x="41.5" y="41" width="13" height="29" rx="5" fill={`url(#${uid}-clay-blue)`} />
+            <rect x="60" y="30" width="13" height="40" rx="5" fill={`url(#${uid}-clay-mint)`} />
+            <path d="M 24 41 L 42 30 L 53 34 L 70 21" fill="none" stroke={`url(#${uid}-clay-amber)`} strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M 62 20 H 71 V 29" fill="none" stroke={`url(#${uid}-clay-amber)`} strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
+          </g>
+        )}
+
+        {name === 'build-ship' && (
+          <g>
+            {/* Clay rocket ship */}
+            <path d="M 35 55 L 25 61 L 31 44 Z" fill={`url(#${uid}-clay-coral)`} />
+            <path d="M 61 55 L 71 61 L 65 44 Z" fill={`url(#${uid}-clay-coral)`} />
+            <path d="M 48 20 C 57 29 61 42 58 59 H 38 C 35 42 39 29 48 20 Z" fill={`url(#${uid}-clay-blue)`} />
+            <circle cx="48" cy="40" r="6" fill="#f8fafc" stroke={`url(#${uid}-clay-mint)`} strokeWidth="2.5" />
+            <path d="M 43 60 L 48 74 L 53 60 Z" fill={`url(#${uid}-clay-amber)`} />
+          </g>
+        )}
+
+        {name === 'design-code' && (
+          <g>
+            {/* Clay code bracket frame + drafting pen */}
+            <rect x="22" y="25" width="52" height="46" rx="11" fill={`url(#${uid}-clay-lavender)`} />
+            <path d="M 39 41 L 31 48 L 39 55" fill="none" stroke="#ffffff" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M 57 41 L 65 48 L 57 55" fill="none" stroke="#ffffff" strokeWidth="4.5" strokeLinecap="round" strokeLinejoin="round" />
+            <line x1="51" y1="38" x2="45" y2="58" stroke={`url(#${uid}-clay-amber)`} strokeWidth="4.5" strokeLinecap="round" />
+          </g>
+        )}
+
+        {name === 'secure' && (
+          <g>
+            {/* Clay shield with bright check badge */}
+            <path d="M 48 21 L 71 30 V 47 C 71 62 60 71 48 76 C 36 71 25 62 25 47 V 30 Z" fill={`url(#${uid}-clay-mint)`} />
+            <path d="M 38 48 L 45 55 L 59 40" fill="none" stroke="#ffffff" strokeWidth="5.5" strokeLinecap="round" strokeLinejoin="round" />
+            <circle cx="67" cy="64" r="9" fill={`url(#${uid}-clay-amber)`} />
+            <circle cx="67" cy="64" r="3" fill="#ffffff" />
+          </g>
+        )}
+
+        {name === 'work-grow' && (
+          <g>
+            {/* Clay potted sprout + warm sun */}
+            <circle cx="66" cy="27" r="7" fill={`url(#${uid}-clay-amber)`} />
+            <path d="M 48 53 V 34" fill="none" stroke={`url(#${uid}-clay-mint)`} strokeWidth="5" strokeLinecap="round" />
+            <ellipse cx="38" cy="36" rx="10" ry="6" transform="rotate(-24 38 36)" fill={`url(#${uid}-clay-mint)`} />
+            <ellipse cx="58" cy="40" rx="9" ry="5.5" transform="rotate(22 58 40)" fill="#6ee7b7" />
+            <path d="M 33 52 H 63 L 59 71 H 37 Z" fill={`url(#${uid}-clay-coral)`} stroke={`url(#${uid}-clay-coral)`} strokeWidth="3" strokeLinejoin="round" />
           </g>
         )}
       </g>

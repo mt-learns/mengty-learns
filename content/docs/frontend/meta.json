@@ -1,6 +1,8 @@
 {
   "title": "Frontend",
+  "icon": "frontend",
   "pages": [
+    "index",
     "react-component-architecture",
     "nextjs-rendering-strategies",
     "data-fetching-tanstack-query",

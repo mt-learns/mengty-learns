@@ -1,0 +1,122 @@
+---
+title: Reading & Lesson Components Kitchen Sink
+description: Visual verification page for all SHOWCASE S0 reading, lesson, and decision-tree components.
+kind: lesson
+type: tutorial
+level: beginner
+cefr: B1
+tags: [kitchen-sink]
+status: draft
+updated: 2026-11-27
+cards:
+  - q: "When do you use past simple instead of present perfect?"
+    a: "When the sentence names a finished time such as yesterday, last week, or in 2024."
+---
+
+## TL;DR
+
+This draft page renders every new SHOWCASE S0 reading component so we can verify layout, contrast, and responsiveness at 360px, 768px, and 1280px in light and dark themes.
+
+<YouWillLearn
+  items={[
+    "See YouWillLearn, OnePicture, Rule, Example, and Say together",
+    "Test interactive Template, PatternBank, and DecisionTree controls",
+    "Verify KeyTakeaways and flashcards in 5-minute mode",
+  ]}
+/>
+
+<OnePicture
+  id="kitchen-sink-one-pic"
+  title="Lesson loop at a glance"
+  caption="Rule -> Examples -> Patterns -> Recall."
+  nodes={[
+    { id: "rule", label: "Rule", category: "abstraction" },
+    { id: "ex", label: "Examples", category: "concrete" },
+    { id: "pat", label: "Patterns", category: "service" },
+    { id: "quiz", label: "Recall", category: "data" },
+  ]}
+  edges={[
+    { from: "rule", to: "ex", kind: "request" },
+    { from: "ex", to: "pat", kind: "request" },
+    { from: "pat", to: "quiz", kind: "request" },
+  ]}
+/>
+
+<Rule formula="subject + verb-ed + finished time">
+  Use past simple when the action finished at a known time in the past (yesterday, last sprint, at 09:00).
+</Rule>
+
+<Example
+  wrong="I have deployed the hotfix yesterday."
+  right="I deployed the hotfix yesterday."
+  reason="Yesterday is a finished time, so use past simple instead of present perfect."
+/>
+
+<Say
+  word="deployed"
+  ipa="/dɪˈplɔɪd/"
+  sound="ends with voiced /d/"
+  note="Do not drop the final /d/ sound when speaking in standups."
+/>
+
+<Template
+  title="Standup update"
+  text={"Yesterday: I fixed the login redirect bug.\nToday: I'm adding integration tests for OAuth.\nBlockers: None."}
+/>
+
+<Dialogue
+  title="Code review check-in"
+  speakers={["Author", "Reviewer"]}
+  lines={[
+    { speaker: "Author", text: "I updated the retry logic to use exponential backoff." },
+    { speaker: "Reviewer", text: "Looks clean! Could we add a cap at 30 seconds?", note: "Polite suggestion with 'Could we...'" },
+  ]}
+/>
+
+<PatternBank
+  title="Standup & PR patterns"
+  patterns={[
+    {
+      pattern: "Yesterday I ___. Today I'm going to ___.",
+      example: "Yesterday I fixed the flaky test. Today I'm going to open the PR.",
+    },
+    {
+      pattern: "Could we ___ instead? That way ___.",
+      example: "Could we cache this lookup instead? That way we avoid extra DB reads.",
+    },
+  ]}
+/>
+
+<DecisionTree
+  id="kitchen-sink-tree"
+  title="Past simple vs present perfect"
+  caption="Ask whether the sentence includes a finished time."
+  start="q1"
+  nodes={[
+    {
+      id: "q1",
+      label: "Finished time?",
+      question: "Does the sentence name a finished time (yesterday, last week, at 10am)?",
+      yes: "past",
+      no: "perf",
+    },
+    {
+      id: "past",
+      label: "Past simple",
+      result: "Use past simple: I deployed it yesterday.",
+    },
+    {
+      id: "perf",
+      label: "Present perfect",
+      result: "Use present perfect: I have deployed it.",
+    },
+  ]}
+/>
+
+<KeyTakeaways
+  items={[
+    "Use past simple with finished times like yesterday or last week.",
+    "Use present perfect when the result matters now and no finished time is named.",
+    "Keep final -ed consonants clear in spoken updates.",
+  ]}
+/>

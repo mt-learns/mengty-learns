@@ -4,17 +4,44 @@ import { docsRoute } from './shared';
 import { defineCollections, defineDocs } from 'fumadocs-mdx/macro';
 import { metaSchema, pageSchema } from 'fumadocs-core/source/schema';
 import { z } from 'zod';
-import { SectionIcon, SECTION_ICON_NAMES, type SectionIconName } from '@/components/illustrations';
+import {
+  BookOpen,
+  FileText,
+  FlaskConical,
+  Lightbulb,
+  ListChecks,
+  Scale,
+  ShieldAlert,
+} from 'lucide-react';
+import {
+  SectionIcon,
+  SECTION_ICON_NAMES,
+  TrackIcon,
+  TRACK_ICON_NAMES,
+  type SectionIconName,
+  type TrackIconName,
+} from '@/components/illustrations';
+
+const KIND_ICON_MAP: Record<string, typeof FileText> = {
+  note: FileText,
+  concept: Lightbulb,
+  cheatsheet: ListChecks,
+  lab: FlaskConical,
+  decision: Scale,
+  postmortem: ShieldAlert,
+  lesson: BookOpen,
+};
 
 const frontmatterSchema = pageSchema.extend({
   type: z.enum(['tutorial', 'how-to', 'reference', 'explanation']).optional(),
   level: z.enum(['beginner', 'intermediate', 'advanced']).optional(),
+  cefr: z.enum(['A1', 'A2', 'B1', 'B2', 'C1']).optional(),
   tags: z.array(z.string()).default([]),
   tested_with: z.record(z.string(), z.string()).optional(),
   status: z.enum(['draft', 'stable', 'outdated']).default('stable'),
   updated: z.string().optional(),
   verified: z.string().optional(),
-  kind: z.enum(['note', 'concept', 'cheatsheet', 'lab', 'decision', 'postmortem', 'radar', 'digest']).default('note'),
+  kind: z.enum(['note', 'concept', 'cheatsheet', 'lab', 'decision', 'postmortem', 'lesson', 'radar', 'digest']).default('note'),
   cards: z.array(z.object({ q: z.string(), a: z.string() })).default([]),
   related: z.array(z.string()).default([]),
   sources: z.array(z.object({ title: z.string(), url: z.string() })).default([]),
@@ -56,8 +83,37 @@ export const source = loader({
         decorative: true,
       });
     }
+    if (icon && (TRACK_ICON_NAMES as readonly string[]).includes(icon)) {
+      return createElement(TrackIcon, {
+        name: icon as TrackIconName,
+        size: 24,
+        decorative: true,
+      });
+    }
   },
-  plugins: [],
+  plugins: [
+    {
+      name: 'kind-icons',
+      transformPageTree: {
+        file(node, filePath) {
+          if (!filePath || node.icon) return node;
+          const file = this.storage.read(filePath);
+          if (!file || file.format !== 'page') return node;
+          const kind = (file.data as { kind?: string }).kind ?? 'note';
+          const Icon = KIND_ICON_MAP[kind];
+          if (!Icon) return node;
+          return {
+            ...node,
+            icon: createElement(Icon, {
+              className: 'size-4 shrink-0 text-muted-foreground',
+              strokeWidth: 1.75,
+              'aria-hidden': true,
+            }),
+          };
+        },
+      },
+    },
+  ],
 });
 
 export const docsLlms = llms(source, {

@@ -1,6 +1,7 @@
 {
   "title": "Containers",
   "pages": [
+    "index",
     "docker-basics",
     "image-layers-cache",
     "multi-stage-nextjs",

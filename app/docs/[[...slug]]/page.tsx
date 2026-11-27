@@ -15,8 +15,10 @@ import { getPageImageUrl, gitConfig } from '@/lib/shared';
 import { OutdatedBanner } from '@/components/learn/OutdatedBanner';
 import { PageFooter } from '@/components/learn/PageFooter';
 import { MarkDone } from '@/components/learn/MarkDone';
+import { FiveMinuteToggle } from '@/components/learn/FiveMinuteToggle';
 import { Illustration } from '@/components/illustrations';
 import { StandaloneBackBar } from '@/components/pwa/standalone-ui';
+import { computeReadingMinutes } from '@/lib/reading-time';
 
 export default async function Page({ params }: { params: Promise<{ slug?: string[] }> }) {
   const resolvedParams = await params;
@@ -25,6 +27,7 @@ export default async function Page({ params }: { params: Promise<{ slug?: string
 
   const MDX = page.data.body;
   const markdownUrl = `/llms.mdx${page.url}.md`;
+  const readingMinutes = computeReadingMinutes(page.path);
 
   return (
     <DocsPage
@@ -47,16 +50,22 @@ export default async function Page({ params }: { params: Promise<{ slug?: string
         <MarkDone slug={page.url} />
       </div>
       <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground my-2">
-        {page.data.type && (
-          <span className="inline-flex items-center rounded-full bg-primary text-primary-foreground px-2.5 py-0.5 font-medium capitalize">
-            {page.data.type}
-          </span>
-        )}
         {page.data.level && (
           <span className="inline-flex items-center rounded-full bg-secondary text-secondary-foreground px-2.5 py-0.5 font-medium capitalize">
             {page.data.level}
           </span>
         )}
+        {page.data.cefr && (
+          <span className="inline-flex items-center rounded-full bg-highlight-soft text-highlight-text px-2.5 py-0.5 font-semibold">
+            CEFR {page.data.cefr}
+          </span>
+        )}
+        <span className="inline-flex items-center rounded-full bg-muted text-muted-foreground px-2.5 py-0.5 font-medium tabular-nums">
+          {readingMinutes} min read
+        </span>
+        <span className="inline-flex items-center rounded-full bg-primary text-primary-foreground px-2.5 py-0.5 font-medium capitalize">
+          {page.data.kind ?? page.data.type ?? 'note'}
+        </span>
         {page.data.tested_with && Object.keys(page.data.tested_with).length > 0 && (
           <span className="inline-flex items-center rounded-full bg-muted text-muted-foreground px-2.5 py-0.5 font-medium">
             Tested with {Object.entries(page.data.tested_with).map(([k, v]) => `${k} ${v}`).join(', ')}
@@ -68,12 +77,13 @@ export default async function Page({ params }: { params: Promise<{ slug?: string
           </span>
         )}
       </div>
-      <div className="flex flex-row gap-2 items-center border-b pb-6">
+      <div className="flex flex-row flex-wrap gap-2 items-center border-b pb-6" data-print="hide">
         <MarkdownCopyButton markdownUrl={markdownUrl} />
         <ViewOptionsPopover
           markdownUrl={markdownUrl}
           githubUrl={`https://github.com/${gitConfig.user}/${gitConfig.repo}/blob/${gitConfig.branch}/content/docs/${encodeURI(page.path)}`}
         />
+        <FiveMinuteToggle />
       </div>
       {page.data.kind === 'lab' && (
         <div className="my-6 flex justify-center sm:justify-start">
@@ -88,6 +98,29 @@ export default async function Page({ params }: { params: Promise<{ slug?: string
           })}
         />
       </DocsBody>
+      {page.data.cards && page.data.cards.length > 0 && (
+        <section
+          aria-label="Flashcards"
+          data-five-min="keep"
+          data-print="cards"
+          className="mt-8 rounded-card border border-border bg-card p-5"
+        >
+          <h2 className="font-sans text-headline font-semibold text-foreground">
+            Flashcards ({page.data.cards.length})
+          </h2>
+          <ul className="mt-3 space-y-2.5">
+            {page.data.cards.map((card, i) => (
+              <li
+                key={i}
+                className="rounded-panel border border-border bg-grouped p-3.5 text-subheadline [break-inside:avoid]"
+              >
+                <p className="font-sans font-semibold text-foreground">{card.q}</p>
+                <p className="mt-1 font-reading text-muted-foreground">{card.a}</p>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
       <PageFooter related={page.data.related} sources={page.data.sources} slug={page.url} />
     </DocsPage>
   );

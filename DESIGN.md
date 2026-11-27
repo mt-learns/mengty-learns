@@ -261,7 +261,8 @@ Inside `.prose`, the reading font is set on the container, and headings, buttons
 
 - **One container:** `components/layout/container.tsx` = `max-w-[1200px] mx-auto px-6 md:px-8`. The Fumadocs home nav is pinned to the same width and gutters in `app/global.css` (`#nd-home-layout`, `#nd-nav`), and `components/layout/site-footer.tsx` uses the container. `node scripts/qa-shots.mjs` reports whether the nav, every container and the footer share their content edges.
 - **Section rhythm:** `py-16 md:py-24` (64px / 96px), separated by hairline `border-t`. Grids use 12 columns at `lg`; the hero stacks below `lg`.
-- **Home (`/`, Persuade):** hero (H1 + two CTAs + desk illustration) → proof strip (build-time counts) → Read / Do / Remember (each with a real artifact: a flow strip, the CI lab checks, a real flashcard) → 9 learning paths (3×3 / 2 / 1) → live `<Flow>` → latest notes → radar snapshot → footer. All counts come from `lib/home-data.ts` at build time.
+- **Home (`/`, Persuade):** hero (H1 + two CTAs + desk illustration) → proof strip (build-time counts) → Read / Do / Remember (each with a real artifact: a flow strip, the CI lab checks, a real flashcard) → 4 track cards (`Build & Ship`, `Design & Code`, `Secure`, `Work & Grow`, 2×2 on desktop) with section icon chips + 30-minute "Start here" tour → live `<Flow>` → latest notes → radar snapshot → footer. All counts come from `lib/home-data.ts` at build time.
+- **Docs sidebar & section landings:** `content/docs/meta.json` groups the 18 sections under the 4 track separators (`build-ship`, `design-code`, `secure`, `work-grow`). Each section landing renders `<LearningMap section="..." />`, a beginner-to-advanced SVG path with zero-CLS `localStorage` completion badges. Every sidebar page item carries a 16px `lucide-react` kind glyph (`note`, `concept`, `cheatsheet`, `lab`, `decision`, `postmortem`, `lesson`).
 - **Touch targets:** minimum `44px` (`--tap-target` / `min-h-tap`) on buttons, links and list rows.
 
 ## Reading (docs)
@@ -370,10 +371,25 @@ Consistent nested squircle-like rounding:
 - **Theme Awareness:** Use CSS custom properties (`var(--card)`, `var(--primary)`, `var(--foreground)`, etc.) and scoped gradient/filter IDs so every asset adapts cleanly to light and dark modes.
 - **Originality:** Zero vendor logos or trademarks (e.g., Kubernetes uses an original 7-spoke helm wheel, never the official K8s mark; Containers uses a cargo crate).
 - **Component API (`components/illustrations/`):**
-  - `<SectionIcon name="..." size={24 | 48 | 96 | 256} decorative={...} title="..." />` for the 10 sections (`foundations`, `containers`, `kubernetes`, `iac`, `ci-cd`, `gitops`, `design`, `architecture`, `security`, `process`).
+  - `<SectionIcon name="..." size={24 | 48 | 96 | 256} decorative={...} title="..." />` for all 18 sections (`foundations`, `containers`, `kubernetes`, `iac`, `ci-cd`, `gitops`, `platform`, `craft`, `design`, `architecture`, `frontend`, `security`, `process`, `leadership`, `communication`, `english`, `career`, `business`).
+  - `<TrackIcon name="..." size={24 | 48 | 96 | 256} decorative={...} title="..." />` for the 4 tracks (`build-ship`, `design-code`, `secure`, `work-grow`).
   - `<Illustration name="..." size={24 | 48 | 96 | 256} decorative={...} title="..." />` for spot art (`hero-desk`, `review-empty`, `not-found`, `lab-header`, `radar-header`).
   - Accessibility: `role="img"` + `<title>` when meaningful, or `aria-hidden="true"` when decorative.
 - **Static Exports:** Mirror optimized standalone SVGs in `public/illustrations/` for OG images and static `<img src>` usage.
+
+### Reading & Lesson Components (`components/mdx/`, `components/learn/`)
+- **`<LearningMap section="..." />`:** Server-ordered beginner → advanced SVG path for section landing pages, with a zero-CLS `localStorage` (`mt-completed-v1`) progress island. Fits 265–1024px without pan; labels 15px.
+- **`<YouWillLearn items={[...]} />`:** 3-bullet goal box at the top of a page. Do: keep each outcome to 1 line. Don't: repeat the page description verbatim.
+- **`<OnePicture ... />`:** Wraps `<Diagram>` for a static visual summary (marked `data-five-min="keep"`). Do: follow `DIAGRAM-RULES.md` (≤ 7 nodes, labels ≤ 18 chars). Don't: hand-draw raw inline `<svg>`.
+- **`<KeyTakeaways items={[...]} />`:** 3–5 numbered takeaways at the end (marked `data-five-min="keep"`). `scripts/build-cards.mjs` also emits its items as flashcards into `public/cards.json`.
+- **`<Rule formula?>`:** Concise 2–4 line rule box with an optional monospace formula pill. Do: keep one rule per box. Don't: bury multi-paragraph prose inside `<Rule>`.
+- **`<Example wrong? right reason? />`:** Workplace wrong-vs-right comparison using `X`/`Check` Lucide icons + explicit `Avoid:` / `Use:` labels (never colour-only) and a 1-line `Why:` reason.
+- **`<Say word ipa? sound? note? />`:** Pronunciation callout for meetings and speaking lessons.
+- **`<Template title? text? />`:** Copy-ready workplace template (standup, PR, email, STAR) with a keyboard-accessible `Copy` button (`min-h-tap`).
+- **`<Dialogue title? speakers? lines={[...]} />`:** Multi-speaker conversation with distinct speaker pills. Do: keep turns realistic and short.
+- **`<DecisionTree id title? caption? start nodes={[...]} />`:** Clickable yes/no decision guide paired with a `<Diagram layout="tree">` view that satisfies `DIAGRAM-RULES.md`.
+- **`<PatternBank title? patterns={[...]} />`:** Fill-in-the-blank sentence patterns, each with an optional example and a keyboard-accessible `Copy` button.
+- **`<FiveMinuteToggle />`:** Docs action-bar toggle persisted under `mt-five-min-v1` that condenses a page to TL;DR, `<OnePicture>`, `<KeyTakeaways>`, and flashcards. Pair with `@media print` in `app/global.css` for clean cheatsheet/lesson printing.
 
 ## Do's and Don'ts
 

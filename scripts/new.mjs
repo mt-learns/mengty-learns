@@ -10,7 +10,12 @@ if (!kind || !targetPath) {
   process.exit(1);
 }
 
-const templateName = kind === 'concept' ? 'concept.mdx' : 'note.mdx';
+const templateMap = {
+  concept: 'concept.mdx',
+  lesson: 'lesson.mdx',
+  note: 'note.mdx',
+};
+const templateName = templateMap[kind] ?? 'note.mdx';
 const templatePath = path.join('content', '_templates', templateName);
 
 if (!fs.existsSync(templatePath)) {

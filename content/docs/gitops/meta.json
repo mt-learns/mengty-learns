@@ -1,6 +1,7 @@
 {
   "title": "GitOps",
   "pages": [
+    "index",
     "what-is-gitops",
     "drift-reconciliation",
     "argocd-vs-flux"
