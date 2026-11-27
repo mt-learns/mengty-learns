@@ -1,0 +1,126 @@
+---
+title: Practical Testing Strategy
+description: Compare the test pyramid vs testing trophy, decide what to test where, test with in-memory fakes, tame flaky tests, and use coverage as a signal—with this site's real setup.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: explanation
+level: intermediate
+tags: [process, testing, vitest, playwright, accessibility, ci-cd]
+tested_with:
+  vitest: "5.1.1"
+  playwright: "1.65.1"
+  axe_core: "4.14.1"
+  lhci: "0.16.1"
+cards:
+  - q: "How does the testing trophy differ from the classic test pyramid?"
+    a: "The pyramid puts most weight on isolated unit tests, while the testing trophy puts the largest share on integration tests backed by static types/linting."
+  - q: "Why should you prefer in-memory fakes over mock-heavy spies for repository or gateway tests?"
+    a: "Fakes implement the real port contract with simple in-memory state, so tests verify behavior without breaking whenever internal method calls are refactored."
+  - q: "Why is a high code-coverage percentage a signal rather than a goal?"
+    a: "Coverage measures which lines executed, not whether assertions checked the right behavior; chasing 100% often produces brittle tests around trivial getters while missing edge cases."
+  - q: "What are the three most common causes of flaky E2E tests?"
+    a: "Shared mutable state across parallel tests, arbitrary sleep/setTimeout waits instead of condition-based assertions, and external network dependencies."
+related:
+  - design/dependency-injection
+  - process/dor-dod-quality-gates
+  - ci-cd/this-site-pipeline
+sources:
+  - title: "Martin Fowler: The Practical Test Pyramid"
+    url: https://martinfowler.com/articles/practical-test-pyramid.html
+  - title: "Vitest Documentation"
+    url: https://vitest.dev/guide/
+  - title: "Playwright Documentation"
+    url: https://playwright.dev/docs/intro
+---
+
+## TL;DR
+Put fast **pure logic and invariants** in unit tests, verify **module boundaries and UI** in integration tests with **in-memory fakes**, and keep **E2E / accessibility / Lighthouse** focused on critical paths. Treat **coverage as a signal** (not a target), and fix or delete **flaky tests** immediately.
+
+## Why it exists
+Teams without a clear testing strategy either write zero tests (shipping regressions every week) or build an inverted pyramid of slow, flaky Playwright suites that take 40 minutes in CI and fail on unrelated CSS animations.
+
+## Mental model
+Each test layer trades **speed and isolation** for **real-world confidence**. Push checks as far down the stack as can still catch the real bug class.
+
+<Diagram
+  id="testing-layers"
+  ariaLabel="Fast Vitest unit and invariant tests feed into integration tests with fakes and Playwright browser QA"
+  caption="This repo's test layers: fast Vitest invariants first, then Playwright layout/axe/Lighthouse QA."
+  nodes={[
+    { id: 'unit', label: 'Unit & Invariants', subtitle: 'Vitest + Node test', icon: 'ci', category: 'service', rank: 0, order: 0 },
+    { id: 'integ', label: 'Integration', subtitle: 'RTL + InMemoryRepo', icon: 'interface', category: 'abstraction', rank: 1, order: 0 },
+    { id: 'e2e', label: 'Browser QA & E2E', subtitle: 'Playwright + axe + LH', icon: 'gateway', category: 'edge', rank: 2, order: 0 },
+  ]}
+  edges={[
+    { from: 'unit', to: 'integ', kind: 'request', label: 'ms feedback' },
+    { from: 'integ', to: 'e2e', kind: 'request', label: 'Built site' },
+  ]}
+/>
+
+## Core concepts
+
+### 1. Test pyramid vs testing trophy
+- **Test pyramid:** Many fast unit tests at the base, fewer integration tests in the middle, and a handful of end-to-end (E2E) browser tests at the top. Works well for algorithm-heavy backends and domain cores.
+- **Testing trophy:** Static analysis (TypeScript + ESLint) at the base, a thick middle of **integration tests** (e.g., React Testing Library + real HTTP/DB boundaries), and small unit and E2E layers. Works well for CRUD web apps where bugs live in glue code.
+
+### 2. What to test where (and contract tests)
+| Layer | What belongs here | What to avoid |
+|---|---|---|
+| **Unit** | Pure functions, state machines, layout math, schema validators | Mocking 6 dependencies just to test a 5-line wrapper |
+| **Integration** | Component trees, DB queries against a real/test DB, port + fake adapters | Testing every CSS pixel in JSDOM |
+| **Contract** | OpenAPI / schema compatibility between API producer and consumer | Duplicating full business logic tests in contract specs |
+| **E2E & QA** | Critical user journeys, rendered layout, accessibility (`axe`), performance | Testing every validation permutation through a browser |
+
+### 3. Testing with fakes (not mock soup)
+As shown in [Dependency Injection](/docs/design/dependency-injection), swap external I/O ports for **in-memory fakes** rather than fragile `vi.fn()` call-order assertions. In this repo's `labs/arch-order-service/`, `InMemoryOrderRepo` and `InMemoryOrderGateway` let tests run in milliseconds with zero Postgres setup while still exercising real business rules.
+
+### 4. This repo's real setup
+- **Vitest (`pnpm test`):** Runs `lib/security-headers.test.ts`, `components/flow/Flow.test.tsx`, and `components/diagram/invariants.test.ts` (over 500 automated layout/overlap/label checks across every `<Flow>` and `<Diagram>` in `content/docs/`).
+- **Lab tests (`labs/`):** Node's built-in `node:test` runner verifies `labs/bridge-pattern-ts` and `labs/arch-order-service` (`layered`, `hexagonal`, `clean`).
+- **Browser QA:** Playwright scripts (`scripts/qa-shots.mjs`, `scripts/qa-diagrams.mjs`, `scripts/qa-axe.mjs` with `@axe-core/playwright`) and `@lhci/cli` check real rendered widths (`360px`, `1280px`), light/dark themes, accessibility violations, and Core Web Vitals against the production build.
+
+### 5. Flaky tests and coverage
+- **Flaky tests destroy trust:** If a test fails 1 in 20 runs without code changes, developers stop reading CI failures. Fix non-determinism (shared DB rows, `setTimeout`, real clock `Date.now()`, unawaited promises) or remove the test.
+- **Coverage is a signal, not a goal:** Use coverage reports to find **untested critical branches** (auth, money, error handling)—never enforce an arbitrary 95% gate that incentivizes assertion-free smoke tests.
+
+## When you DON'T need this
+- **Throwaway spikes or one-off scripts:** A 2-hour prototype you plan to delete doesn't need a Playwright suite.
+- **Static prose-only pages:** You don't write unit tests for markdown paragraphs—instead, this repo tests the *build invariants* (frontmatter schema, static route export, diagram overlap math, and accessibility).
+- **Cost / complexity trade-off:** More test layers mean more CI minutes and test maintenance when requirements change. Invest heavily where bugs are expensive (money, auth, data integrity, layout invariants) and lightly where they are cheap.
+
+## Gotchas
+- **Testing implementation details:** Asserting that `repo.save` was called with exact internal arguments breaks every refactor; assert the resulting state or returned output instead.
+- **Mocking the database for SQL tests:** In-memory mocks can't catch Postgres syntax errors, index misses, or constraint violations—run SQL queries against a real Postgres instance in CI.
+- **Ignoring `prefers-reduced-motion` in E2E:** Unsettled CSS transitions cause random click/screenshot flakes unless Playwright emulates reduced motion or waits on stable locators.
+
+## Production checklist
+- [ ] `pnpm lint`, `pnpm typecheck`, and `pnpm test` run on every pull request in CI.
+- [ ] Business logic is decoupled behind ports so unit/integration tests use fast in-memory fakes.
+- [ ] E2E tests cover only critical flows, use condition-based waits (no `sleep`), and run in isolation.
+- [ ] Accessibility (`axe`) and responsive screenshots (`360px` / `1280px`) are verified on UI changes.
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "Why are in-memory fakes generally preferred over heavy mocking in application tests?",
+    options: [
+      { label: "Fakes implement the interface's real behavior, so tests don't break when you refactor internal calls", description: "You test observable outcomes rather than coupling tests to private method call counts.", correct: true },
+      { label: "Fakes automatically test your production PostgreSQL indexes", description: "Only a real database can validate SQL queries and index plans." },
+      { label: "Fakes eliminate the need for any integration or E2E tests", description: "Fakes speed up unit/domain tests, while integration/E2E tests still verify real wiring." }
+    ]
+  },
+  {
+    question: "A team enforces 95% line coverage in CI, and developers start writing tests that call functions without meaningful assertions. What principle did they miss?",
+    options: [
+      { label: "Coverage is a diagnostic signal to find blind spots, not a quality goal on its own", description: "Line execution without strong assertions gives false confidence.", correct: true },
+      { label: "Coverage should be raised to 100% to prevent weak assertions", description: "Raising the percentage threshold only increases gaming." },
+      { label: "Unit tests should be replaced entirely with Playwright E2E tests", description: "E2E tests are too slow and coarse-grained to replace unit and integration tests." }
+    ]
+  }
+]} />
+
+## Sources
+- [Martin Fowler: The Practical Test Pyramid](https://martinfowler.com/articles/practical-test-pyramid.html)
+- [Vitest Documentation](https://vitest.dev/guide/)
+- [Playwright Documentation](https://playwright.dev/docs/intro)
