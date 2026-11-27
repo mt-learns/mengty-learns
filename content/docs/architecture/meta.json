@@ -20,6 +20,7 @@
     "transactions-isolation",
     "orm-pitfalls",
     "schema-migrations",
+    "error-handling-logging",
     "queues-async",
     "api-design",
     "c4-model"

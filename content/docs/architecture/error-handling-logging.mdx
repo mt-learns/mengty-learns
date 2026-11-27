@@ -1,0 +1,137 @@
+---
+title: Error Handling & Structured Logging
+description: Balance errors-as-values vs exceptions in TypeScript, centralize error boundaries, emit JSON logs with correlation IDs, redact secrets/PII, and fail closed.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: explanation
+level: intermediate
+tags: [architecture, errors, logging, typescript, observability, security]
+tested_with:
+  typescript: "7.0.2"
+  nodejs: "26.x (docs)"
+  owasp_top_10: "2025 (A10)"
+cards:
+  - q: "In TypeScript, when should you return a Result<T, E> value instead of throwing an exception?"
+    a: "Use Result<T, E> discriminated unions for expected domain outcomes (validation, insufficient funds, not found) so callers must handle them; reserve throw for unexpected bugs or unrecoverable infrastructure faults."
+  - q: "What does it mean to 'fail closed' when an authorization or validation check throws an error?"
+    a: "Deny the request (return 403/500) rather than catching the error and allowing execution to continue—preventing OWASP A10:2025 Mishandling of Exceptional Conditions."
+  - q: "Why should production services emit single-line JSON logs with a correlation ID?"
+    a: "JSON logs parse reliably in log aggregators without brittle regexes, and a shared correlation_id links every log line across handlers and downstream calls for one request."
+  - q: "What data must never appear in application logs?"
+    a: "Passwords, session tokens, JWTs, API keys, Authorization headers, and sensitive PII such as payment card numbers or national IDs."
+related:
+  - foundations/observability
+  - security/secrets-management
+  - security/owasp-top-10
+sources:
+  - title: "OWASP Top 10:2025 (A10 Mishandling of Exceptional Conditions)"
+    url: https://top10.owasp.org/2025/
+  - title: "OWASP Logging Cheat Sheet"
+    url: https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html
+  - title: "TypeScript Handbook: Narrowing & Discriminated Unions"
+    url: https://www.typescriptlang.org/docs/handbook/2/narrowing.html
+---
+
+## TL;DR
+Use **`Result<T, E>`** discriminated unions for expected domain failures and **`throw`** for unexpected faults caught at a single **error boundary**. Emit **single-line JSON logs** with a **`correlation_id`**, redact **secrets and PII**, and always **fail closed** when security checks error.
+
+## Why it exists
+Swallowing exceptions with `catch {}` hides bugs and can accidentally bypass auth checks (**OWASP A10:2025**). Meanwhile, `console.log("Error:", err)` prints multi-line strings that break log parsers and often dumps full `req.headers` (including `Authorization` bearer tokens) into third-party log storage.
+
+## Mental model
+Separate **expected business rejections** (handled in-band with types) from **unexpected crashes** (caught once at the boundary, logged with full context, and returned to the caller as a safe, generic error).
+
+<Diagram
+  id="error-boundary-logging"
+  ariaLabel="Domain returns Result or throws unexpected fault, boundary logs JSON with correlation ID and returns safe response"
+  caption="Catch unexpected faults at the boundary; return typed Results for expected domain outcomes."
+  nodes={[
+    { id: 'domain', label: 'Domain Logic', subtitle: 'Returns Result or throws', icon: 'service', category: 'service', rank: 0, order: 0 },
+    { id: 'boundary', label: 'Error Boundary', subtitle: 'Maps status + redacts', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+    { id: 'logs', label: 'JSON Log Sink', subtitle: 'correlation_id + stack', icon: 'db', category: 'data', rank: 2, order: 0 },
+    { id: 'client', label: 'HTTP Client', subtitle: 'Safe problem+json', icon: 'user', category: 'client', rank: 2, order: 1 },
+  ]}
+  edges={[
+    { from: 'domain', to: 'boundary', kind: 'request', label: 'Result/Err' },
+    { from: 'boundary', to: 'logs', kind: 'request', label: 'JSON stdout' },
+    { from: 'boundary', to: 'client', kind: 'response', label: '4xx / 500' },
+  ]}
+/>
+
+## Do it
+
+### 1. Errors as values vs exceptions in TypeScript
+`throw` is invisible in a TypeScript function signature. For expected domain failures (e.g., `INSUFFICIENT_FUNDS`, `EXPIRED_TOKEN`), return a discriminated union so the compiler forces the caller to check `result.ok`:
+
+```typescript
+// Expected domain failures as values; unexpected faults still throw (not run)
+export type Result<T, E extends string> =
+  | { ok: true; value: T }
+  | { ok: false; error: E; message: string };
+
+export function debitAccount(
+  balanceCents: number,
+  amountCents: number,
+): Result<number, 'INVALID_AMOUNT' | 'INSUFFICIENT_FUNDS'> {
+  if (amountCents <= 0) {
+    return { ok: false, error: 'INVALID_AMOUNT', message: 'Amount must be positive.' };
+  }
+  if (balanceCents < amountCents) {
+    return { ok: false, error: 'INSUFFICIENT_FUNDS', message: 'Balance is too low.' };
+  }
+  return { ok: true, value: balanceCents - amountCents };
+}
+```
+
+### 2. Error boundaries and failing closed
+Put one centralized error boundary at your HTTP framework's top level (or React `error.tsx` for UI):
+- Map known domain `error` codes to `4xx` responses.
+- Catch unknown exceptions, log them with stack trace + `correlation_id`, and return a generic `500` (`application/problem+json`) with **no** internal details.
+- **Fail closed:** If an authorization check, rate limiter, or signature verifier throws an unexpected error, deny the request (`403` or `500`)—never fall through to `next()`.
+
+### 3. Structured logging & what never to log
+Emit single-line JSON to `stdout` with consistent fields (`ts`, `level`, `msg`, `correlation_id`, `service`), and choose levels intentionally: `error` (broken request/alertable), `warn` (degraded fallback), `info` (key lifecycle events), `debug` (off in prod by default).
+
+Never log credentials, tokens, or raw secrets—see [Secrets Management](/docs/security/secrets-management) and [OWASP Top 10:2025](/docs/security/owasp-top-10). Configure a redaction allowlist/denylist in your logger (`pino` `redact: ['req.headers.authorization', '*.password', '*.token']`) and sanitize log inputs against newline/CRLF injection.
+
+## When you DON'T need this
+- **Tiny CLI scripts or build-time generators:** A 30-line script can `throw new Error(...)` and print human-readable stderr without `Result` wrappers or JSON log shippers.
+- **Over-wrapping every helper:** Don't wrap every `JSON.parse` or array lookup in `Result<T, E>` if the caller can't recover anyway—let truly unexpected bugs bubble to the boundary.
+- **Cost / complexity trade-off:** `Result` types add minor boilerplate at call sites, and JSON log pipelines cost storage per GB ingested. In exchange, you get exhaustive compiler checks, searchable production logs, and zero leaked stack traces.
+
+## Gotchas
+- **`catch (err)` assuming `err` is an `Error`:** In JavaScript/TypeScript, anything can be thrown (`unknown`); always normalize with `err instanceof Error ? err : new Error(String(err))`.
+- **Swallowing async rejections:** Leaving `catch {}` empty or forgetting `await` inside `try/catch` silently drops errors.
+- **Logging entire `req` or `env` objects:** Serializing `req` often dumps `cookie`, `authorization`, and signed URLs with tokens.
+
+## Production checklist
+- [ ] A single HTTP error boundary catches unhandled errors, logs them once, and returns generic `500` `problem+json`.
+- [ ] Every incoming request gets a `correlation_id` (from `X-Request-Id` or generated UUID) attached to all logs.
+- [ ] Logger redaction strips `authorization`, `cookie`, `password`, `token`, and API keys before writing to `stdout`.
+- [ ] Security-critical checks (authN, authZ, CSRF, webhook signatures) fail closed on exception.
+
+## Check yourself
+<Quiz questions={[
+  {
+    question: "An authorization middleware throws a Redis timeout error while checking a user's revoked-token list. What does 'fail closed' require?",
+    options: [
+      { label: "Deny the request (return 503/500) rather than letting it proceed to the handler", description: "Failing open on an auth check error lets revoked or unauthorized callers bypass security controls (OWASP A10:2025).", correct: true },
+      { label: "Log a warning and call next() so users aren't inconvenienced", description: "Allowing access when a security check errors is failing open—a critical vulnerability." },
+      { label: "Return the raw Redis stack trace in the 200 OK body", description: "Never expose internal stack traces to callers or return 200 on failure." }
+    ]
+  },
+  {
+    question: "Why should a TypeScript service use Result<T, E> for expected business rejections instead of throwing?",
+    options: [
+      { label: "TypeScript function signatures don't track thrown error types, whereas Result forces callers to handle both ok and error branches", description: "Discriminated unions make expected failure modes explicit at compile time.", correct: true },
+      { label: "Throwing exceptions is illegal in Node.js async functions", description: "Async functions support throw/reject normally; the issue is type safety and control flow clarity." },
+      { label: "Result objects automatically redact PII from logs", description: "Redaction must still be configured in your logger." }
+    ]
+  }
+]} />
+
+## Sources
+- [OWASP Top 10:2025](https://top10.owasp.org/2025/)
+- [OWASP Logging Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Logging_Cheat_Sheet.html)
+- [TypeScript Handbook: Narrowing](https://www.typescriptlang.org/docs/handbook/2/narrowing.html)
