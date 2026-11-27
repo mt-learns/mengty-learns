@@ -1,0 +1,137 @@
+---
+title: Ansible Essentials
+description: Agentless host configuration and rolling VM deployments—inventory, variable precedence, idempotency, handlers, and safe rollouts.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: cheatsheet
+type: reference
+level: intermediate
+tags: [ansible, automation, linux, vm, configuration-management]
+tested_with:
+  ansible-core: "2.22 (docs)"
+cards:
+  - q: "In Ansible variable precedence, why should overridable role parameters live in defaults/main.yml instead of vars/main.yml?"
+    a: "role vars/main.yml has higher precedence than inventory group_vars and host_vars, so inventory overrides silently fail; defaults/main.yml has the lowest precedence."
+  - q: "How do you make raw command or shell tasks idempotent in Ansible?"
+    a: "Add creates:, removes:, or an explicit changed_when: condition, and verify with a second converge run (for example via Molecule) that zero tasks report changed."
+  - q: "What happens if an Ansible play fails before handlers flush?"
+    a: "Modified config files remain on disk while the service keeps running the old config until manually restarted, unless you use meta: flush_handlers or --force-handlers."
+  - q: "How do you run a zero-downtime rolling deployment across a VM fleet in Ansible?"
+    a: "Use serial (e.g. serial: '25%') with max_fail_percentage: 0, drain each host from the load balancer, deploy by digest, run a URI health check, and re-enable."
+  - q: "Why is Ansible Vault a floor rather than a complete secrets strategy?"
+    a: "Ansible Vault uses symmetric encryption with a shared passphrase, so rotation requires re-encrypting every file; dynamic secrets via Vault Agent or lookups provide per-host short-lived creds."
+related:
+  - platform/security-baseline
+  - iac/tofu-cheatsheet
+  - foundations/linux-processes-signals
+sources:
+  - title: "Ansible Docs: User Guide & Playbooks"
+    url: https://docs.ansible.com/projects/ansible-core/latest/user_guide/playbooks.html
+  - title: "Ansible Docs: Variable Precedence"
+    url: https://docs.ansible.com/projects/ansible-core/latest/user_guide/playbooks_variables.html#understanding-variable-precedence
+  - title: "Ansible Docs: Rolling Updates (serial)"
+    url: https://docs.ansible.com/projects/ansible-core/latest/playbook_guide/playbooks_delegation.html#rolling-update-batch-size
+  - title: "learn-devops: Ansible Cheat Sheet (author's notes)"
+    url: https://github.com/limme-learning/learn-devops/blob/main/cheatsheets/03-ansible/README.md
+---
+
+## TL;DR
+Ansible is **agentless push over SSH** with no state file: it owns **host configuration and VM rollouts**, while Terraform/OpenTofu owns infrastructure lifecycle. Always dry-run with `--check --diff`, put overridable variables in `defaults/main.yml`, bound rollouts with `serial` + `max_fail_percentage: 0`, and test roles for idempotency.
+
+## Daily commands
+
+```bash
+# Inspect inventory (not run)
+ansible-inventory -i inventories/prod --graph
+ansible-inventory -i inventories/prod --host web-01
+
+# Dry-run with diff before any production change (not run)
+ansible-playbook -i inventories/prod playbooks/site.yml --check --diff
+ansible-playbook -i inventories/prod playbooks/deploy.yml --limit web-01 -e "app_version=1.4.2"
+
+# Syntax and lint gates for CI (not run)
+ansible-playbook --syntax-check playbooks/site.yml
+ansible-lint playbooks/ roles/
+```
+
+## Variable precedence (the trap)
+From lowest to highest (the layers that matter daily):
+1. Role `defaults/main.yml` (lowest — **put overridable values here**)
+2. Inventory `group_vars/all` → specific `group_vars` → `host_vars`
+3. Play `vars`
+4. Role `vars/main.yml` (**beats inventory!**)
+5. `set_fact` / `register`
+6. Extra vars `-e` (highest — overrides everything, including safety defaults)
+
+## Rolling VM deploy pattern
+
+```yaml
+# Rolling update: 25% at a time, stop on first failure (not run)
+- name: Deploy app to web tier
+  hosts: web
+  become: true
+  serial: "25%"
+  max_fail_percentage: 0
+  tasks:
+    - name: Deploy and verify health
+      block:
+        - name: Drain from load balancer
+          ansible.builtin.command: lb-cli drain {{ inventory_hostname }}
+          delegate_to: localhost
+        - name: Deploy new artifact
+          ansible.builtin.template:
+            src: app.service.j2
+            dest: /etc/systemd/system/app.service
+          notify: Restart app
+        - name: Flush handlers before health check
+          ansible.builtin.meta: flush_handlers
+        - name: Wait for healthy endpoint
+          ansible.builtin.uri:
+            url: "http://{{ ansible_host }}:8080/healthz"
+            status_code: 200
+          retries: 10
+          delay: 3
+      always:
+        - name: Re-enable in load balancer
+          ansible.builtin.command: lb-cli enable {{ inventory_hostname }}
+          delegate_to: localhost
+```
+
+## Gotchas
+- **Disabling `host_key_checking` in prod:** Turning off SSH host-key verification exposes your management path to MITM attacks; populate `known_hosts` from provisioning outputs instead.
+- **Unflushed handlers on failure:** If a play aborts before the end, notified handlers never run—leaving new config on disk while the old process keeps running. Use `meta: flush_handlers` before health checks.
+- **Overlapping with Terraform:** Never manage the same firewall rule or security group in both Terraform and Ansible; let Terraform own infrastructure lifecycle and Ansible own OS/app configuration.
+- **Forgetting `no_log: true`:** Tasks that render tokens or passwords print their parameters to stdout and CI logs unless `no_log: true` is set.
+
+## Production checklist
+- [ ] `host_key_checking = True` in `ansible.cfg` for all non-local inventories.
+- [ ] Every role passes `ansible-lint` and a two-pass idempotency test (e.g. Molecule).
+- [ ] Production rollouts use `serial` + `max_fail_percentage: 0` + `block`/`always` LB drain.
+- [ ] Secrets come from `vault-agent` or `hashi_vault` lookups with `no_log: true`, never plaintext `group_vars`.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "You set `http_port: 8080` in `roles/web/vars/main.yml` and `http_port: 9090` in `inventories/prod/group_vars/web.yml`. Which value does Ansible use?",
+    options: [
+      { label: "8080, because role vars/main.yml has higher precedence than inventory group_vars", description: "Put overridable role parameters in defaults/main.yml, which has the lowest precedence.", correct: true },
+      { label: "9090, because production inventory always overrides role files", description: "Only -e extra vars and set_fact beat role vars/main.yml; inventory group_vars does not." },
+      { label: "Ansible fails with a duplicate variable error", description: "Ansible resolves conflicts using its variable precedence rules rather than failing." }
+    ]
+  },
+  {
+    question: "Why should you call `meta: flush_handlers` before running a post-deploy URI health check?",
+    options: [
+      { label: "Handlers normally run at the end of a play, so the service would still be running the old version during the health check", description: "Flushing handlers ensures the service restarts before the health check verifies it.", correct: true },
+      { label: "It clears failed tasks so the play can continue", description: "flush_handlers only executes pending notified handlers immediately." },
+      { label: "It enables Ansible pipelining over SSH", description: "Pipelining is configured in ansible.cfg, not via meta tasks." }
+    ]
+  }
+]} />
+
+## Sources
+- [Ansible Docs: Playbooks](https://docs.ansible.com/projects/ansible-core/latest/user_guide/playbooks.html)
+- [Ansible Docs: Variable Precedence](https://docs.ansible.com/projects/ansible-core/latest/user_guide/playbooks_variables.html#understanding-variable-precedence)
+- [Ansible Docs: Rolling Updates (`serial`)](https://docs.ansible.com/projects/ansible-core/latest/playbook_guide/playbooks_delegation.html#rolling-update-batch-size)
+- [learn-devops: Ansible Cheat Sheet (author's notes)](https://github.com/limme-learning/learn-devops/blob/main/cheatsheets/03-ansible/README.md)
