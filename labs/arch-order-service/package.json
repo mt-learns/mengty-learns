@@ -1,0 +1,18 @@
+{
+  "name": "arch-order-service",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "build": "tsc",
+    "start:layered": "tsc && node dist/layered/src/main.js",
+    "start:hexagonal": "tsc && node dist/hexagonal/src/main.js",
+    "start:clean": "tsc && node dist/clean/src/frameworks/main.js",
+    "test": "tsc && node --test dist/layered/test/*.test.js dist/hexagonal/test/*.test.js dist/clean/test/*.test.js"
+  },
+  "devDependencies": {
+    "@types/node": "26.6.7",
+    "typescript": "7.0.2"
+  }
+}

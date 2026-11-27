@@ -197,7 +197,11 @@ export class OrderController {
   </Tab>
 </Tabs>
 
-> **Lab planned:** A multi-branch `labs/arch-order-service` repository (`layered`, `hexagonal`, and `clean` branches) is planned in the content roadmap.
+<LabLink
+  name="arch-order-service"
+  description="Run the Layered Order service alongside Hexagonal and Clean implementations in one repo."
+  command="cd labs/arch-order-service && npm install && npm run typecheck && npm test && npm run start:layered"
+/>
 
 ## 8. When to use / when to avoid
 

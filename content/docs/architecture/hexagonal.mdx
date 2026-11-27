@@ -212,7 +212,11 @@ export class InMemoryOrderRepo implements OrderRepoPort {
   </Tab>
 </Tabs>
 
-> **Lab planned:** A multi-branch `labs/arch-order-service` repository (`layered`, `hexagonal`, and `clean` branches) with `InMemoryOrderRepo` tests is planned in the content roadmap.
+<LabLink
+  name="arch-order-service"
+  description="Swap PostgresOrderRepo for InMemoryOrderRepo in tests with zero database, and compare with Layered and Clean."
+  command="cd labs/arch-order-service && npm install && npm run typecheck && npm test && npm run start:hexagonal"
+/>
 
 ## 8. When to use / when to avoid
 
