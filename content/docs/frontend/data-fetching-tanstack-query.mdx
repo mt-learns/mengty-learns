@@ -1,0 +1,213 @@
+---
+title: "Server State with TanStack Query: Cache, Staleness and Refetch"
+description: Treat remote data as a cache of someone else's truth - typed keys, staleTime and gcTime per data type, targeted invalidation, retries that skip 4xx, and optimistic updates with a real rollback.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: concept
+type: explanation
+level: intermediate
+tags: [react, tanstack-query, data-fetching, caching, server-state, nextjs]
+tested_with:
+  "@tanstack/react-query": "5.108.4"
+  react: "19.3.1"
+cards:
+  - q: "Why does server state not belong in a client-state store like Redux or Zustand?"
+    a: "You hold a copy of someone else's truth, and you would inherit responsibility for freshness, de-duplication and invalidation. TanStack Query treats it as a cache and gives you those tools."
+  - q: "What is the difference between staleTime and gcTime?"
+    a: "staleTime is how long data is considered fresh (no refetch on mount/focus); gcTime is how long an unused cache entry survives before it is garbage-collected. Defaults are 0 and 5 minutes."
+  - q: "Which failures should a query retry?"
+    a: "Only transient ones: 408, 429 (respect Retry-After) and 5xx, with exponential backoff plus jitter. Never retry a 4xx - it will not become a 200."
+  - q: "What three callbacks does a safe optimistic update need?"
+    a: "onMutate (cancel in-flight queries, snapshot, write optimistically), onError (restore the snapshot), and onSettled (invalidate so the server's answer wins)."
+  - q: "How do you keep the first paint free of a loading spinner in the App Router?"
+    a: "Prefetch into a request-scoped QueryClient on the server, dehydrate it, and wrap the client tree in HydrationBoundary so useQuery mounts with data already warm."
+related:
+  - frontend/nextjs-rendering-strategies
+  - frontend/url-state-nuqs
+  - frontend/loading-error-empty-states
+  - architecture/caching-redis
+sources:
+  - title: "TanStack Query docs: Overview"
+    url: https://tanstack.com/query/latest/docs/framework/react/overview
+  - title: "TanStack Query docs: Important Defaults"
+    url: https://tanstack.com/query/latest/docs/framework/react/guides/important-defaults
+  - title: "TanStack Query docs: Query Keys"
+    url: https://tanstack.com/query/latest/docs/framework/react/guides/query-keys
+  - title: "TanStack Query docs: Optimistic Updates"
+    url: https://tanstack.com/query/latest/docs/framework/react/guides/optimistic-updates
+  - title: "TanStack Query docs: Server Rendering and Hydration"
+    url: https://tanstack.com/query/latest/docs/framework/react/guides/ssr
+  - title: "software-engineering: Data fetching and caching with TanStack Query (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/07-frontend-best-practices/06-data-fetching-and-caching-with-tanstack-query.md
+---
+
+## 1. Intent
+
+<Intent>
+Remote data is not your state. It is a copy of someone else's truth that is already stale when it arrives. TanStack Query makes that copy explicit: one typed key per resource, a deliberate freshness window, targeted invalidation, and a retry policy that only retries what can succeed.
+</Intent>
+
+## 2. Problem
+
+Hand-rolled fetching with `useEffect` and three `useState` values looks fine in QA and fails in production. A slow earlier response lands after a fast later one and overwrites it, so one account's balance appears under another account's name. Three components mount with the same id and issue three identical requests. Every navigation re-fetches from cold. A single 503 is a permanent error. An unmount during flight writes state to a dead component. None of these are exotic; they are the five things a server-state library exists to prevent.
+
+## 3. Solution
+
+Split the world in two:
+
+| | Client state | Server state |
+|---|---|---|
+| **Owner** | This tab | A remote system |
+| **Truth** | You are the truth | You hold a copy |
+| **Examples** | Drawer open, active tab, unsent input | Balances, transactions, profile, catalogue |
+| **Needs** | Setter, maybe persistence | Caching, de-duplication, invalidation, retry, staleness |
+| **Tool** | `useState`, `useReducer`, Zustand, URL | TanStack Query |
+
+Then make three decisions per data type: **the key** (cache identity), **`staleTime`** (how long it is fresh), and **the invalidation target** (what a mutation touches).
+
+## 4. Real-world analogy
+
+<Analogy>
+Think of a library's reading room. You can keep a photocopy of a reference book (the cache), but the shelf copy is the truth. A timestamp on the photocopy says how old it is (staleTime). When the librarian announces a new edition, every photocopy of that title is marked for replacement (invalidateQueries). You do not re-photocopy the whole library to update one book.
+</Analogy>
+
+## 5. Flow: watch it work
+
+<Flow
+  id="tanstack-query-cache-lifecycle"
+  title="Cache, staleness and refetch"
+  nodes={[
+    { id: 'comp', label: 'Component', subtitle: 'useQuery(key)', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'hook', label: 'Query observer', subtitle: 'Dedup + state', icon: 'interface', category: 'abstraction', rank: 1, order: 0 },
+    { id: 'stale', label: 'Fresh or stale?', subtitle: 'staleTime', icon: 'service', category: 'service', rank: 2, order: 0 },
+    { id: 'cache', label: 'Cache entry', subtitle: 'dataUpdatedAt', icon: 'db', category: 'data', rank: 3, order: 0 },
+    { id: 'api', label: 'Server API', subtitle: 'One request', icon: 'gateway', category: 'edge', rank: 4, order: 0 },
+  ]}
+  steps={[
+    { edge: 'comp->hook', title: 'Mount and read', text: 'useQuery looks up its typed key and subscribes to that cache entry.' },
+    { edge: 'hook->stale', title: 'Is it fresh?', text: 'It compares now minus dataUpdatedAt with the staleTime you chose for this data.' },
+    { edge: 'stale->cache', title: 'Fresh: serve cache', text: 'No network request at all; the component renders the cached value immediately.' },
+    { edge: 'stale->api', title: 'Stale: refetch', text: 'Concurrent observers of the same key share one in-flight request.' },
+    { edge: 'api->stale', title: 'Response arrives', text: 'The cache is updated and dataUpdatedAt is set to now.', kind: 'response' },
+    { edge: 'stale->hook', title: 'New value ready', text: 'The observer re-renders with fresh data and isFetching clears.', kind: 'response' },
+    { edge: 'hook->comp', title: 'Render', text: 'The component receives data plus background-refetch flags.', kind: 'response' },
+  ]}
+/>
+
+## 6. Structure
+
+A **key factory** is the invalidation API. Hierarchical keys let a prefix invalidate a whole subtree, so nothing else in the app writes a key literal:
+
+```ts
+export const accountKeys = {
+  all: ['accounts'] as const,
+  lists: () => [...accountKeys.all, 'list'] as const,
+  detail: (id: string) => [...accountKeys.all, 'detail', id] as const,
+  balance: (id: string) => [...accountKeys.detail(id), 'balance'] as const,
+} as const
+```
+
+`accountKeys.detail(id)` invalidates that account's balance and transactions because prefix matching walks down; `accountKeys.all` nukes the domain. Choose freshness per data type and write down why:
+
+| Data | `staleTime` | `gcTime` | Reason |
+|---|---|---|---|
+| Currency list, categories | `Infinity` | 24h | Changes on a release |
+| Fee schedule, product terms | `60 * 60_000` | 24h | Editorial cadence |
+| Profile, address | `5 * 60_000` | 30 min | Rarely changes |
+| Transaction list | `30_000` | 10 min | New items matter, not sub-second |
+| Available balance | `0` | `60_000` | A figure the user may act on |
+
+## 7. When to use / when to avoid
+
+<Checklist
+  use={[
+    "Any client-side server state in an authenticated app: balances, queues, profiles, search results.",
+    "Screens that need background revalidation, optimistic updates or infinite scrolling.",
+    "A read-mostly page that still needs an interactive refetch after first paint."
+  ]}
+  avoid={[
+    "Read-only pages that never re-fetch: a Server Component `await` is simpler and ships no client cache.",
+    "Genuine client state: drawer open, hover, unsent form text. Keep those in `useState` or the URL.",
+    "Caching a per-user response under a key that omits the user - that is a data-disclosure bug."
+  ]}
+/>
+
+## 8. How to implement
+
+<Steps>
+  <Step title="Make one query client per request">
+    On the server, create a new `QueryClient` per request; in the browser, keep a single module-level instance. Never share a server client between users.
+  </Step>
+  <Step title="Define keys in one module">
+    Use a typed key factory and import it everywhere, including mutations. Never hand-write a key string at a call site.
+  </Step>
+  <Step title="Set defaults deliberately">
+    Choose a non-zero `staleTime`, `gcTime`, a retry function that skips 4xx, backoff with jitter, and `mutations.retry: 0`.
+  </Step>
+  <Step title="Validate at the boundary">
+    Parse the response with a schema (Zod or generated) inside `queryFn`, so a shape change fails loudly instead of crashing a render.
+  </Step>
+  <Step title="Invalidate narrowly">
+    After a mutation, invalidate the smallest prefix that changed. Use `setQueryData` when the response is the new resource, and `removeQueries` on logout.
+  </Step>
+</Steps>
+
+## 9. Pros / Cons
+
+<ProsCons
+  pros={[
+    "De-duplication, caching, staleness, retry and invalidation come as one coherent model.",
+    "A typed key factory makes invalidation reliable across a large codebase.",
+    "Optimistic updates and background revalidation feel fast without lying about the server."
+  ]}
+  cons={[
+    "The team must learn a cache mental model; keys need review discipline.",
+    "Two places can fetch data once you add server prefetch and hydration.",
+    "Optimistic updates are only safe for cheap, high-confidence writes with a tested rollback."
+  ]}
+/>
+
+## 10. Relations
+
+- Where the initial data comes from is a rendering decision: see [Next.js Rendering Strategies](/docs/frontend/nextjs-rendering-strategies).
+- Filters that drive query keys belong in the URL: see [URL State with nuqs](/docs/frontend/url-state-nuqs).
+- The five states a query renders are covered in [Loading, Error and Empty States](/docs/frontend/loading-error-empty-states).
+- Server-side caching of the same data is a different layer: see [Caching with Redis](/docs/architecture/caching-redis).
+
+## 11. Check yourself
+
+<Quiz questions={[
+  {
+    question: "A user switches accounts while a slow request for the previous account is in flight. With TanStack Query, why can the old response not land on the new screen?",
+    options: [
+      { label: "The key changed, so the response is written to a different cache entry", description: "Cache identity is the query key; a response for the old key cannot populate the new key.", correct: true },
+      { label: "TanStack Query aborts every request on re-render", description: "It de-duplicates and can cancel on demand, but the key is what separates the entries." },
+      { label: "React batches the state updates", description: "Batching does not prevent a late response from overwriting newer data." }
+    ]
+  },
+  {
+    question: "A mutation succeeds and the API returns the full updated resource. What is the cheapest correct way to reflect it?",
+    options: [
+      { label: "`setQueryData` with the returned resource, or invalidate that one detail key", description: "The response is the new resource, so a round trip is unnecessary; a targeted invalidation is the safe fallback.", correct: true },
+      { label: "`invalidateQueries()` with no argument", description: "That marks every query stale and refetches the whole screen." },
+      { label: "Reload the page", description: "Correct but throws away all client state and cache." }
+    ]
+  },
+  {
+    question: "Which status should a query NOT retry?",
+    options: [
+      { label: "404", description: "A missing resource will still be missing on the third attempt; retrying wastes load and latency.", correct: true },
+      { label: "503", description: "Transient server failure is exactly what retries are for." },
+      { label: "429", description: "Retry after the advertised delay; it is transient by design." }
+    ]
+  }
+]} />
+
+## 12. Sources
+
+- [TanStack Query docs: Overview](https://tanstack.com/query/latest/docs/framework/react/overview)
+- [TanStack Query docs: Important Defaults](https://tanstack.com/query/latest/docs/framework/react/guides/important-defaults)
+- [TanStack Query docs: Query Keys](https://tanstack.com/query/latest/docs/framework/react/guides/query-keys)
+- [TanStack Query docs: Optimistic Updates](https://tanstack.com/query/latest/docs/framework/react/guides/optimistic-updates)
+- [TanStack Query docs: Server Rendering and Hydration](https://tanstack.com/query/latest/docs/framework/react/guides/ssr)
+- [software-engineering: Data fetching and caching with TanStack Query (author's notes)](https://github.com/limme-learning/software-engineering/blob/main/07-frontend-best-practices/06-data-fetching-and-caching-with-tanstack-query.md)
