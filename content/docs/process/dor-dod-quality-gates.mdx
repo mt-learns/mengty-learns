@@ -1,0 +1,112 @@
+---
+title: "DoR, DoD, and Quality Gates"
+description: Practical Definition of Ready, Definition of Done, and measurable quality gates from PR to production—using Mengty Learns' real CI, labs, and Lighthouse/axe gates.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: cheatsheet
+type: reference
+level: beginner
+tags: [process, dor, dod, quality-gates, ci-cd, testing]
+tested_with:
+  node: "22.22.3"
+  pnpm: "11.6.0"
+  next: "16.4.6"
+  vitest: "5.1.1"
+cards:
+  - q: "What is the difference between Definition of Ready (DoR) and Definition of Done (DoD)?"
+    a: "DoR is the entry checklist before starting work (clear scope, sources, acceptance criteria); DoD is the exit checklist before shipping (tests, build, review, docs)."
+  - q: "What four commands form the mandatory local/CI gate in Mengty Learns before every commit?"
+    a: "pnpm lint && pnpm typecheck && pnpm test && pnpm build."
+  - q: "Why check test coverage on 'changed lines' instead of demanding 100% repo-wide coverage?"
+    a: "Repo-wide 100% targets encourage trivial tests on boilerplate, whereas changed-line checks ensure new logic and bug fixes are actually tested."
+  - q: "What automated accessibility and performance gates run in this repo's .github/workflows/quality.yml?"
+    a: "Lighthouse CI (lhci autorun) and Playwright + @axe-core/playwright failing on any serious or critical accessibility violations."
+related:
+  - ci-cd/this-site-pipeline
+  - process/code-review
+  - process/raci
+sources:
+  - title: "The 2020 Scrum Guide: Definition of Done"
+    url: https://scrumguides.org/scrum-guide.html
+  - title: "Playwright: Accessibility Testing with axe-core"
+    url: https://playwright.dev/docs/accessibility-testing
+  - title: "GoogleChrome/lighthouse-ci"
+    url: https://github.com/GoogleChrome/lighthouse-ci
+---
+
+## TL;DR
+**Definition of Ready (DoR)** stops half-baked tickets from entering `In Progress`. **Definition of Done (DoD)** stops half-tested code from being called "finished." Enforce repeatable checks as **automated quality gates** at PR, merge, release, and deploy—like this repo's `ci.yml`, `labs.yml`, and `quality.yml`.
+
+## 1. Definition of Ready (DoR)
+Before a developer or AI agent picks up a task:
+- [ ] **Clear outcome:** Problem and non-goals fit in 3–5 lines.
+- [ ] **Acceptance criteria:** At least 2 testable Given/When/Then checks (or a concrete spec).
+- [ ] **Dependencies unblocked:** Required secrets, APIs, or upstream PRs are available.
+- [ ] **Right-sized:** Fits in 1–2 days (if larger, split first).
+- [ ] *(For docs on this site)* Official source URL identified (`CONTENT-PLAN.md` §1).
+
+## 2. Definition of Done (DoD)
+Before a task moves to `Done`:
+- [ ] Code + unit/component tests written and passing.
+- [ ] Self-reviewed diff; no dead code, debug logs, or hardcoded secrets.
+- [ ] Local/CI verification green (`pnpm lint && pnpm typecheck && pnpm test && pnpm build`).
+- [ ] UI/diagram changes visually checked at `360px` and `1280px` in light & dark themes.
+- [ ] Docs/ADRs/cards updated if behavior or architecture changed.
+
+## 3. Measurable quality gates (worked example: Mengty Learns)
+
+| Stage | Gate | Concrete target in this repo | Where enforced |
+|---|---|---|---|
+| **Pre-commit / PR** | Lint, types, unit tests, static build | `0` ESLint errors, `0` TS errors, all `vitest` suites pass, `next build` succeeds | Local (`AGENTS.md` §6) + `.github/workflows/ci.yml` |
+| **PR (changed code)** | Changed-line coverage & scope | New helpers/parsers have unit tests; PR touches only scoped files | PR review + `vitest run` |
+| **PR (labs)** | Infrastructure & container linting | `hadolint` + `docker build`, `tofu fmt/validate` + `tflint`, `kubeconform -strict`, `actionlint` | `.github/workflows/labs.yml` |
+| **Merge to `main`** | Review approval + clean git | ≥ 1 review approval (Lead/Owner), conventional commit, 0 secret leaks | Branch protection / Lead review |
+| **Release / Quality** | Accessibility & performance | `0` serious/critical `@axe-core/playwright` violations; Lighthouse CI (`lhci autorun`) ≥ 95 | `.github/workflows/quality.yml` |
+| **Production deploy** | Live verification | Preview/prod smoke check (`200` on key routes, headers present, 0 console errors) | Post-deploy check / `RUNBOOK.md` |
+
+## Minimum viable version (1–3 person team + AI agents)
+If you are starting a new repo today, set up just **three gates**:
+1. **One CI command** on every PR: `lint && typecheck && test && build`.
+2. **Dependency/secret scan** (GitHub Dependabot/Renovate + secret scanning).
+3. **30-second post-deploy smoke check** on the live URL.
+
+## When it's overkill
+- Blocking a 1-person prototype with 40-minute E2E suites before you even have users.
+- Turning **DoR** into a rigid gatekeeper where nobody can fix a broken test without a "grooming meeting." DoR is a **guideline**, not a weapon.
+
+## Gotchas
+- **Flaky gates train people to ignore CI:** If a Lighthouse or Playwright check fails randomly, fix the flakiness immediately or move it to non-blocking until stable—never leave a broken red gate.
+- **Unenforced DoD:** A DoD written in a wiki that isn't checked in CI or PR templates is quickly forgotten under deadline pressure.
+- **Ignoring changed-line quality:** Legacy files might have low test coverage, so gate **new/changed lines** rather than blocking every PR on historical debt.
+
+## Production checklist
+- [ ] `ci.yml` runs `lint`, `typecheck`, `test`, and `build` on every PR.
+- [ ] `quality.yml` checks accessibility (`axe-core`) and performance (`lhci`) on rendered output.
+- [ ] Workflows declare minimal `permissions: contents: read`.
+- [ ] Every team member and AI agent knows the exact DoD command before committing.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "Why should a team's Definition of Done (DoD) be backed by automated CI gates wherever possible?",
+    options: [
+      { label: "Automated gates catch lint, type, build, and a11y regressions consistently without relying on human memory", description: "Manual checklists are easily skipped under time pressure; CI enforces repeatable checks on every PR.", correct: true },
+      { label: "Automated gates eliminate the need for human code review", description: "CI cannot judge business logic, architecture, or whether a PR solves the right problem." },
+      { label: "CI gates replace Definition of Ready", description: "DoR happens before work starts; CI runs after code is written." }
+    ]
+  },
+  {
+    question: "Which workflow in Mengty Learns runs Lighthouse CI and @axe-core/playwright against the built out/ directory?",
+    options: [
+      { label: ".github/workflows/quality.yml", description: "quality.yml builds the site, runs lhci autorun, and scans key routes with @axe-core/playwright.", correct: true },
+      { label: ".github/workflows/labs.yml", description: "labs.yml validates Dockerfiles, OpenTofu, Kubernetes manifests, and GitHub Actions workflows." },
+      { label: ".github/workflows/inbox.yml", description: "inbox.yml fetches RSS feeds into a private GitHub Issue." }
+    ]
+  }
+]} />
+
+## Sources
+- [The 2020 Scrum Guide: Definition of Done](https://scrumguides.org/scrum-guide.html)
+- [Playwright: Accessibility Testing](https://playwright.dev/docs/accessibility-testing)
+- [Lighthouse CI (GitHub)](https://github.com/GoogleChrome/lighthouse-ci)

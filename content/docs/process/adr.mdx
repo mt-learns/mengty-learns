@@ -1,0 +1,137 @@
+---
+title: "Architecture Decision Records (ADRs)"
+description: Write lightweight Nygard ADRs, understand the proposed/accepted/superseded lifecycle, and review a worked ADR for Next.js static export vs OpenNext on Cloudflare Workers.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: how-to
+level: beginner
+tags: [process, adr, architecture, decisions, cloudflare-workers]
+tested_with:
+  next: "16.4.6"
+  adr_format: "nygard-2011"
+cards:
+  - q: "What are the five core sections of a Michael Nygard ADR?"
+    a: "Title, Status, Context, Decision, and Consequences."
+  - q: "Why should an accepted ADR never be edited to say something different when you change your mind?"
+    a: "ADRs are an immutable decision log; instead, write a new ADR and mark the old one 'Superseded by ADR-XXXX' so future readers see why the change happened."
+  - q: "When is an ADR worth writing for a small team?"
+    a: "When a choice is hard to reverse, affects multiple modules, or carries non-obvious trade-offs (database, auth model, hosting, build architecture)."
+  - q: "In this site's OpenNext on Cloudflare Workers plan, how do static routes stay $0 without R2 or KV?"
+    a: "By using staticAssetsIncrementalCache with enableCacheInterception: true and keeping every route prerendered via generateStaticParams / force-static."
+related:
+  - architecture/compare-styles
+  - ci-cd/this-site-pipeline
+  - process/idea-to-production
+sources:
+  - title: "Michael Nygard: Documenting Architecture Decisions (2011)"
+    url: https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions
+  - title: "ADR GitHub Organization (adr.github.io)"
+    url: https://adr.github.io/
+  - title: "OpenNext for Cloudflare Workers"
+    url: https://opennext.js.org/cloudflare
+---
+
+## TL;DR
+An **ADR (Architecture Decision Record)** is a short, version-controlled markdown file capturing **Context**, **Decision**, and **Consequences** for a hard-to-reverse choice. Write one when changing your mind later would be expensive—and supersede old ADRs rather than rewriting history.
+
+## Why it exists
+Six months after shipping, nobody remembers *why* you chose static export over SSR, or Postgres over SQLite. Without ADRs, new teammates (or AI agents) either repeat rejected debates or accidentally undo a constraint that existed for a real reason.
+
+## 1. The Nygard ADR format
+Michael Nygard's 2011 format fits in 20–40 lines of Markdown:
+
+- **Title:** Short noun phrase (`ADR-0002: Deploy with OpenNext on Cloudflare Workers`).
+- **Status:** `Proposed` → `Accepted` → `Deprecated` or `Superseded by ADR-XXXX`.
+- **Context:** The forces at play (requirements, constraints, cost, team skills) in neutral prose.
+- **Decision:** Active voice ("We will...").
+- **Consequences:** All outcomes—good, bad, and neutral—including what becomes harder.
+
+## 2. Status lifecycle
+
+```
+Proposed ──▶ Accepted ──▶ Superseded by ADR-XXXX
+    │                         ▲
+    └──▶ Rejected             └── (or Deprecated)
+```
+
+1. **Proposed:** Open in a PR for review; team can still push back.
+2. **Accepted:** Merged to `main`. Treat as immutable—do not silently rewrite its decision later.
+3. **Superseded:** When circumstances change, add a new ADR explaining the new context and update the old ADR's status line to `Superseded by ADR-XXXX`.
+
+## 3. Worked example: Next.js static export vs OpenNext on Workers
+
+This example summarizes a real decision in this repository (`docs/deploy/CLOUDFLARE-WORKERS-PLAN.md` superseding `PLAN.md` §2):
+
+```markdown
+# ADR-0002: Deploy to Cloudflare Workers with OpenNext instead of Pages static export
+
+## Status
+Accepted (2026-11-26) — supersedes PLAN.md §2 (Cloudflare Pages `out/` export)
+
+## Context
+Mengty Learns started with `output: 'export'` on Next.js 16 + Fumadocs to deploy a pure
+static `out/` folder to Cloudflare Pages with $0 backend cost. However, future features
+(optional ISR, route handlers, and Cloudflare Workers' unified platform) are blocked by
+`output: 'export'`. Cloudflare recommends vinext for brand-new apps, but this is an
+existing Next.js 16.4.6 + Fumadocs 16 app.
+
+## Decision
+We will remove `output: 'export'` and deploy using `@opennextjs/cloudflare` on
+Cloudflare Workers, while keeping every route statically prerendered (`generateStaticParams`
+and `dynamic = 'force-static'`) and configuring `staticAssetsIncrementalCache` with
+`enableCacheInterception: true` and `images.unoptimized: true`.
+
+## Consequences
+- Good: Zero storage cost ($0—no R2, KV, or D1 needed while all routes remain static).
+- Good: Room to adopt ISR or middleware later without switching hosts.
+- Good: Security headers (`public/_headers`) and immutable `/_next/static/*` caching work at the edge.
+- Trade-off: Ships a Worker bundle (must stay under the 3 MiB gzip free-plan limit) instead of plain HTML files.
+- Trade-off: OpenNext builds run on Linux CI (`ubuntu-latest`), as Windows support is not guaranteed.
+```
+
+## Minimum viable version (1–3 person team + AI agents)
+- Store ADRs in `docs/adr/0001-short-title.md` (or a Decisions table in `PLAN.md` for tiny projects).
+- Aim for **15 minutes** to write, **≤ 1 page** long.
+- Include ADRs in your AI agent context (`AGENTS.md` or `docs/adr/`) so agents don't propose architectures you already ruled out.
+
+## When it's overkill
+- Writing an ADR for **reversible choices** (variable naming, button padding, swapping an internal helper).
+- Creating a formal Architecture Review Board that meets once a month and blocks PRs waiting for ADR sign-off.
+
+## Gotchas
+- **Hiding negative consequences:** An ADR that only lists pros is marketing, not engineering. Always record the trade-offs and operational cost.
+- **Editing accepted ADRs in place:** Changing "We chose A" to "We chose B" erases the history of why A was chosen and why it stopped working. Always supersede.
+- **Writing ADRs after everyone forgot:** Draft the ADR in the same PR (or design step) where the decision is made.
+
+## Production checklist
+- [ ] Hard-to-reverse decisions (hosting, auth, database, public API shape) have a numbered ADR.
+- [ ] Every ADR lists **Consequences** honestly, including downsides and operational limits.
+- [ ] Superseded ADRs link forward to the new ADR number.
+- [ ] The ADR lives in Git right next to the code, not in a private chat thread.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "You accepted ADR-0001 (Use static export) six months ago, and today you decide to switch to OpenNext on Workers. What should you do with ADR-0001?",
+    options: [
+      { label: "Write ADR-0002 for OpenNext and update ADR-0001's status to 'Superseded by ADR-0002'", description: "Keeping the historical record intact explains both why static export was chosen first and why it changed.", correct: true },
+      { label: "Delete ADR-0001 so the repo stays clean", description: "Deleting ADRs destroys the historical rationale." },
+      { label: "Edit ADR-0001's Decision section to say OpenNext", description: "Rewriting an accepted ADR makes the history misleading." }
+    ]
+  },
+  {
+    question: "Which of these changes warrants an ADR for a 2-person team?",
+    options: [
+      { label: "Switching from session cookies to stateless JWTs with refresh rotation", description: "Auth token architecture is hard to reverse and affects security, APIs, and clients.", correct: true },
+      { label: "Renaming a local helper function inside one component", description: "Trivial, easily reversible refactors do not need an ADR." },
+      { label: "Fixing a typo in a documentation page", description: "No architectural trade-off is involved." }
+    ]
+  }
+]} />
+
+## Sources
+- [Michael Nygard: Documenting Architecture Decisions (2011)](https://cognitect.com/blog/2011/11/15/documenting-architecture-decisions)
+- [ADR GitHub Organization](https://adr.github.io/)
+- [OpenNext for Cloudflare Workers](https://opennext.js.org/cloudflare)

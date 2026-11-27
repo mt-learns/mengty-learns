@@ -1,0 +1,128 @@
+---
+title: "Scrum vs Kanban vs Waterfall vs Hybrid"
+description: Compare Scrum, Kanban, Waterfall, Scrumban, and Shape Up for small engineering teams—cadence, roles, artifacts, overhead, and a practical decision guide.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: decision
+type: explanation
+level: beginner
+tags: [process, scrum, kanban, waterfall, shape-up, scrumban, agile]
+tested_with:
+  scrum_guide: "2020"
+  kanban_guide: "2025"
+cards:
+  - q: "When does Waterfall still make sense over Agile?"
+    a: "When requirements are genuinely fixed by contract, compliance, or hardware lead times, and changing scope mid-build is more expensive than upfront specification."
+  - q: "What is the core mechanism Kanban uses to prevent overload?"
+    a: "Explicit Work-In-Progress (WIP) limits per workflow column, pulling new work only when capacity opens."
+  - q: "What are the three accountabilities in the 2020 Scrum Guide?"
+    a: "Product Owner, Scrum Master, and Developers (who together form one Scrum Team)."
+  - q: "How does Basecamp's Shape Up differ from two-week Scrum sprints?"
+    a: "Shape Up uses fixed 6-week cycles (plus a 2-week cooldown) with shaped pitches and variable scope, rather than a continuously groomed backlog of estimated tickets."
+related:
+  - ci-cd/this-site-pipeline
+  - architecture/compare-styles
+  - foundations/git-cheatsheet
+sources:
+  - title: "The 2020 Scrum Guide"
+    url: https://scrumguides.org/scrum-guide.html
+  - title: "The Kanban Guide"
+    url: https://kanbanguides.org/english/
+  - title: "Managing the Development of Large Software Systems (Royce, 1970)"
+    url: https://www.praxisframework.org/files/royce1970.pdf
+  - title: "Shape Up: Stop Running in Circles and Ship Work that Matters (Basecamp)"
+    url: https://basecamp.com/shapeup
+---
+
+## TL;DR
+Pick **Kanban** for continuous ops, maintenance, or a 1–3 person team working with AI agents. Pick **Scrum** when a 4–9 person team needs a predictable sprint cadence for stakeholder demos. Pick **Shape Up** for 6-week product bets, and **Waterfall** only when regulations or hardware lock requirements upfront.
+
+## Why it exists
+Teams often copy enterprise ceremonies—daily standups for one developer, two-week sprint planning for an ops queue, or 40-page Waterfall specs for an exploratory product. Matching the delivery model to **requirement stability**, **team size**, and **interrupt rate** removes ceremony without losing predictability.
+
+## Comparison table
+
+| Dimension | Waterfall | Scrum (2020 Guide) | Kanban | Scrumban (Hybrid) | Shape Up (Basecamp) |
+|---|---|---|---|---|---|
+| **Cadence** | Sequential phases (requirements → design → build → test → deploy) | Fixed-length Sprints (1–4 weeks, commonly 2 weeks) | Continuous flow, no required timeboxes | Continuous flow + optional planning/retro cadence | 6-week build cycles + 2-week cooldown |
+| **Roles** | Project manager, analysts, devs, QA (often siloed) | Product Owner, Scrum Master, Developers | No prescribed new roles; team owns the board | Existing team; optional rotating coordinator | Shapers (senior product/tech), small build teams (1–3) |
+| **Artifacts** | Big upfront spec, Gantt schedule, sign-off gates | Product Backlog, Sprint Backlog, Increment | Visual board, WIP limits, explicit flow policies | Kanban board + lightweight prioritized backlog | Shaped pitches, betting table, hill charts |
+| **Requirements** | Fixed upfront; late changes are costly | Changing; re-prioritized every Sprint | Changing; reprioritized whenever a slot opens | Changing; handles both planned features and interrupts | Fixed appetite (time), **variable scope** |
+| **Best team size** | Large / multi-vendor regulated projects | 4–10 people (Scrum Guide recommends ≤ 10) | 1–12 people (great for 1–3) | 2–8 people | Small autonomous squads (2–3 per bet) |
+| **Overhead** | High (upfront docs & phase gates) | Medium (4 events per Sprint) | Low (board + WIP limits) | Low–Medium | Low–Medium (upfront shaping, then autonomous) |
+
+## Decision guide
+
+<Diagram
+  id="process-model-decision"
+  ariaLabel="Decision flow for choosing Waterfall, Kanban, Scrum, or Shape Up based on requirement stability and team size"
+  caption="Start with requirement stability, then match the cadence to your team size and interrupt rate."
+  nodes={[
+    { id: 'req', label: 'Reqs fixed?', subtitle: 'Contract / compliance', icon: 'interface', category: 'abstraction', rank: 0, order: 0 },
+    { id: 'water', label: 'Waterfall', subtitle: 'Sequential gates', icon: 'db', category: 'data', rank: 1, order: 0 },
+    { id: 'size', label: 'Team 1-3?', subtitle: 'Or high interrupts', icon: 'user', category: 'client', rank: 1, order: 1 },
+    { id: 'kanban', label: 'Kanban', subtitle: 'Pull + WIP limits', icon: 'queue', category: 'network', rank: 2, order: 0 },
+    { id: 'scrum', label: 'Scrum / ShapeUp', subtitle: 'Timeboxed bets', icon: 'service', category: 'service', rank: 2, order: 1 },
+  ]}
+  edges={[
+    { from: 'req', to: 'water', kind: 'request', label: 'Yes' },
+    { from: 'req', to: 'size', kind: 'request', label: 'No' },
+    { from: 'size', to: 'kanban', kind: 'request', label: 'Yes' },
+    { from: 'size', to: 'scrum', kind: 'request', label: 'No' },
+  ]}
+/>
+
+1. **Choose Kanban** if you are a solo developer, a 1–3 person team, or an ops/platform team handling unpredictable support and bugs alongside feature work.
+2. **Choose Scrumban** if you like Kanban's pull flow and WIP limits, but still want a weekly planning check-in and a biweekly retrospective.
+3. **Choose Scrum** if you have 4–9 people, a dedicated Product Owner, and stakeholders who expect a working demo every 2 weeks.
+4. **Choose Shape Up** if 2-week sprints feel like a hamster wheel and you want 6 weeks of uninterrupted focus where scope flexes to hit the deadline.
+5. **Choose Waterfall** only when external certification, hardware manufacturing, or fixed-bid contracts forbid iterative scope changes (even Royce's 1970 paper noted that pure non-iterative waterfall is risky without feedback loops).
+
+## Minimum viable version (1–3 person team + AI agents)
+Use a **3-column Kanban board** (`Ready` → `In Progress (WIP: 2)` → `Done`) plus a **weekly 20-minute review**:
+- Keep `Ready` capped at 5–7 small, well-scoped tasks so AI agents or teammates can pick up work without ambiguity.
+- Enforce **WIP ≤ 2** on `In Progress`—finish and merge one PR before starting another.
+- Skip daily standups if you already communicate asynchronously in PRs and commit logs.
+
+## When it's overkill
+- Running 2-week Scrum ceremonies (Sprint Planning, Daily Scrum, Sprint Review, Sprint Retrospective) for a **1-person project**—you end up scheduling meetings with yourself.
+- Writing a multi-month Waterfall specification for a startup MVP where user feedback will invalidate half the assumptions in week one.
+- Creating a Jira workflow with 11 statuses and mandatory story-point estimation when 10–15 lines in a markdown backlog would do.
+
+## Gotchas
+- **Cargo-cult Scrum:** Calling a weekly status meeting a "Sprint" while dumping unplanned mid-sprint requests onto the team gives you all the ceremony of Scrum with none of the focus.
+- **Kanban without WIP limits:** A board with no WIP limit is just a sticky-note graveyard; work piles up in `In Progress` and nothing ships.
+- **Misreading Royce (1970):** Winston Royce's paper is often cited as the origin of Waterfall, yet he explicitly warned that running the sequence once without iteration is "risky and invites failure."
+
+## Production checklist
+- [ ] Every active task has one clear owner and lives on a single visible board.
+- [ ] `In Progress` has an explicit WIP limit (for example, `WIP ≤ 2` for a solo dev or `agents + 1`).
+- [ ] The team agrees on when scope can change (anytime in Kanban vs next Sprint in Scrum).
+- [ ] There is a lightweight weekly or biweekly pause to inspect what shipped and drop what isn't working.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "A 2-person team builds an internal developer tool while also handling daily production support tickets. Which model fits best?",
+    options: [
+      { label: "Kanban (or Scrumban) with explicit WIP limits", description: "Pull-based flow handles unplanned interrupts naturally without breaking a rigid sprint commitment.", correct: true },
+      { label: "Strict 4-week Scrum Sprints with zero mid-sprint changes", description: "Production support interrupts will repeatedly break sprint commitments and create friction." },
+      { label: "Waterfall with a 3-month upfront specification", description: "Internal tools benefit from fast iteration rather than locked upfront specs." }
+    ]
+  },
+  {
+    question: "In Basecamp's Shape Up, what stays fixed and what flexes during a 6-week cycle?",
+    options: [
+      { label: "Time (6-week appetite) is fixed; scope flexes to ship on time", description: "Shape Up treats time as a hard budget and cuts non-essential scope rather than extending deadlines.", correct: true },
+      { label: "Scope is fixed; the cycle extends until every ticket is done", description: "Extending cycles violates Shape Up's core circuit-breaker rule." },
+      { label: "Story points are fixed; team size flexes mid-cycle", description: "Shape Up avoids story points and keeps small teams stable for the cycle." }
+    ]
+  }
+]} />
+
+## Sources
+- [The 2020 Scrum Guide](https://scrumguides.org/scrum-guide.html)
+- [The Kanban Guide](https://kanbanguides.org/english/)
+- [Winston W. Royce (1970): Managing the Development of Large Software Systems](https://www.praxisframework.org/files/royce1970.pdf)
+- [Basecamp: Shape Up](https://basecamp.com/shapeup)

@@ -1,0 +1,146 @@
+---
+title: "Incident Management and Blameless Postmortems"
+description: Severity levels, incident roles (IC and comms), mitigation-first timelines, a blameless postmortem template with owned actions, and a fictional training scenario.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: how-to
+level: intermediate
+tags: [process, incidents, postmortem, sre, reliability]
+tested_with:
+  sre_book: "Google SRE (Managing Incidents & Postmortem Culture)"
+cards:
+  - q: "What is the number-one priority during an active SEV1 or SEV2 incident?"
+    a: "Mitigate user impact first (rollback, failover, feature flag)—save deep root-cause debugging for after service is restored."
+  - q: "What does the Incident Commander (IC) do during an incident?"
+    a: "Coordinates the response, delegates investigation and communications, tracks time/decisions, and avoids getting pulled into hands-on debugging."
+  - q: "Why must postmortems be blameless?"
+    a: "Blaming individuals causes people to hide mistakes; assuming good intent uncovers the systemic gaps (missing alerts, unsafe deploys, unclear runbooks) that let the failure happen."
+  - q: "What makes a postmortem action item actually get done?"
+    a: "A single named owner, a concrete deliverable, a due date, and a tracked issue link—never a vague 'be more careful next time'."
+related:
+  - process/dor-dod-quality-gates
+  - process/retrospectives
+  - ci-cd/this-site-pipeline
+sources:
+  - title: "Google SRE Book: Managing Incidents"
+    url: https://sre.google/sre-book/managing-incidents/
+  - title: "Google SRE Book: Postmortem Culture"
+    url: https://sre.google/sre-book/postmortem-culture/
+  - title: "PagerDuty Incident Response Documentation"
+    url: https://response.pagerduty.com/
+---
+
+## TL;DR
+During an outage, **mitigate first, debug later** (rollback beats root-cause hunting). Assign an **Incident Commander (IC)** and **Comms** role, keep a timestamped timeline, and follow every SEV1/SEV2 with a **blameless postmortem** whose action items have one owner and a tracked issue.
+
+## 1. Severity levels
+
+| Level | User impact | Response | Postmortem? |
+|---|---|---|---|
+| **SEV1 (Critical)** | Complete outage, data loss, or active security breach | All-hands immediate response; status update every 30 min | **Mandatory** |
+| **SEV2 (High)** | Major feature broken or severe degradation for many users | Immediate triage during work hours; update every 60 min | **Mandatory** |
+| **SEV3 (Medium)** | Minor feature broken with a workaround; small subset affected | Fix in normal queue / next business day | Optional (if repeat) |
+| **SEV4 (Low)** | Cosmetic or non-urgent edge case | Backlog ticket | No |
+
+## 2. Roles (and how 1–3 person teams share them)
+- **Incident Commander (IC):** Holds the big picture, calls the severity, delegates tasks, and prevents duplicate work. Does **not** SSH in to tail logs if someone else is available.
+- **Comms Lead:** Posts external status updates and internal summaries at fixed intervals so responders aren't interrupted by "is it fixed yet?" pings.
+- **Operations / Responder:** Runs the rollback, checks dashboards, and executes mitigation steps.
+
+On a **2-person team**, Person A is **IC + Comms** and Person B is **Operations**. As a **solo developer**, set a 15-minute repeating timer: spend 1 minute updating a status note/issue, then 14 minutes mitigating.
+
+## 3. Mitigation-first timeline
+1. **Detect & Acknowledge:** Alert fires or user reports issue.
+2. **Triage & Declare:** Assign severity + IC + Comms; open a single incident channel/thread.
+3. **Mitigate first:** Roll back the last deploy (`wrangler rollback` / `git revert`), disable a feature flag, or fail over. **Do not** spend 45 minutes live-debugging a bad deploy when a 60-second rollback restores users.
+4. **Verify & Resolve:** Confirm error rates and key user journeys are green for 10–15 minutes before declaring resolved.
+5. **Postmortem (within 48 hours):** Write while memories and logs are fresh.
+
+## 4. Blameless postmortem template (`kind: postmortem`)
+
+```markdown
+## Summary
+One-paragraph overview: what broke, for how long, and how it was mitigated.
+
+## Impact
+- Duration: HH:MM–HH:MM UTC (X minutes)
+- Affected users / routes: ...
+
+## Timeline (UTC)
+- 14:02 Deploy #412 promoted to production.
+- 14:08 Synthetic check alerts on 500s on `/search`.
+- 14:11 IC declared SEV2; Comms posted status update.
+- 14:15 Rolled back to Deploy #411; error rate dropped to 0%.
+
+## Root cause
+Technical explanation of the trigger and the underlying systemic gap.
+
+## Lessons learned
+- **What went well:** Fast rollback worked in 4 minutes.
+- **What went poorly:** Staging lacked the production search index file.
+- **Where we got lucky:** Alert fired before peak traffic.
+
+## Action items
+| Action | Type | Owner | Due | Ticket |
+|---|---|---|---|---|
+| Add `/search` smoke test to `ci.yml` | Prevent | @lead | 2026-12-04 | #104 |
+| Document rollback command in `RUNBOOK.md` | Mitigate | @owner | 2026-12-02 | #105 |
+```
+
+## 5. Worked example *(Fictional Training Scenario)*
+
+> **Note:** The incident below is a **fictional training scenario** for practicing the template—it is not a real outage.
+
+- **Scenario:** `[Training] SEV2 — Static search index returns 404 after build script refactor`
+- **What happened:** A fictional refactor renamed the generated search index path without updating the client fetch URL. `next build` succeeded, so the bug reached production.
+- **Mitigation:** At `T+9 min`, the on-call responder ran `wrangler rollback` to restore the previous Worker version while investigating.
+- **Root cause (systemic, not "dev forgot"):** CI verified `next build` exited `0`, but had no post-build check asserting that the search endpoint returned `200` and non-empty JSON.
+- **Owned action items:**
+  1. Add a Playwright/fetch assertion in `quality.yml` checking search returns results (`Owner: Lead`, `Due: +5 days`).
+  2. Pin the search path in one shared constant (`Owner: Worker`, `Due: +5 days`).
+
+## Minimum viable version (1–3 person team + AI agents)
+- Keep a **1-page `RUNBOOK.md`** with: (1) how to check health/logs, (2) the exact 1-line rollback command, and (3) where to post status.
+- Write a **15-minute blameless postmortem** in `docs/postmortems/YYYY-MM-DD-slug.md` for every user-visible outage, ending with **1–3 owned GitHub issues**.
+
+## When it's overkill
+- Holding a 60-minute postmortem meeting for a **SEV4 typo** or a broken local dev environment that never touched production.
+- Spinning up 5 separate Slack channels and formal pager rotations for a static site with 1 maintainer.
+
+## Gotchas
+- **Debugging before rolling back:** Pride ("I can fix this forward in 2 minutes") turns a 3-minute outage into a 40-minute outage. Roll back first, investigate on staging.
+- **"Be more careful" action items:** Human vigilance is not a control. Turn every lesson into an automated test, CI gate, alert, or runbook step.
+- **Blame disguised as "human error":** Saying "Alice ran the wrong command" stops the investigation too early. Ask *why* the system allowed a single command to cause an outage without a confirmation or safeguard.
+
+## Production checklist
+- [ ] Every production service has a tested, 1-command rollback documented in `RUNBOOK.md`.
+- [ ] Severity levels (SEV1–SEV4) and IC/Comms responsibilities are agreed before an outage happens.
+- [ ] Postmortems are blameless and focus on systemic safeguards.
+- [ ] Every postmortem action item has **one owner**, a **due date**, and a **tracked ticket**.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "A deploy just caused 50% of API requests to return 500 errors. What should the responder do first?",
+    options: [
+      { label: "Roll back to the previous known-good release to restore service, then investigate the bug offline", description: "Mitigation comes before root-cause analysis during an active SEV1/SEV2.", correct: true },
+      { label: "SSH into production and read stack traces for 30 minutes before deciding", description: "Leaving users broken while debugging extends outage duration unnecessarily." },
+      { label: "Start writing the postmortem while the site is still down", description: "Postmortems happen after service is restored." }
+    ]
+  },
+  {
+    question: "Which postmortem action item follows blameless SRE practice?",
+    options: [
+      { label: "Add a CI smoke check verifying /api/search returns 200 before deploy (Owner: @mengty, Due: 2026-12-04)", description: "It fixes the systemic gap and has a clear owner, deliverable, and due date.", correct: true },
+      { label: "Remind developers to double-check search routes before merging", description: "Reminders are not reliable engineering controls and have no owner or verification." },
+      { label: "Ban the author of the PR from deploying on Fridays", description: "Punitive rules blame individuals instead of fixing missing automated checks." }
+    ]
+  }
+]} />
+
+## Sources
+- [Google SRE Book: Managing Incidents](https://sre.google/sre-book/managing-incidents/)
+- [Google SRE Book: Postmortem Culture](https://sre.google/sre-book/postmortem-culture/)
+- [PagerDuty Incident Response Documentation](https://response.pagerduty.com/)

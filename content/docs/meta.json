@@ -1,0 +1,15 @@
+{
+  "pages": [
+    "index",
+    "foundations",
+    "containers",
+    "kubernetes",
+    "iac",
+    "ci-cd",
+    "gitops",
+    "design",
+    "architecture",
+    "security",
+    "process"
+  ]
+}

@@ -1,0 +1,116 @@
+---
+title: "Practical Code Review (Including AI-Generated Code)"
+description: What to review (correctness, security, tests, readability), PR sizing, Conventional Comments, turnaround targets, self-review, and verifying AI-generated PRs.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: note
+type: how-to
+level: beginner
+tags: [process, code-review, conventional-comments, ai-agents, pull-requests]
+tested_with:
+  conventional_comments: "1.0.0"
+cards:
+  - q: "What should human code reviewers focus on instead of formatting and import order?"
+    a: "Correctness, edge cases, security/trust boundaries, test quality, and readability—let linters and formatters catch style."
+  - q: "In Conventional Comments, what does a 'nitpick (non-blocking):' prefix communicate?"
+    a: "A minor preference or polish item that the author may ignore or fix without blocking PR approval."
+  - q: "What are the three mandatory checks when reviewing AI-generated code?"
+    a: "Verify claimed files/APIs actually exist, run the code/tests yourself (don't trust claimed output), and check git log/status to verify commits are real and clean."
+  - q: "Why keep pull requests small (around 200–400 changed lines)?"
+    a: "Small PRs get reviewed faster, surface more real bugs per line, and are far easier to revert if something breaks in production."
+related:
+  - process/dor-dod-quality-gates
+  - foundations/git-cheatsheet
+  - security/threat-modeling
+sources:
+  - title: "Google Engineering Practices: Code Review Developer Guide"
+    url: https://google.github.io/eng-practices/review/
+  - title: "Conventional Comments 1.0.0"
+    url: https://conventionalcomments.org/
+---
+
+## TL;DR
+Review for **correctness, security, tests, and readability**—never for style that `eslint` or `prettier` can fix. Keep PRs small, label comments with **Conventional Comments** (`issue:`, `nitpick:`, `suggestion:`), and when reviewing **AI-generated code**, always verify claims, run the suite, and check `git log`.
+
+## 1. What to review (and what to skip)
+
+| Focus here (Human judgment) | Skip here (Automate in CI) |
+|---|---|
+| Does this solve the stated problem and edge cases? | Semicolons, quotes, indentation, import sorting |
+| Trust boundaries: authZ, input validation, secrets, XSS/SQLi | Unused variables or missing types (`eslint` / `tsc`) |
+| Do tests assert real behavior (not just mock tautologies)? | Dead formatting preferences |
+| Can a teammate understand this function in 6 months? | Bikeshedding over equivalent syntax |
+
+## 2. PR size and turnaround
+- **PR size:** Aim for **≤ 200–400 lines changed** (excluding lockfiles or generated snapshots). Separate mechanical refactors from behavior changes into two PRs.
+- **Review turnaround:** Target **< 24 hours** (ideally within a few hours). Unblocking a teammate's PR has higher leverage than starting a new feature of your own.
+
+## 3. Conventional Comments
+Prefix review comments so the author immediately knows **severity** and **intent**:
+
+```text
+issue (blocking): `deleteItem` checks authentication but not ownership (BOLA).
+suggestion (non-blocking): Extract `parseFrontmatter` into a shared helper.
+nitpick (non-blocking): Rename `d` to `durationMs` for clarity.
+question: Does this endpoint need rate limiting before we ship?
+praise: Clean separation between the pure layout function and React state!
+```
+
+Using `(non-blocking)` lets you approve the PR in the same pass instead of forcing another round-trip over a minor rename.
+
+## 4. Reviewing AI-generated code
+AI coding agents write plausible code fast—and can also hallucinate APIs, skip edge cases, or report stale test results. Apply these four checks on every agent PR:
+1. **Verify claims against files:** If the agent cites a symbol, flag, or library version, check `node_modules` or the actual file—never accept "I verified it" on faith.
+2. **Run it yourself:** Run `pnpm lint && pnpm typecheck && pnpm test && pnpm build` (or inspect CI logs) *after* the agent's final edit.
+3. **Check `git log` and `git status`:** Confirm commits actually exist on the branch, follow commit conventions, and contain no stray scratch files or trailers.
+4. **Watch for duplication:** Agents often reimplement an existing helper instead of reusing what's already in `lib/` or `components/`.
+
+## 5. Self-review checklist (before requesting review)
+Even as a solo developer, review your own PR diff on GitHub/Git before merging:
+- [ ] Read every changed line in `git diff`—remove debug logs, unused imports, and unrelated edits.
+- [ ] Confirm new functions handle empty/null/error inputs.
+- [ ] Confirm tests would actually fail if the bug returned.
+- [ ] Write a 3-line PR summary: **What changed**, **Why**, and **How it was verified**.
+
+## Minimum viable version (1–3 person team + AI agents)
+- **Solo developer:** Treat every PR as an async self-review—never push directly to `main` for non-trivial changes; open a PR, let CI run, read the diff once with fresh eyes, then merge.
+- **2–3 person team:** 1 approving review per PR, Conventional Comments prefixes, and a 4-hour daytime review SLA.
+
+## When it's overkill
+- Requiring **2+ senior approvals** on a 1-line typo fix or dependency patch when CI is green.
+- Leaving 25 `nitpick:` comments on an urgent hotfix during a production incident.
+
+## Gotchas
+- **Rubber-stamping 1,500-line PRs:** Nobody actually reads a 1,500-line diff; reviewers say "LGTM" out of fatigue. Split the work earlier.
+- **Treating style preferences as blocking:** Blocking a PR over `for..of` vs `.map()` slows the team down and breeds resentment.
+
+## Production checklist
+- [ ] Automated lint/formatting runs in CI so reviews stay focused on logic and security.
+- [ ] PRs are small enough to review in 15–20 minutes.
+- [ ] Reviewers use explicit blocking vs non-blocking labels (Conventional Comments).
+- [ ] AI-generated diffs are verified by running tests and inspecting `git log` / `git diff`.
+
+## Check yourself
+
+<Quiz questions={[
+  {
+    question: "You spot a missing ownership check in an API handler AND a slightly awkward local variable name. How should you write those two comments using Conventional Comments?",
+    options: [
+      { label: "issue (blocking) for the ownership check; nitpick (non-blocking) for the variable name", description: "Separates the security bug that must be fixed from the minor readability suggestion.", correct: true },
+      { label: "nitpick (blocking) for both", description: "A missing ownership check is a security issue, not a nitpick, and nitpicks shouldn't block." },
+      { label: "Approve immediately without mentioning the ownership check", description: "Security flaws must be flagged as blocking issues before merge." }
+    ]
+  },
+  {
+    question: "An AI coding agent finishes a task and says 'All tests pass.' What should the reviewer still do?",
+    options: [
+      { label: "Inspect the diff, verify referenced APIs/files exist, and confirm CI or local test runs actually passed after the final edit", description: "Agent summaries can be stale or miss edge cases; always verify against real files and tool output.", correct: true },
+      { label: "Skip reading the diff because AI output is deterministic", description: "AI output is probabilistic and must be reviewed like any other PR." },
+      { label: "Rewrite the entire PR by hand before reading it", description: "Read and verify the diff first; only rewrite if the approach is fundamentally wrong." }
+    ]
+  }
+]} />
+
+## Sources
+- [Google Engineering Practices: Code Review Developer Guide](https://google.github.io/eng-practices/review/)
+- [Conventional Comments 1.0.0](https://conventionalcomments.org/)
