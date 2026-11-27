@@ -2,13 +2,21 @@
 title: Argo CD
 ring: trial
 quadrant: tools
-what: Declarative GitOps continuous delivery controller for Kubernetes with a built-in sync UI.
-why: Makes cluster drift visible and enforces Git as the single source of truth for manifests.
-action: Trial in a local kind/k3s lab to test ApplicationSet patterns and automated drift reconciliation.
-updated: "2026-11-26"
+what: Declarative GitOps continuous delivery controller for Kubernetes with a built-in sync UI and project sync windows.
+why: "TODO(owner): Rewrite in your own voice — makes cluster drift visible, and recent incidents show why deny sync windows + self-heal + migration hooks need explicit lab testing."
+action: Trial in a local kind/k3s lab to test ApplicationSet patterns, automated drift reconciliation, and how sync windows interact with PreSync/Sync hooks.
+updated: "2026-11-27"
 sources:
   - title: Argo CD Documentation
     url: https://argo-cd.readthedocs.io/en/stable/
+  - title: Argo CD Sync Windows
+    url: https://argo-cd.readthedocs.io/en/stable/operator-manual/sync-windows/
+  - title: CNCF Blog — When a sync window closes (2026-11-20)
+    url: https://www.cncf.io/blog/2026/11/20/when-a-sync-window-closes-how-argo-cd-self-heal-skipped-the-migration-hook/
 related:
   - kubernetes/service-routing
+  - gitops/what-is-gitops
+  - gitops/drift-reconciliation
 ---
+
+Note (2026-11-27): Added sync-window caveats from the CNCF postmortem on self-heal skipping migration hooks when a deny sync window closes.
