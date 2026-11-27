@@ -1,0 +1,88 @@
+---
+title: Project Kickoff Checklist (10-Step Baseline)
+description: The 10 non-negotiable engineering foundations to put in place before writing feature code—from branching and secrets to CI, observability, and Definition of Done.
+updated: "2026-11-27"
+verified: "2026-11-27"
+kind: cheatsheet
+type: reference
+level: beginner
+tags: [process, checklist, ci-cd, project-setup, definition-of-done]
+tested_with:
+  repo_workflow: "github-actions + pnpm"
+cards:
+  - q: "Why should CI, linting, and secret scanning be wired before the first feature PR rather than 'later'?"
+    a: "Fixing formatting, missing tests, or leaked credentials retroactively across dozens of commits is far slower than enforcing automated gates from commit one."
+  - q: "What makes a feature truly 'Done' beyond merging code to main?"
+    a: "Automated tests and security scans pass, migrations are backward-compatible, monitoring/alerts are active, and the change is verified in production with a documented rollback path."
+  - q: "How do you keep requirement-to-code traceability effortless?"
+    a: "Include the ticket ID consistently in branch names, PR titles, commit messages, and key regression test descriptions."
+  - q: "What belongs in a repository's Day-1 documentation baseline?"
+    a: "A quick-start README (how to run, test, and deploy locally) plus an ADR folder for recording architectural decisions."
+related:
+  - process/idea-to-production
+  - process/dor-dod-quality-gates
+  - process/code-review
+  - ci-cd/this-site-pipeline
+sources:
+  - title: "GitHub Docs: About Protected Branches"
+    url: https://docs.github.com/en/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches
+  - title: "OpenTelemetry Documentation"
+    url: https://opentelemetry.io/docs/
+  - title: "software-engineering: Project Setup & Definition of Done (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/00-project-setup-roadmap/10-definition-of-done.md
+---
+
+## TL;DR
+Before writing business features, lock down **10 baseline practices**: branching rules, secret hygiene, modular layout, lint/format hooks, CI gates, safe CD, structured observability, ADR/README docs, code review norms, and a shared **Definition of Done**.
+
+## The 10-step kickoff checklist
+
+| # | Area | Day-1 baseline | Reference |
+|---|---|---|---|
+| **1** | **Repo & branching** | Trunk-based (`main` + short-lived branches), branch protection, no direct push to `main` | [Git Cheatsheet](/docs/foundations/git-cheatsheet) |
+| **2** | **Env & secrets** | `.env.example` committed, `.env` gitignored, pre-commit secret scan (`gitleaks`), OIDC over static keys | [Secrets Management](/docs/security/secrets-management) |
+| **3** | **Project structure** | Cohesive module layout, clear separation of domain logic from framework/I/O | [Compare Styles](/docs/architecture/compare-styles) |
+| **4** | **Lint & formatting** | `eslint`, `prettier`, `tsc --noEmit` enforced in CI (and optional fast pre-commit hook) | [DoR & DoD Gates](/docs/process/dor-dod-quality-gates) |
+| **5** | **CI pipeline** | Every PR runs lint, typecheck, unit/integration tests, and dependency/container scans | [Pipeline Anatomy](/docs/ci-cd/pipeline-anatomy) |
+| **6** | **CD & rollback** | Immutable build artifacts, expand/contract migrations, feature flags or tag-based rollback | [Deploy & Rollback](/docs/ci-cd/deploy-and-rollback) |
+| **7** | **Observability** | Structured JSON logs with correlation IDs, `/healthz` + `/readyz`, error rate & p95 latency alerts | [Observability](/docs/foundations/observability) |
+| **8** | **Docs & ADRs** | Working local setup `README.md` + `docs/adr/` template for key trade-offs | [Write an ADR](/docs/process/adr) |
+| **9** | **Code review** | Small PRs (< 400 lines), explicit checklist, constructive feedback, 1+ required approval | [Code Review](/docs/process/code-review) |
+| **10** | **Definition of Done** | Shared contract: tests + scans green, docs updated, monitored in prod, rollback tested | [Idea to Production](/docs/process/idea-to-production) |
+
+## "Done" stages people confuse
+
+| Claim | Reality | User value delivered |
+|---|---|---|
+| "Works on my machine" | Unreviewed, untested against staging data | None |
+| "Merged to `main`" | Integrated, not yet deployed | None |
+| "Deployed dark" | Code is in prod behind a disabled flag | None yet (safe staging) |
+| **"Flag on, monitored, metrics healthy"** | Serving real users with alerts green | **Actually Done** |
+
+## Gotchas
+- **Skipping CI on "just a quick prototype":** Prototypes become production systems; wiring lint, typecheck, and secret scanning takes 15 minutes on Day 1 and saves days later.
+- **Manual evidence collection:** In regulated environments, generate approval, test, and scan artifacts automatically in CI rather than filling spreadsheets after release.
+- **Unwritten rollback plan:** Every PR that touches schema or config should state how to revert it in under 5 minutes.
+
+## Check yourself
+
+<Quiz
+  questions={[
+    {
+      question: "When is a feature truly considered 'Done' under a production Definition of Done?",
+      options: [
+        { label: "When the pull request is opened", description: "An open PR has not been reviewed, merged, or deployed." },
+        { label: "When it is deployed, enabled for users, monitored, and healthy with a clear rollback path", description: "Code sitting unmerged or disabled delivers no user value until it is safely running and observed.", correct: true },
+        { label: "When unit tests pass on the author's laptop", description: "Local tests do not verify integration, migrations, or production observability." },
+      ],
+    },
+    {
+      question: "Why should secret scanning and .env.example be set up on Day 1?",
+      options: [
+        { label: "Preventing committed credentials from entering git history avoids costly key rotations and history rewrites later", description: "Once a secret hits git history, deleting it in a later commit is not enough—you must rotate it.", correct: true },
+        { label: "It automatically provisions a Kubernetes cluster", description: "Secret hygiene protects credentials; it does not provision infrastructure." },
+        { label: "It replaces TLS certificates", description: "TLS encrypts traffic in transit and is separate from repository secret scanning." },
+      ],
+    },
+  ]}
+/>
