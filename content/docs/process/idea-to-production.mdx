@@ -30,6 +30,8 @@ sources:
     url: https://sre.google/sre-book/release-engineering/
   - title: "OWASP Threat Modeling Cheat Sheet"
     url: https://cheatsheetseries.owasp.org/cheatsheets/Threat_Modeling_Cheat_Sheet.html
+  - title: "key-learning: End-to-End Delivery Flow (author's notes)"
+    url: https://github.com/limme-learning/key-learning/blob/main/technical-management-playbook/02-end-to-end-delivery-flow.md
 ---
 
 <Intent>
@@ -90,8 +92,8 @@ Think of cooking a new dish for a small café: you taste the ingredient idea fir
 ## Minimum viable version (1–3 person team + AI agents)
 For a small feature on a 1–3 person team:
 1. Write a **half-page issue** (problem + non-goals + 3 Given/When/Then acceptance criteria).
-2. Spend **10 minutes** asking: "Does this touch auth, user data, or an irreversible schema?" (if yes, write a short ADR + STRIDE check).
-3. Build in a **1-day PR**, run `lint && typecheck && test && build`, self-review the diff, merge, verify the live URL, and jot down one retro note on Friday.
+2. Spend **10 minutes** asking: "Does this touch auth, user data, or an irreversible schema?" (if yes, write a short ADR + STRIDE check, or run a **time-boxed 1–2 day risk spike** if a third-party dependency is unknown).
+3. Build in a **1-day PR**, run `lint && typecheck && test && build`, self-review the diff, confirm rollback/migration readiness before release, verify the live URL, and jot down one retro note on Friday.
 
 ## When it's overkill
 - Writing a full PRD, ADR, and STRIDE matrix for a **typo fix or CSS tweak**.
@@ -158,3 +160,4 @@ For a small feature on a 1–3 person team:
 - [DORA: Software Delivery and Operational Performance](https://dora.dev/research/)
 - [Google SRE Book: Release Engineering](https://sre.google/sre-book/release-engineering/)
 - [OWASP Threat Modeling Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Threat_Modeling_Cheat_Sheet.html)
+- [key-learning: End-to-End Delivery Flow (author's notes)](https://github.com/limme-learning/key-learning/blob/main/technical-management-playbook/02-end-to-end-delivery-flow.md)
