@@ -104,6 +104,9 @@ describe('Reading MDX components', () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, { clipboard: { writeText } });
     render(<Template title="Standup" text="Yesterday I ___. Today I am ___." />);
+    await vi.waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Copy Standup' })).toBeEnabled(),
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Copy Standup' }));
     expect(writeText).toHaveBeenCalledWith('Yesterday I ___. Today I am ___.');
   });
@@ -116,18 +119,22 @@ describe('Reading MDX components', () => {
         patterns={[{ pattern: 'Could we ___ instead?', example: 'Could we batch these requests instead?' }]}
       />,
     );
+    await vi.waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Copy pattern: Could we ___ instead?' })).toBeEnabled(),
+    );
     fireEvent.click(screen.getByRole('button', { name: 'Copy pattern: Could we ___ instead?' }));
     expect(writeText).toHaveBeenCalledWith('Could we ___ instead?');
   });
 
-  it('walks DecisionTree and passes diagram layout bounds invariants', () => {
+  it('walks DecisionTree and passes diagram layout bounds invariants', async () => {
     const nodes = [
       { id: 'q1', label: 'Finished time?', question: 'Is there a finished time (yesterday, last week)?', yes: 'past', no: 'perf' },
       { id: 'past', label: 'Past simple', result: 'Use past simple: I deployed it yesterday.' },
       { id: 'perf', label: 'Present perfect', result: 'Use present perfect: I have deployed it.' },
     ];
     render(<DecisionTree id="tense-tree" title="Tense choice" start="q1" nodes={nodes} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Yes' }));
+    const yesBtn = await screen.findByRole('button', { name: 'Yes' });
+    fireEvent.click(yesBtn);
     expect(screen.getByText('Use past simple: I deployed it yesterday.')).toBeInTheDocument();
 
     const { diagramNodes, diagramEdges } = buildDecisionDiagramData(nodes);

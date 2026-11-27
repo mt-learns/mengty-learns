@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { source } from '@/lib/source';
-import { LearningMapClient, type LearningMapItem } from './LearningMapClient';
+import { LearningMapLazy } from './LearningMapLazy';
+import type { LearningMapItem } from './LearningMapClient';
 
 const DOCS_DIR = path.join(process.cwd(), 'content', 'docs');
 
@@ -55,7 +56,7 @@ export function LearningMap({ section }: { section: string }) {
           Lessons for this section are coming soon. Once published, they will appear here in beginner-to-advanced order.
         </div>
       ) : (
-        <LearningMapClient items={items} />
+        <LearningMapLazy items={items} />
       )}
     </section>
   );

@@ -24,7 +24,7 @@ const LEVEL_LABEL: Record<LearningMapItem['level'], string> = {
  * Client island for LearningMap: reads `mt-completed-v1` from localStorage
  * after mount without shifting any layout dimensions.
  */
-export function LearningMapClient({ items }: { items: LearningMapItem[] }) {
+export default function LearningMapClient({ items }: { items: LearningMapItem[] }) {
   const [completed, setCompleted] = useState<Record<string, unknown> | null>(null);
 
   useEffect(() => {
