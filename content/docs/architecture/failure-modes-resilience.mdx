@@ -1,0 +1,262 @@
+---
+title: Failure Modes & Resilience Patterns
+description: Contain slow or failing dependencies with decreasing timeouts, jittered retries on idempotent calls, circuit breakers, bulkheads, and deliberate degradation.
+kind: concept
+type: explanation
+level: intermediate
+tags: [architecture, resilience, timeouts, circuit-breaker, retries, idempotency]
+tested_with:
+  typescript: "7.0.2"
+status: stable
+updated: "2026-11-27"
+verified: "2026-11-27"
+cards:
+  - q: "What are the five common remote failure modes and their primary mitigations?"
+    a: "Slow responses (Timeout), transient errors (Retry with exponential backoff + jitter), persistent outages (Circuit Breaker), duplicate delivery (Idempotency Key), and partial failure (Bulkhead + Graceful Degradation)."
+  - q: "Why must retries always include random jitter?"
+    a: "Without jitter, all clients that failed together retry at the exact same millisecond, creating a synchronized thundering herd that keeps the recovering dependency down."
+  - q: "Which HTTP requests are safe to retry automatically?"
+    a: "Idempotent operations (GET, HEAD, PUT, DELETE) or POST mutations protected by an Idempotency-Key—never retry 4xx client errors."
+  - q: "How does a Bulkhead prevent a non-critical dependency from taking down an entire API?"
+    a: "It isolates concurrency/thread pools per downstream dependency so a slow non-critical widget exhausts only its own small pool instead of starving core endpoints."
+related:
+  - architecture/api-design
+  - architecture/queues-async
+  - architecture/caching-redis
+sources:
+  - title: "AWS Builders' Library: Timeouts, retries, and backoff with jitter"
+    url: https://aws.amazon.com/builders-library/timeouts-retries-and-backoff-with-jitter/
+  - title: "Martin Fowler: Circuit Breaker"
+    url: https://martinfowler.com/bliki/CircuitBreaker.html
+  - title: "software-engineering: Everything Remote Fails (author's notes)"
+    url: https://github.com/limme-learning/software-engineering/blob/main/01-core-concepts/03-failure-modes-and-resilience.md
+---
+
+## TL;DR
+Every remote call will eventually hang, fail, or arrive twice. Protect your service by combining **bounded timeouts** (shorter than your caller's), **bulkhead pool limits**, **jittered retries** (only on idempotent calls), a **circuit breaker**, and **explicit fallback behavior**.
+
+## 1. Intent
+
+<Intent>
+Design outbound dependencies so a slow or broken downstream service degrades one feature cleanly instead of cascading into a full system outage.
+</Intent>
+
+## 2. Problem
+
+Suppose your checkout API calls a third-party shipping-rate estimator. One afternoon the estimator accepts TCP connections but stops sending responses.
+
+Without a timeout, every incoming request holds a worker thread or connection open indefinitely. Within 90 seconds the shared pool is full—now `/healthz`, `/orders`, and `/login` all fail too. Worse, a naive retry loop immediately hammers the struggling provider with 10× traffic, extending its outage.
+
+<Diagram
+  id="resilience-problem"
+  ariaLabel="Unbounded calls to a slow shipping provider exhaust the shared worker pool and crash unrelated endpoints"
+  caption="Without timeouts and bulkheads, one slow third-party call starves the entire API."
+  nodes={[
+    { id: 'api', label: 'Checkout API', subtitle: 'Shared pool full', icon: 'service', category: 'service', rank: 0, order: 0, variant: 'problem' },
+    { id: 'ship', label: 'Shipping Provider', subtitle: 'Hangs (no timeout)', icon: 'gateway', category: 'external', rank: 1, order: 0, variant: 'problem' },
+    { id: 'orders', label: 'Core Orders', subtitle: 'Starved!', icon: 'db', category: 'external', rank: 1, order: 1, variant: 'problem' },
+  ]}
+  edges={[
+    { from: 'api', to: 'ship', label: 'hangs' },
+    { from: 'api', to: 'orders', label: 'blocked', kind: 'error' },
+  ]}
+/>
+
+## 3. Solution
+
+Layer five complementary controls around every remote call:
+
+| Failure mode | Control | Rule of thumb |
+|---|---|---|
+| **Slow** | **Timeout** | Always set connect + read timeouts shorter than your caller's deadline |
+| **Transient error (503 / reset)** | **Retry + Jitter** | Exponential backoff + random jitter, max 2–3 attempts, never on `4xx` |
+| **Persistent outage** | **Circuit Breaker** | Trip `OPEN` when failure rate spikes; fail fast in microseconds |
+| **Duplicate delivery** | **Idempotency Key** | Store `Idempotency-Key` with a unique constraint before mutating |
+| **Partial failure** | **Bulkhead + Degrade** | Cap concurrent calls per dependency; return cached/stale or queue async |
+
+## 4. Real-world analogy
+
+<Analogy>
+Think of **watertight bulkheads and circuit breakers on a ship**. A circuit breaker trips immediately when a shorted wire draws too much current—preventing a fire—while watertight bulkheads ensure a leak in one compartment cannot flood the engine room and sink the whole vessel.
+</Analogy>
+
+## 5. Flow: watch it work
+
+<Flow
+  id="failure-modes-resilience"
+  title="Timeout, Retry, and Circuit Breaker Fallback"
+  nodes={[
+    { id: 'caller', label: 'Client', subtitle: 'Requests rate', icon: 'user', category: 'client', rank: 0, order: 0 },
+    { id: 'api', label: 'Order API', subtitle: 'Bulkhead + Cache', icon: 'service', category: 'service', rank: 1, order: 0 },
+    { id: 'breaker', label: 'Circuit Breaker', subtitle: 'Closed / Open', icon: 'gateway', category: 'edge', rank: 2, order: 0 },
+    { id: 'ext', label: 'Rate Provider', subtitle: '800ms timeout', icon: 'db', category: 'external', rank: 3, order: 0 },
+  ]}
+  steps={[
+    { edge: 'caller->api', title: 'Request shipping rate', text: 'Client asks Order API for live shipping estimate' },
+    { edge: 'api->breaker', title: 'Enter bulkhead & breaker', text: 'Order API acquires bulkhead slot and checks breaker state (Closed)' },
+    { edge: 'breaker->ext', title: 'Call with 800ms timeout', text: 'Breaker forwards request with strict 800ms AbortSignal timeout' },
+    { edge: 'ext->breaker', title: 'Timeout / 503 error', text: 'Provider hangs past 800ms; jittered retry also fails', kind: 'error' },
+    { edge: 'breaker->api', title: 'Trip breaker OPEN', text: 'Failure threshold exceeded; breaker opens to fail fast for 30s', kind: 'error' },
+    { edge: 'api->caller', title: 'Serve degraded fallback', text: 'Order API returns cached flat rate marked stale instead of 500', kind: 'response' },
+  ]}
+/>
+
+## 6. Structure
+
+<Diagram
+  id="resilience-layers"
+  ariaLabel="Call passes through bulkhead, circuit breaker, timeout, and retry layers before reaching the remote provider"
+  caption="Order matters: bulkhead and circuit breaker wrap retries and per-attempt timeouts."
+  nodes={[
+    { id: 'bulk', label: 'Bulkhead', subtitle: 'Max N concurrent', icon: 'pod', category: 'service', rank: 0, order: 0 },
+    { id: 'cb', label: 'Circuit Breaker', subtitle: 'Fail fast if Open', icon: 'gateway', category: 'edge', rank: 1, order: 0 },
+    { id: 'retry', label: 'Jittered Retry', subtitle: 'Idempotent only', icon: 'ci', category: 'abstraction', rank: 2, order: 0 },
+    { id: 'to', label: 'Attempt Timeout', subtitle: 'AbortSignal', icon: 'db', category: 'external', rank: 3, order: 0 },
+  ]}
+  edges={[
+    { from: 'bulk', to: 'cb', label: 'slot' },
+    { from: 'cb', to: 'retry', label: 'closed' },
+    { from: 'retry', to: 'to', label: 'attempt' },
+  ]}
+/>
+
+## 7. Code
+
+```ts
+export async function fetchWithResilience<T>(
+  url: string,
+  options: { timeoutMs: number; maxAttempts: number; fallback: () => T },
+): Promise<{ data: T; stale: boolean }> {
+  for (let attempt = 0; attempt < options.maxAttempts; attempt++) {
+    try {
+      const res = await fetch(url, {
+        signal: AbortSignal.timeout(options.timeoutMs),
+      });
+
+      if (res.status >= 400 && res.status < 500 && res.status !== 429) {
+        // Never retry permanent 4xx client errors
+        throw new Error(`Non-retryable client error: ${res.status}`);
+      }
+      if (!res.ok) {
+        throw new Error(`Transient upstream error: ${res.status}`);
+      }
+
+      return { data: (await res.json()) as T, stale: false };
+    } catch (err) {
+      const isLast = attempt === options.maxAttempts - 1;
+      if (isLast || (err instanceof Error && err.message.startsWith('Non-retryable'))) {
+        return { data: options.fallback(), stale: true };
+      }
+
+      // Exponential backoff + full jitter prevents thundering herd
+      const baseMs = 100 * 2 ** attempt;
+      const jitterMs = Math.random() * baseMs;
+      await new Promise((r) => setTimeout(r, jitterMs));
+    }
+  }
+
+  return { data: options.fallback(), stale: true };
+}
+```
+
+## 8. When to use / when to avoid
+
+<Checklist
+  use={[
+    "Set bounded timeouts on every single network call (HTTP, DB, Redis, gRPC).",
+    "Use circuit breakers and bulkheads for external third-party APIs or non-critical enrichment calls.",
+    "Serve labeled stale cache or queue async work when eventual consistency is acceptable.",
+  ]}
+  avoid={[
+    "Do not serve stale cached data for security checks, account balances, or fraud/sanctions decisions—fail closed instead.",
+    "Do not retry non-idempotent POST endpoints unless you send an Idempotency-Key.",
+  ]}
+/>
+
+## 9. How to implement
+
+<Steps>
+  <Step>
+    ### Set per-hop timeouts
+    Ensure downstream timeouts are strictly smaller than your API's overall SLA budget.
+  </Step>
+  <Step>
+    ### Isolate pools with bulkheads
+    Limit concurrent in-flight requests per dependency so one slow provider cannot starve others.
+  </Step>
+  <Step>
+    ### Add jittered retries for safe calls
+    Retry only idempotent reads or `Idempotency-Key` writes on `5xx`/network errors, never `4xx`.
+  </Step>
+  <Step>
+    ### Wrap with a circuit breaker and fallback
+    Trip open on sustained errors and return an explicit degraded response or fail cleanly.
+  </Step>
+</Steps>
+
+## 10. Pros / Cons
+
+<ProsCons
+  pros={[
+    "Prevents cascading outages when a single third-party dependency hangs.",
+    "Protects recovering services from retry storms via jitter and open circuit breakers.",
+    "Turns silent thread-pool exhaustion into observable, fast-failing metrics.",
+  ]}
+  cons={[
+    "Adds configuration parameters (thresholds, TTLs, pool sizes) that require tuning.",
+    "Requires testing failure paths explicitly with fault injection or mock timeouts.",
+  ]}
+/>
+
+## 11. Relations
+
+<Relations
+  items={[
+    {
+      name: "HTTP API Design",
+      summary: "Covers Idempotency-Key headers and RFC 9110 method idempotency rules.",
+      href: "/docs/architecture/api-design",
+    },
+    {
+      name: "Queues & Async Work",
+      summary: "Absorbs downstream outages by buffering non-synchronous work in a queue with DLQs.",
+      href: "/docs/architecture/queues-async",
+    },
+    {
+      name: "Caching with Redis",
+      summary: "Provides stale-while-revalidate fallbacks when origin services are degraded.",
+      href: "/docs/architecture/caching-redis",
+    },
+  ]}
+/>
+
+## 12. Check yourself
+
+<Quiz
+  questions={[
+    {
+      question: "Why is adding random jitter to exponential backoff critical during an upstream outage?",
+      options: [
+        { label: "It reduces CPU usage in Node.js", description: "Timer jitter has negligible CPU impact." },
+        { label: "It spreads out retry attempts so clients do not slam the recovering service simultaneously", description: "Without jitter, synchronized retries create a thundering herd that keeps the recovering service down.", correct: true },
+        { label: "It bypasses HTTP 400 validation errors", description: "Client 4xx errors should never be retried regardless of jitter." },
+      ],
+    },
+    {
+      question: "Which fallback is unsafe when a third-party fraud or balance-check API is down?",
+      options: [
+        { label: "Failing closed with a clear error", description: "Failing closed is the safe choice when stale data would cause financial or security harm." },
+        { label: "Serving a stale cached approval from 10 minutes ago", description: "Stale data is fine for decorative rates or catalogs, never for balances, limits, or security checks.", correct: true },
+        { label: "Tripping the circuit breaker to fail fast", description: "Failing fast protects your thread pool while still failing closed." },
+      ],
+    },
+    {
+      question: "What happens if an inner retry loop wraps a circuit breaker instead of the circuit breaker wrapping retries?",
+      options: [
+        { label: "Every retry attempt counts against the breaker, or retries keep firing even after the breaker opens", description: "Usually the circuit breaker wraps a single attempt (or the outer call) so an open breaker immediately aborts further retries.", correct: true },
+        { label: "The database automatically creates an index", description: "Resilience middleware has no effect on database indexes." },
+        { label: "Timeouts are disabled", description: "Per-attempt timeouts still apply independently." },
+      ],
+    },
+  ]}
+/>
