@@ -16,7 +16,7 @@ cards:
   - q: "What is the difference between staleTime and gcTime?"
     a: "staleTime is how long data is considered fresh (no refetch on mount/focus); gcTime is how long an unused cache entry survives before it is garbage-collected. Defaults are 0 and 5 minutes."
   - q: "Which failures should a query retry?"
-    a: "Only transient ones: 408, 429 (respect Retry-After) and 5xx, with exponential backoff plus jitter. Never retry a 4xx - it will not become a 200."
+    a: "Only transient ones: 408, 429 (respect Retry-After) and 5xx, with exponential backoff plus jitter. Never retry other 4xx errors (400, 401, 403, 404, 422) - they will not become a 200."
   - q: "What three callbacks does a safe optimistic update need?"
     a: "onMutate (cancel in-flight queries, snapshot, write optimistically), onError (restore the snapshot), and onSettled (invalidate so the server's answer wins)."
   - q: "How do you keep the first paint free of a loading spinner in the App Router?"
