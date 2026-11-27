@@ -370,7 +370,7 @@ Consistent nested squircle-like rounding:
 - **Theme Awareness:** Use CSS custom properties (`var(--card)`, `var(--primary)`, `var(--foreground)`, etc.) and scoped gradient/filter IDs so every asset adapts cleanly to light and dark modes.
 - **Originality:** Zero vendor logos or trademarks (e.g., Kubernetes uses an original 7-spoke helm wheel, never the official K8s mark; Containers uses a cargo crate).
 - **Component API (`components/illustrations/`):**
-  - `<SectionIcon name="..." size={24 | 48 | 96 | 256} decorative={...} title="..." />` for the 9 sections (`foundations`, `containers`, `kubernetes`, `iac`, `ci-cd`, `gitops`, `design`, `architecture`, `security`).
+  - `<SectionIcon name="..." size={24 | 48 | 96 | 256} decorative={...} title="..." />` for the 10 sections (`foundations`, `containers`, `kubernetes`, `iac`, `ci-cd`, `gitops`, `design`, `architecture`, `security`, `process`).
   - `<Illustration name="..." size={24 | 48 | 96 | 256} decorative={...} title="..." />` for spot art (`hero-desk`, `review-empty`, `not-found`, `lab-header`, `radar-header`).
   - Accessibility: `role="img"` + `<title>` when meaningful, or `aria-hidden="true"` when decorative.
 - **Static Exports:** Mirror optimized standalone SVGs in `public/illustrations/` for OG images and static `<img src>` usage.

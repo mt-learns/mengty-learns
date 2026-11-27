@@ -30,6 +30,7 @@ export const COMPACT_RANK_GAP = 52;
 export const COMPACT_NODE_GAP = 12;
 export const GROUP_PAD = 24;
 export const GROUP_LABEL_HEIGHT = 28;
+export const GROUP_LABEL_LINE_HEIGHT = 15;
 export const GROUP_PAD_TOP = GROUP_PAD + GROUP_LABEL_HEIGHT; // 52px
 export const PARALLEL_EDGE_OFFSET = 10;
 export const EDGE_RADIUS = 8;
@@ -61,6 +62,7 @@ export interface GroupBox {
   y: number;
   width: number;
   height: number;
+  labelHeight?: number;
 }
 
 export interface EdgeRoute {
@@ -305,6 +307,33 @@ export function computeNodeDimensions(
   return { nodeWidth, nodeLines };
 }
 
+/**
+ * Computes the reserved top strip height for a group label (11px uppercase, tracking-wider)
+ * wrapped at word boundaries inside `groupWidth` (32px horizontal padding + 2px border).
+ */
+export function groupLabelHeight(label: string, groupWidth: number): number {
+  const availWidth = Math.max(40, groupWidth - 34);
+  const words = label.toUpperCase().trim().split(/\s+/).filter(Boolean);
+  if (words.length === 0) return GROUP_LABEL_HEIGHT;
+  const space = estimateTextWidth(' ', 11, true) + 0.6;
+  let lines = 1;
+  let lineW = -1;
+  for (const word of words) {
+    const w = estimateTextWidth(word, 11, true) + word.length * 0.6;
+    if (lineW < 0) {
+      lineW = w;
+    } else if (lineW + space + w > availWidth) {
+      lines += 1;
+      lineW = w;
+    } else {
+      lineW += space + w;
+    }
+  }
+  return lines <= 1
+    ? GROUP_LABEL_HEIGHT
+    : GROUP_LABEL_HEIGHT + (lines - 1) * GROUP_LABEL_LINE_HEIGHT;
+}
+
 function normalizePass(
   rawNodes: Map<string, NodeBox>,
   groups: FlowGroup[],
@@ -347,14 +376,45 @@ function normalizePass(
     const minY = Math.min(...memberRects.map((r) => r.y));
     const maxX = Math.max(...memberRects.map((r) => r.x + r.width));
     const maxY = Math.max(...memberRects.map((r) => r.y + r.height));
+    const width = maxX - minX + groupPad * 2;
+    const labelH = Math.max(
+      groupLabelHeight(group.label, width),
+      groupPadTop - groupPad,
+    );
+    const effectivePadTop = groupPad + labelH;
+    const desiredTop = minY - effectivePadTop;
+
+    // If a wrapped group label pushes the group's top border up into nodes above it,
+    // shift this group's members (and everything below minY) down just enough to clear them.
+    let shiftY = 0;
+    for (const nb of rawNodes.values()) {
+      if (memberSet.has(nb.id)) continue;
+      if (nb.y < minY && nb.x + nb.width > minX - groupPad && nb.x < maxX + groupPad) {
+        const needed = nb.y + nb.height + 4 - desiredTop;
+        if (needed > shiftY) shiftY = needed;
+      }
+    }
+    if (shiftY > 0) {
+      for (const [id, nb] of rawNodes.entries()) {
+        if (nb.y >= minY) {
+          rawNodes.set(id, { ...nb, y: nb.y + shiftY, cy: nb.cy + shiftY });
+        }
+      }
+      for (const [gid, gb] of groupBoxById.entries()) {
+        if (gb.y >= minY - effectivePadTop) {
+          groupBoxById.set(gid, { ...gb, y: gb.y + shiftY });
+        }
+      }
+    }
 
     groupBoxById.set(group.id, {
       id: group.id,
       label: group.label,
       x: minX - groupPad,
-      y: minY - groupPadTop,
-      width: maxX - minX + groupPad * 2,
-      height: maxY - minY + groupPadTop + groupPad,
+      y: desiredTop + shiftY,
+      width,
+      height: maxY - minY + effectivePadTop + groupPad,
+      labelHeight: labelH,
     });
   }
 
@@ -894,6 +954,7 @@ export function computeDiagramLayout({
   edges,
   groups = [],
   layout = 'flow',
+  direction: preferredDirection,
   containerWidth,
   clampHeight = true,
   stepBadges = true,
@@ -902,6 +963,8 @@ export function computeDiagramLayout({
   edges: LayoutEdgeInput[];
   groups?: FlowGroup[];
   layout?: FlowLayoutMode;
+  /** Preferred direction on wide containers (>= 720px); narrow containers fall back through the fit-before-pan ladder. */
+  direction?: LayoutDirection;
   containerWidth: number;
   clampHeight?: boolean;
   /** <Flow> draws a step badge on the active edge; a static <Diagram> never does. */
@@ -987,16 +1050,33 @@ export function computeDiagramLayout({
       dir === 'LR' ? labelRankGap : 0,
     );
 
+  const preferWideLR =
+    !isTree &&
+    preferredDirection === 'LR' &&
+    safeWidth >= LR_CONTAINER_BREAKPOINT;
+
   let direction: LayoutDirection = isTree
     ? 'TB'
     : safeWidth >= LR_CONTAINER_BREAKPOINT
-      ? 'LR'
+      ? (preferredDirection ?? 'LR')
       : 'TB';
 
   let pass = runDagre(direction, false, null, dims);
 
+  // If caller explicitly prefers LR on a wide container, try compact LR before falling back to TB.
+  if (preferWideLR && !fitsAtReadable(pass, 'LR', stacked, false)) {
+    const compactDims = computeNodeDimensions(nodes, true, COMPACT_NODE_MAX_WIDTH);
+    const compactLR = runDagre('LR', true, null, compactDims);
+    if (fitsAtReadable(compactLR, 'LR', stacked, true)) {
+      compact = true;
+      dims = compactDims;
+      direction = 'LR';
+      pass = compactLR;
+    }
+  }
+
   // (a) re-check the alternate direction; keep whichever fits best
-  if (!fitsAtReadable(pass, direction, stacked) && !isTree) {
+  if (!fitsAtReadable(pass, direction, stacked, compact) && !isTree) {
     const altDir: LayoutDirection = direction === 'LR' ? 'TB' : 'LR';
     const altPass = runDagre(altDir, false, null, dims);
     if (finalFitFor(altPass, altDir, stacked) > finalFitFor(pass, direction, stacked)) {
@@ -1006,7 +1086,7 @@ export function computeDiagramLayout({
   }
 
   // (b) compact node variant (128-160px, 28px icon, 14px label) if still < 0.87
-  if (!fitsAtReadable(pass, direction, stacked)) {
+  if (!fitsAtReadable(pass, direction, stacked, compact)) {
     compact = true;
     const maxCompactForTwo = safeWidth < 480 ? Math.floor((safeWidth - 64 - COMPACT_NODE_GAP) / 2) : COMPACT_NODE_MAX_WIDTH;
     dims = computeNodeDimensions(nodes, true, Math.max(COMPACT_NODE_MIN_WIDTH, maxCompactForTwo));
@@ -1477,7 +1557,12 @@ export function placeEdgeLabels(
   const geoms = new Map(routes.map((r) => [r.key, edgeGeometry(r, nodeMap, direction)]));
   const fixed: LabelBox[] = [
     ...nodeMap.values(),
-    ...groups.map((g) => ({ x: g.x, y: g.y, width: g.width, height: GROUP_LABEL_HEIGHT })),
+    ...groups.map((g) => ({
+      x: g.x,
+      y: g.y,
+      width: g.width,
+      height: g.labelHeight ?? GROUP_LABEL_HEIGHT,
+    })),
   ];
   const badges = new Map<string, LabelBox>();
   for (const [key, geom] of geoms) {
@@ -1515,6 +1600,7 @@ export function placeEdgeLabels(
       const half = (sg.vertical ? height : width) / 2 + EDGE_LABEL_CLEARANCE + 0.5;
       const fractions = [0.5, 0.4, 0.6, 0.3, 0.7, 0.2, 0.8, 0.1, 0.9];
       if (sg.len > 2 * half) fractions.push(half / sg.len, 1 - half / sg.len);
+      fractions.push(0, 1);
       for (const t of fractions) {
         const px = sg.p.x + (sg.q.x - sg.p.x) * t;
         const py = sg.p.y + (sg.q.y - sg.p.y) * t;

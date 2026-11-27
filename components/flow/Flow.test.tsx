@@ -9,6 +9,7 @@ import {
 } from './deep-link';
 import { parseFlowProps, resolveNodeCategory } from './types';
 import { Player } from './v3/Player';
+import { GroupNode } from './v3/GroupNode';
 import { IosNode } from './v3/IosNode';
 import { computeFlowGraph } from './v3/layout';
 import { ReactFlowProvider } from '@xyflow/react';
@@ -347,5 +348,53 @@ describe('Flow §4 & §6 readable states, problem variant, and single active bad
     expect(activeEdges).toHaveLength(1);
     expect(activeEdges[0].data?.activeStepNumber).toBe(2);
     expect(inactiveEdges.every((e) => e.data?.activeStepNumber === null)).toBe(true);
+  });
+
+  it('wraps group labels at word boundaries without truncation and reserves vertical space', () => {
+    const longLabel = 'Application Core (Domain + Ports)';
+    const { container } = render(
+      <ReactFlowProvider>
+        <GroupNode
+          id="g1"
+          type="group"
+          positionAbsoluteX={0}
+          positionAbsoluteY={0}
+          zIndex={-10}
+          isConnectable={false}
+          dragging={false}
+          draggable={false}
+          selectable={false}
+          deletable={false}
+          selected={false}
+          data={{
+            label: longLabel,
+            width: 208,
+            height: 160,
+          }}
+        />
+      </ReactFlowProvider>,
+    );
+
+    const span = container.querySelector('span')!;
+    expect(span.textContent).toBe(longLabel);
+    expect(span.className).not.toContain('truncate');
+    expect(span.className).toContain('whitespace-normal');
+
+    const graph = computeFlowGraph({
+      nodes: [
+        { id: 'a', label: 'Port', rank: 0, order: 0 },
+        { id: 'b', label: 'Adapter', rank: 1, order: 0 },
+      ],
+      steps: [{ edge: 'a->b', text: 'Port calls Adapter', kind: 'request' }],
+      groups: [{ id: 'core', label: longLabel, nodeIds: ['a'] }],
+      containerWidth: 360,
+      activeStepIndex: -1,
+      reducedMotion: false,
+    });
+
+    const groupBox = graph.layout.groups[0];
+    const memberBox = graph.layout.nodes.get('a')!;
+    expect(groupBox.labelHeight).toBeGreaterThan(28);
+    expect(memberBox.y).toBeGreaterThanOrEqual(groupBox.y + groupBox.labelHeight!);
   });
 });

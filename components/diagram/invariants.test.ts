@@ -232,13 +232,13 @@ function assertLayoutInvariants(
     }
   }
 
-  // 3. No node-group-label overlaps (top 28px of group box is reserved for label)
+  // 3. No node-group-label overlaps (top strip of group box is reserved for label)
   for (const group of layoutResult.groups) {
     const labelRect = {
       x: group.x,
       y: group.y,
       width: group.width,
-      height: 28,
+      height: group.labelHeight ?? GROUP_LABEL_HEIGHT,
     };
     for (const box of boxes) {
       expect(
@@ -410,7 +410,7 @@ function assertEdgeLabelInvariants(
     x: g.x,
     y: g.y,
     width: g.width,
-    height: GROUP_LABEL_HEIGHT,
+    height: g.labelHeight ?? GROUP_LABEL_HEIGHT,
   }));
   const badges = new Map<string, { x: number; y: number; width: number; height: number }>();
   for (const route of layoutResult.edges) {
@@ -648,6 +648,52 @@ describe('DIAGRAM-RULES §9.1 layout invariants across all MDX flows and diagram
       assertNodeLabelsUnclamped(`${parsed.id}:shared@${width}`, layoutResult, parsed.nodes ?? []);
     });
   }
+
+  for (const width of [1024, 1280] as const) {
+    it(`k8s-request with direction="LR" lays out LR and satisfies all invariants @ ${width}px`, () => {
+      const parsed = parseFlowProps({ ...K8S_REQUEST_FLOW, direction: 'LR' });
+      const layoutResult = computeDiagramLayout({
+        nodes: parsed.nodes ?? [],
+        edges: flowEdgeInputs(parsed.steps ?? []),
+        groups: parsed.groups ?? [],
+        layout: parsed.layout,
+        direction: parsed.direction,
+        containerWidth: width,
+      });
+      expect(layoutResult.direction).toBe('LR');
+      expect(layoutResult.panMode).toBe(false);
+      assertLayoutInvariants(`${parsed.id}:lr@${width}`, layoutResult, parsed.nodes ?? [], width, false);
+      assertEdgeLabelInvariants(`${parsed.id}:lr@${width}`, layoutResult, {
+        isStaticDiagram: false,
+        requireAllPlaced: true,
+      });
+      assertNodeLabelsUnclamped(`${parsed.id}:lr@${width}`, layoutResult, parsed.nodes ?? []);
+    });
+  }
+
+  it('k8s-request with direction="LR" keeps 360px layout unchanged (TB)', () => {
+    const parsed = parseFlowProps({ ...K8S_REQUEST_FLOW, direction: 'LR' });
+    const base = computeDiagramLayout({
+      nodes: parsed.nodes ?? [],
+      edges: flowEdgeInputs(parsed.steps ?? []),
+      groups: parsed.groups ?? [],
+      layout: parsed.layout,
+      containerWidth: 360,
+    });
+    const withDir = computeDiagramLayout({
+      nodes: parsed.nodes ?? [],
+      edges: flowEdgeInputs(parsed.steps ?? []),
+      groups: parsed.groups ?? [],
+      layout: parsed.layout,
+      direction: parsed.direction,
+      containerWidth: 360,
+    });
+    expect(withDir.direction).toBe('TB');
+    expect(withDir.direction).toBe(base.direction);
+    expect(withDir.compact).toBe(base.compact);
+    expect(withDir.bounds).toEqual(base.bounds);
+    expect(withDir.zoom).toBe(base.zoom);
+  });
 });
 
 describe('Inter text-width estimator stays at or above the rendered width', () => {

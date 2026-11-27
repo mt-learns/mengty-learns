@@ -38,6 +38,9 @@ export type FlowNodeVariant = z.infer<typeof FlowNodeVariantSchema>;
 export const FlowLayoutModeSchema = z.enum(['flow', 'tree']);
 export type FlowLayoutMode = z.infer<typeof FlowLayoutModeSchema>;
 
+export const FlowDirectionSchema = z.enum(['LR', 'TB']);
+export type FlowDirection = z.infer<typeof FlowDirectionSchema>;
+
 export const FlowNodeSchema = z.object({
   id: z.string().min(1, 'Node id is required'),
   label: z.string().min(1, 'Node label is required'),
@@ -110,6 +113,7 @@ export const FlowVariantSchema = z.object({
   id: z.string().min(1, 'Variant id is required'),
   label: z.string().min(1, 'Variant label is required'),
   layout: FlowLayoutModeSchema.optional(),
+  direction: FlowDirectionSchema.optional(),
   nodes: z
     .array(FlowNodeSchema)
     .min(2, 'Variant requires at least 2 nodes')
@@ -214,6 +218,7 @@ export const FlowPropsSchema = z
     id: z.string().min(1, 'Flow id is required'),
     title: z.string().optional(),
     layout: FlowLayoutModeSchema.default('flow'),
+    direction: FlowDirectionSchema.optional(),
     nodes: z
       .array(FlowNodeSchema)
       .min(2, 'Flow requires at least 2 nodes')
@@ -310,6 +315,7 @@ export const DiagramPropsSchema = z
     caption: z.string().optional(),
     ariaLabel: z.string().optional(),
     layout: FlowLayoutModeSchema.default('flow'),
+    direction: FlowDirectionSchema.optional(),
     nodes: z
       .array(FlowNodeSchema)
       .min(2, 'Diagram requires at least 2 nodes')

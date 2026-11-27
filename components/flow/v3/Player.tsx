@@ -32,6 +32,7 @@ import {
   parseFlowDeepLink,
 } from '../deep-link';
 import type {
+  FlowDirection,
   FlowGroup,
   FlowLayoutMode,
   FlowNode,
@@ -87,6 +88,7 @@ export function Player({
   id,
   title,
   layout: propLayout = 'flow',
+  direction: propDirection,
   nodes: propNodes,
   steps: propSteps,
   groups: propGroups,
@@ -116,6 +118,7 @@ export function Player({
     [activeVariant, propSteps],
   );
   const layoutMode: FlowLayoutMode = activeVariant?.layout ?? propLayout;
+  const preferredDirection: FlowDirection | undefined = activeVariant?.direction ?? propDirection;
 
   // -1 = Overview start state, 0..steps.length-1 = active step
   const [stepIndex, setStepIndex] = useState<number>(-1);
@@ -409,6 +412,7 @@ export function Player({
             steps={steps}
             groups={groups}
             layoutMode={layoutMode}
+            direction={preferredDirection}
             activeStepIndex={stepIndex}
             reducedMotion={reducedMotion}
             precomputed={precomputedLayouts?.[activeVariant?.id ?? 'default']}
