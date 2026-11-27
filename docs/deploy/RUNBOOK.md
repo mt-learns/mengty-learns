@@ -192,5 +192,7 @@ gh run watch $(gh run list --workflow deploy.yml --limit 1 --json databaseId -q 
 gh release view v0.2.0                           # exists once the deploy is green
 ```
 
-If the deploy fails, no release is created. Fix it on `main`, bump the PATCH version, and tag again. Never re-push or move an existing tag.
+If the deploy fails, no release is created. Fix it on `main`. A tag that has **no** GitHub Release (the deploy never finished) may be deleted and re-created on the fix (`git push --delete origin vX.Y.Z`, then tag again). Once a release exists, its tag is permanent: ship the next PATCH instead.
+
+Note: `opennextjs-cloudflare deploy` passes extra flags to Wrangler through a shell without quoting, so never pass values with spaces or parentheses (for example `--message`).
 If a released version is bad: `wrangler rollback` (section 3), then ship the fix as the next PATCH release.

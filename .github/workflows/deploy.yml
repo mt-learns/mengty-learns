@@ -93,7 +93,7 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -o pipefail
-          pnpm exec opennextjs-cloudflare deploy --tag "$GITHUB_REF_NAME" --message "Release $GITHUB_REF_NAME (${GITHUB_SHA::7})" 2>&1 | tee deploy.log
+          pnpm exec opennextjs-cloudflare deploy --tag "$GITHUB_REF_NAME" 2>&1 | tee deploy.log
           {
             echo "### Production deploy $GITHUB_REF_NAME"
             echo

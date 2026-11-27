@@ -56,7 +56,7 @@ pnpm lint && pnpm typecheck && pnpm test && pnpm build
   4. Run `git tag -a vX.Y.Z -m "vX.Y.Z"` and `git push origin vX.Y.Z`.
   5. Watch the Deploy run.
   6. Check production (docs/deploy/RUNBOOK.md section 2) and that the release exists.
-- **Never** deploy from a laptop (`wrangler deploy`), never move or reuse a tag, and never delete a release. A bad release is fixed by rolling back (`wrangler rollback`, RUNBOOK section 3) and then shipping the next PATCH release.
+- **Never** deploy from a laptop (`wrangler deploy`), never move a tag that has a GitHub Release, and never delete a release. A tag whose deploy failed before its release was created may be re-created on the fix. A bad release is fixed by rolling back (`wrangler rollback`, RUNBOOK section 3) and then shipping the next PATCH release.
 - Workers never tag, release or deploy.
 
 ---
