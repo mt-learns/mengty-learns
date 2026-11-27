@@ -3,20 +3,15 @@
 1. **`lib/flows/k8s-request.ts` (`CNT-008`):** `lib/` is out of scope for Wave 0 ("Don't touch `components/`, `app/` or `lib/` code"). To satisfy `CNT-008` without modifying `lib/`, `content/docs/kubernetes/service-routing.mdx` inlines `<Flow id="k8s-request" ... />` with the updated kube-proxy DNAT/conntrack step text. The shared `K8S_REQUEST_FLOW` export in `lib/flows/k8s-request.ts` still has the older step text and can be synced by the lead if needed.
 2. **Local CLI tools (`CNT-004`, `CNT-009`):** `hadolint` and `kubeconform` are not installed in this Windows environment (`docker build` ran and passed locally). Both `hadolint` and `kubeconform -strict` run in `.github/workflows/labs.yml`.
 
-# Content Wave 5 — Notes & Out-of-Scope Code Changes
+# Polish (branch `polish`)
 
-3. **Landing-page section grid (`lib/home-data.ts`) and section icon (`components/illustrations/`):**
-   - `lib/home-data.ts` and `components/illustrations/` are code outside Wave 5's allowed scope.
-   - **Needed in `components/illustrations/types.ts` & `SectionIcon.tsx`:** Add `'process'` to `SECTION_ICON_NAMES`, `DEFAULT_TITLES` (`'Process section icon'`), `SECTION_TINTS`, and render a soft 3D clay icon (e.g., a checklist clipboard or workflow nodes in a squircle).
-   - **Needed in `lib/home-data.ts`:** Add `process` to `SECTION_COPY`:
-     - **Key:** `process`
-     - **Title:** `Process`
-     - **Blurb:** `Idea to production, ADRs, quality gates, and retros for small teams.`
-   - **Needed in `content/docs/index.mdx`:** Once `<SectionIcon name="process" />` exists, add `icon={<SectionIcon name="process" size={24} decorative />}` to the Process `<Card>`.
+# Polish (branch `polish`): closed Wave 5 item 3 (Process section) and Typography item 4 (label clamps)
 
-# Typography (branch `typography`)
-
-4. **Flow node labels now render in Inter, and two more clamp at 360px.** Before this branch Inter never applied: `app/global.css` had `:root { --font-inter: var(--font-inter); }`, a self-referencing custom property that invalidated the variable, so every page used the system font (Segoe UI on Windows). With Inter actually rendering, labels are wider. A scan of all 29 pages with flows at 360px (68 node labels) finds 4 labels hitting `line-clamp-2` against 2 before: `PlaceOrderPort` (already clamped) and `OrderRepoPort` on `/docs/architecture/hexagonal/`, `Push / PR Trigger` (already clamped) on `/docs/ci-cd/pipeline-anatomy/`, and `API Server + etcd` on `/docs/kubernetes/kubectl-apply/`. Node boxes, zoom and the fit ladder are unchanged, and `pnpm test` passes. Label tracking doesn't fix it (−0.01em: 4 clamped, −0.02em: 3), so the fix is in `components/flow` (node width at the narrow rung, or a 13px compact label), which is out of scope for the typography worker.
+1. **Docs to sync (outside this branch's files):**
+   - `DESIGN.md` › Illustration Rules lists 9 section icons; there are now 10 (`process` added).
+   - `DIAGRAM-RULES.md` §3.3(b) gives compact nodes 128–160px. Nodes now widen past 160px (up to 240px) when a label would otherwise need 3 lines, because §4.1 (full label visible) wins. The fit ladder re-checks the result.
+   - `DIAGRAM-RULES.md` §6.3 places pills at the midpoint opposite the badge. The layout now places them clear of nodes, badges, other pills and the canvas edge. LR rank gaps widen to hold the widest pill. Compact flows show only the active edge's pill while stepping, and a pill with no free spot is dropped (0 of 275 flow labels and 4 of 185 diagram labels across 265–1024px).
+2. **Group labels truncate (pre-existing, not in this brief):** `components/flow/v3/GroupNode.tsx` sets the group label with `truncate`, so long group names are cut with an ellipsis ("APPLICATION CORE (…" on `/docs/architecture/hexagonal/` at 360px and 1280px). DIAGRAM-RULES §4.1 forbids ellipses on node labels; group labels need the same treatment (wrap, or size the group to its label).
 
 # Landing Motion (branch `landing-motion`)
 

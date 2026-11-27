@@ -69,6 +69,7 @@ function DiagramStage({
       label: e.label,
     })),
     groups: data.groups ?? [],
+    stepBadges: false,
     layout: data.layout,
     containerWidth,
     clampHeight: false,
@@ -224,25 +225,23 @@ function DiagramStage({
                     strokeDasharray={isDashed ? '6 4' : undefined}
                     markerEnd={`url(#${markerId})`}
                   />
-                  {route.label && (
-                    <g
-                      transform={`translate(${geom.labelX}, ${
-                        geom.labelY + (computed.direction === 'LR' ? -14 : 0)
-                      })`}
-                    >
+                  {route.label && route.labelBox && (
+                    // §6.3: the layout places the pill clear of nodes, other pills and
+                    // the bounds; a label with no free spot is left out.
+                    <g transform={`translate(${route.labelBox.x}, ${route.labelBox.y})`}>
                       <rect
-                        x={-(route.label.length * 3.8 + 10)}
-                        y={-11}
-                        width={route.label.length * 7.6 + 20}
-                        height={22}
-                        rx={11}
+                        x={0.5}
+                        y={0.5}
+                        width={route.labelBox.width - 1}
+                        height={route.labelBox.height - 1}
+                        rx={(route.labelBox.height - 1) / 2}
                         fill="var(--card)"
                         stroke="var(--border)"
                         strokeWidth={1}
                       />
                       <text
-                        x={0}
-                        y={4}
+                        x={route.labelBox.width / 2}
+                        y={route.labelBox.height / 2 + 4}
                         textAnchor="middle"
                         fill="var(--foreground)"
                         fontSize={12}
@@ -278,7 +277,7 @@ function DiagramStage({
               }}
               className={cn(
                 'absolute flex items-center rounded-panel bg-card shadow-xs',
-                compact ? 'gap-2 px-2.5 py-1.5' : 'gap-2.5 px-3 py-2',
+                compact ? 'gap-1.5 px-2 py-1.5' : 'gap-2.5 px-3 py-2',
                 isProblem
                   ? 'border border-dashed border-[var(--border-strong)]'
                   : 'border border-border',
