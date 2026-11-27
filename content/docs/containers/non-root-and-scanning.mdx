@@ -50,6 +50,23 @@ Container hardening works in four independent layers:
 | **Kernel surface** | `--cap-drop=ALL` (`--security-opt=no-new-privileges`) | Privileged syscalls and setuid escalation |
 | **Image contents** | Multi-stage + Alpine/Distroless + Trivy/Grype | Unneeded shells, compilers, and known OS/library CVEs |
 
+<Diagram
+  id="container-hardening-layers"
+  ariaLabel="Four container hardening layers: build scan, numeric non-root UID, read-only rootfs, and dropped capabilities"
+  caption="Defense in depth: scan at build time, then restrict UID, filesystem, and kernel capabilities at runtime."
+  nodes={[
+    { id: 'scan', label: 'Trivy / Grype', subtitle: 'CI CVE gate', icon: 'service', category: 'service', rank: 0, order: 0 },
+    { id: 'uid', label: 'USER 1001:1001', subtitle: 'Non-root UID', icon: 'user', category: 'client', rank: 1, order: 0 },
+    { id: 'fs', label: '--read-only', subtitle: 'Immutable rootfs', icon: 'db', category: 'data', rank: 2, order: 0 },
+    { id: 'cap', label: '--cap-drop=ALL', subtitle: 'No root syscalls', icon: 'pod', category: 'concrete', rank: 3, order: 0 },
+  ]}
+  edges={[
+    { from: 'scan', to: 'uid', kind: 'request' },
+    { from: 'uid', to: 'fs', kind: 'request' },
+    { from: 'fs', to: 'cap', kind: 'request' },
+  ]}
+/>
+
 ### Distroless vs Alpine
 - **Alpine (`node:22-alpine3.21`):** ~5 MB base with `musl` libc, `busybox`, `sh`, and `apk`. Easy to debug (`docker exec -it ... sh`), though `musl` can occasionally differ from `glibc` for native C/C++ addons.
 - **Distroless (`gcr.io/distroless/nodejs22-debian12`):** `glibc`-based with **no shell and no package manager**. Smaller CVE count and harder for an attacker to run post-exploitation commands, at the cost of needing ephemeral debug containers (`kubectl debug`) for troubleshooting.

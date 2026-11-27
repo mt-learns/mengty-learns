@@ -44,6 +44,22 @@ A CI cache is a **key-value archive** (`tar.zst`) stored next to your repo:
 - **Prefix `restore-keys`:** falls back to the newest partial match (useful for Docker/Apt, **dangerous** if your install step doesn't prune stale files).
 - **Eviction:** GitHub Actions caps total cache size per repository (10 GB) and evicts unused entries after 7 days.
 
+<Diagram
+  id="ci-cache-lookup"
+  layout="tree"
+  ariaLabel="CI cache lookup: exact lockfile hash hit restores store; miss runs full install and saves cache"
+  caption="Cache lookup: exact lockfile hash hits skip network downloads; misses recompute and save."
+  nodes={[
+    { id: 'key', label: 'Hash Lockfile', subtitle: 'Cache key', icon: 'git', category: 'client', rank: 0, order: 0 },
+    { id: 'hit', label: 'Cache Hit', subtitle: 'Restore tar.zst', icon: 'db', category: 'data', rank: 1, order: 0 },
+    { id: 'miss', label: 'Cache Miss', subtitle: 'Install & save', icon: 'service', category: 'service', rank: 1, order: 1 },
+  ]}
+  edges={[
+    { from: 'key', to: 'hit', kind: 'request' },
+    { from: 'key', to: 'miss', kind: 'request' },
+  ]}
+/>
+
 ## Do it
 
 ### 1. pnpm store cache in GitHub Actions
